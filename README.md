@@ -36,6 +36,16 @@ zig build bench
 - `CAPTP-OPTIMIZATIONS.md`
 - `ZIG-SYRUP-FULL-PARITY.md`
 
+## Related OCapN/Syrup Repos
+
+- ocapn/syrup: `https://github.com/ocapn/syrup`
+- ocapn/ocapn: `https://github.com/ocapn/ocapn`
+- ocapn/ocapn-test-suite: `https://github.com/ocapn/ocapn-test-suite`
+- ocapn/syrup (guile impl): `https://github.com/ocapn/syrup/blob/master/impls/guile/syrup.scm`
+- ocapn/syrup (racket impl): `https://github.com/ocapn/syrup/blob/master/impls/racket/syrup/syrup.rkt`
+- cmars/ocapn-syrup: `https://github.com/cmars/ocapn-syrup`
+- costa-group/syrup-python: `https://github.com/costa-group/syrup-python`
+
 ## Status
 
 Active development. See `ZIG-SYRUP-FULL-PARITY.md` for spec alignment notes.
