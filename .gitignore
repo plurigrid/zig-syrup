@@ -1,0 +1,7 @@
+.zig-cache/
+zig-out/
+.flox/
+.DS_Store
+
+# local tooling
+*.log
