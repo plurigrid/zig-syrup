@@ -1,5 +1,8 @@
 # zig-syrup
 
+[![CI](https://github.com/plurigrid/zig-syrup/actions/workflows/ci.yml/badge.svg)](https://github.com/plurigrid/zig-syrup/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 High-performance Zig implementation of the OCapN Syrup data format with CapTP-focused optimizations.
 
 ## Features
