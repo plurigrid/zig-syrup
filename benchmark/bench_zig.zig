@@ -126,7 +126,7 @@ pub fn main() !void {
         const start = std.time.nanoTimestamp();
         for (0..ITERATIONS) |i| {
             const pos: u16 = @intCast(i % 256);
-            _ = syrup.CapTPDescriptors.encodeDescExport(pos, &desc_buf);
+            _ = try syrup.CapTPDescriptors.encodeDescExport(pos, &desc_buf);
         }
         const elapsed_ns: u64 = @intCast(std.time.nanoTimestamp() - start);
         const per_op_ns = elapsed_ns / ITERATIONS;

@@ -147,6 +147,16 @@ pub const Error = struct {
         return .{ .bool = b };
     }
 
+    /// Encodes a balanced ternary trit (-1, 0, 1) as a symbol
+    pub fn fromTrit(val: i8) Value {
+        return switch (val) {
+            -1 => fromSymbol("-"),
+            0 => fromSymbol("0"),
+            1 => fromSymbol("+"),
+            else => fromSymbol("unknown"),
+        };
+    }
+
     pub fn fromBytes(b: []const u8) Value {
         return .{ .bytes = b };
     }
@@ -215,7 +225,14 @@ pub const Error = struct {
         // Same type - compare values
         // For strings/symbols/bytes: compare by wire format (length then content)
         return switch (self) {
-            .undefined, .null => unreachable, // handled by record-like comparison
+            .undefined, .null => {
+                // These types are singleton-like in record-like context, 
+                // but handled here if they appear directly
+                // undefined < null
+                if (self == .undefined and other == .null) return .lt;
+                if (self == .null and other == .undefined) return .gt;
+                return .eq;
+            },
             .bool => |a| {
                 const b = other.bool;
                 if (a == b) return .eq;
@@ -237,7 +254,10 @@ pub const Error = struct {
                 if (label_cmp != .eq) return label_cmp;
                 return compareSequences(a.fields, b.fields);
             },
-            .tagged, .@"error" => unreachable, // handled by record-like comparison
+            .tagged, .@"error" => {
+                // Should be handled by isRecordLike check above, but as a fallback:
+                return compareRecordLike(self, other);
+            },
         };
     }
 
@@ -285,7 +305,7 @@ pub const Error = struct {
             .@"error" => Value{ .symbol = "desc:error" },
             .undefined => Value{ .symbol = "undefined" },
             .null => Value{ .symbol = "null" },
-            else => unreachable,
+            else => Value{ .symbol = "unknown" }, // Fallback instead of panic
         };
     }
 
@@ -295,7 +315,7 @@ pub const Error = struct {
             .tagged => 2,
             .@"error" => 3,
             .undefined, .null => 0,
-            else => unreachable,
+            else => 0, // Fallback
         };
     }
 
@@ -305,16 +325,16 @@ pub const Error = struct {
             .tagged => |t| switch (index) {
                 0 => Value{ .string = t.tag },
                 1 => t.payload.*,
-                else => unreachable,
+                else => Value{ .undefined = {} }, // Out of bounds
             },
             .@"error" => |e| switch (index) {
                 0 => Value{ .string = e.message },
                 1 => Value{ .bytes = e.identifier },
                 2 => e.data.*,
-                else => unreachable,
+                else => Value{ .undefined = {} }, // Out of bounds
             },
-            .undefined, .null => unreachable,
-            else => unreachable,
+            .undefined, .null => Value{ .undefined = {} },
+            else => Value{ .undefined = {} }, // Fallback
         };
     }
 
@@ -502,7 +522,8 @@ pub const Error = struct {
 
     /// Encode to allocated buffer
     pub fn encodeAlloc(self: Value, allocator: Allocator) ![]u8 {
-        var list_buf = std.ArrayList(u8).init(allocator);
+        const ByteList = std.array_list.AlignedManaged(u8, null);
+        var list_buf = ByteList.init(allocator);
         errdefer list_buf.deinit();
         try self.encode(list_buf.writer());
         return list_buf.toOwnedSlice();
@@ -687,7 +708,7 @@ pub fn computeCidHex(value: Value, allocator: Allocator) ![]u8 {
     var hash: [32]u8 = undefined;
     try computeCid(value, &hash);
     const hex = try allocator.alloc(u8, 64);
-    _ = std.fmt.bufPrint(hex, "{s}", .{std.fmt.fmtSliceHexLower(&hash)}) catch unreachable;
+    _ = std.fmt.bufPrint(hex, "{s}", .{std.fmt.fmtSliceHexLower(&hash)}) catch return error.FormattingError;
     return hex;
 }
 
@@ -696,14 +717,14 @@ pub fn comptimeCid(comptime value: Value) [64]u8 {
     comptime {
         var buf: [4096]u8 = undefined;
         var stream = std.io.fixedBufferStream(&buf);
-        value.encode(stream.writer()) catch unreachable;
+        value.encode(stream.writer()) catch @compileError("Encoding failed");
         const encoded = buf[0..stream.pos];
 
         var hash: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(encoded, &hash, .{});
 
         var hex: [64]u8 = undefined;
-        _ = std.fmt.bufPrint(&hex, "{s}", .{std.fmt.fmtSliceHexLower(&hash)}) catch unreachable;
+        _ = std.fmt.bufPrint(&hex, "{s}", .{std.fmt.fmtSliceHexLower(&hash)}) catch @compileError("Formatting failed");
         return hex;
     }
 }
@@ -1240,7 +1261,7 @@ fn serializeImpl(comptime T: type, value: T, allocator: Allocator) Allocator.Err
                 }
             }
             // Larger integers would need bigint support
-            unreachable;
+            return error.IntegerTooLarge;
         },
 
         .float => |float_info| blk: {
@@ -1267,7 +1288,7 @@ fn serializeImpl(comptime T: type, value: T, allocator: Allocator) Allocator.Err
             if (ptr_info.size == .one) {
                 break :blk try serializeImpl(ptr_info.child, value.*, allocator);
             }
-            unreachable;
+            return error.UnsupportedPointerType;
         },
 
         .array => |arr_info| blk: {
@@ -1348,10 +1369,10 @@ fn serializeImpl(comptime T: type, value: T, allocator: Allocator) Allocator.Err
                     }
                 }
             }
-            unreachable;
+            return error.UnionTagNotFound;
         },
 
-        else => unreachable,
+        else => return error.UnsupportedType,
     };
 }
 
@@ -2299,10 +2320,10 @@ pub const CapTPDescriptors = struct {
     }
 
     /// Runtime fast encoding of desc:export - writes to buffer, returns slice
-    pub fn encodeDescExport(pos: u16, buf: []u8) []u8 {
+    pub fn encodeDescExport(pos: u16, buf: []u8) ![]u8 {
         const prefix = "<" ++ labels.desc_export;
         @memcpy(buf[0..prefix.len], prefix);
-        const num_slice = std.fmt.bufPrint(buf[prefix.len..], "{d}", .{pos}) catch unreachable;
+        const num_slice = try std.fmt.bufPrint(buf[prefix.len..], "{d}", .{pos});
         const len = num_slice.len;
         buf[prefix.len + len] = '+';
         buf[prefix.len + len + 1] = '>';
@@ -2310,10 +2331,10 @@ pub const CapTPDescriptors = struct {
     }
 
     /// Runtime fast encoding of desc:answer - writes to buffer, returns slice
-    pub fn encodeDescAnswer(pos: u16, buf: []u8) []u8 {
+    pub fn encodeDescAnswer(pos: u16, buf: []u8) ![]u8 {
         const prefix = "<" ++ labels.desc_answer;
         @memcpy(buf[0..prefix.len], prefix);
-        const num_slice = std.fmt.bufPrint(buf[prefix.len..], "{d}", .{pos}) catch unreachable;
+        const num_slice = try std.fmt.bufPrint(buf[prefix.len..], "{d}", .{pos});
         const len = num_slice.len;
         buf[prefix.len + len] = '+';
         buf[prefix.len + len + 1] = '>';
@@ -2427,17 +2448,17 @@ test "comptime descriptor tables" {
     // Test runtime desc:export encoding
     var buf: [64]u8 = undefined;
 
-    const export_0 = CapTPDescriptors.encodeDescExport(0, &buf);
+    const export_0 = try CapTPDescriptors.encodeDescExport(0, &buf);
     try std.testing.expectEqualSlices(u8, "<11'desc:export0+>", export_0);
 
-    const export_42 = CapTPDescriptors.encodeDescExport(42, &buf);
+    const export_42 = try CapTPDescriptors.encodeDescExport(42, &buf);
     try std.testing.expectEqualSlices(u8, "<11'desc:export42+>", export_42);
 
-    const export_255 = CapTPDescriptors.encodeDescExport(255, &buf);
+    const export_255 = try CapTPDescriptors.encodeDescExport(255, &buf);
     try std.testing.expectEqualSlices(u8, "<11'desc:export255+>", export_255);
 
     // Test runtime desc:answer encoding
-    const answer_0 = CapTPDescriptors.encodeDescAnswer(0, &buf);
+    const answer_0 = try CapTPDescriptors.encodeDescAnswer(0, &buf);
     try std.testing.expectEqualSlices(u8, "<11'desc:answer0+>", answer_0);
 
     // Test comptime encoding
@@ -2446,6 +2467,17 @@ test "comptime descriptor tables" {
 
     const ct_answer_0 = CapTPDescriptors.comptimeDescAnswer(0);
     try std.testing.expectEqualSlices(u8, "<11'desc:answer0+>", ct_answer_0);
+}
+
+test "trit encoding" {
+    const t_neg = Value.fromTrit(-1);
+    try std.testing.expectEqualStrings("-", t_neg.symbol);
+
+    const t_zero = Value.fromTrit(0);
+    try std.testing.expectEqualStrings("0", t_zero.symbol);
+
+    const t_pos = Value.fromTrit(1);
+    try std.testing.expectEqualStrings("+", t_pos.symbol);
 }
 
 test "fast decimal parsing" {
