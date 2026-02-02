@@ -262,12 +262,20 @@ pub const Error = struct {
     }
 
     /// Compare length-prefixed values (bytes/string/symbol) by wire format
-    /// Wire format: <len><marker><content>, so shorter strings sort first
+    /// Wire format: <len><marker><content>, so we compare the stringified length first
     fn compareLengthPrefixed(a: []const u8, b: []const u8) Order {
-        // First compare by length (shorter = smaller in wire format)
-        const len_cmp = std.math.order(a.len, b.len);
+        // We must compare the serialized length strings (e.g. "9" vs "10")
+        // "9" > "10" lexicographically, so len=9 > len=10 in wire format.
+        
+        var a_buf: [32]u8 = undefined;
+        var b_buf: [32]u8 = undefined;
+        const a_str = std.fmt.bufPrint(&a_buf, "{}", .{a.len}) catch unreachable;
+        const b_str = std.fmt.bufPrint(&b_buf, "{}", .{b.len}) catch unreachable;
+        
+        const len_cmp = std.mem.order(u8, a_str, b_str);
         if (len_cmp != .eq) return len_cmp;
-        // Same length - compare content
+        
+        // Same length string implies same length value. Compare content.
         return std.mem.order(u8, a, b);
     }
 
@@ -948,11 +956,11 @@ pub const Parser = struct {
     fn collectUntil(
         self: *Parser,
         terminator: u8,
-        comptime max_items: usize,
         comptime check_order: bool,
     ) ParseError![]Value {
-        var items_buf: [max_items]Value = undefined;
-        var items_len: usize = 0;
+        var items = std.ArrayListUnmanaged(Value){};
+        errdefer items.deinit(self.allocator);
+        
         var last_start: usize = 0;
         var last_end: usize = 0;
 
@@ -961,9 +969,7 @@ pub const Parser = struct {
             const item = try self.parse();
             const item_end = self.pos;
 
-            if (items_len >= max_items) return error.ListTooLarge;
-
-            if (check_order and items_len > 0) {
+            if (check_order and items.items.len > 0) {
                 // Compare using original input bytes - O(1) lookup, O(min(m,n)) compare
                 const prev_bytes = self.input[last_start..last_end];
                 const curr_bytes = self.input[item_start..item_end];
@@ -974,29 +980,27 @@ pub const Parser = struct {
             last_start = item_start;
             last_end = item_end;
 
-            items_buf[items_len] = item;
-            items_len += 1;
+            try items.append(self.allocator, item);
         }
 
         if (self.pos >= self.input.len) return error.UnexpectedEOF;
         self.pos += 1;
 
-        const items = try self.allocator.alloc(Value, items_len);
-        @memcpy(items, items_buf[0..items_len]);
-        return items;
+        return items.toOwnedSlice(self.allocator);
     }
 
     /// Parse list: [<values>]
     fn parseList(self: *Parser) ParseError!Value {
         self.pos += 1;
-        return .{ .list = try self.collectUntil(']', 256, false) };
+        return .{ .list = try self.collectUntil(']', false) };
     }
 
     /// Parse dictionary: {<key><value>...}
     fn parseDictionary(self: *Parser) ParseError!Value {
         self.pos += 1;
-        var entries_buf: [256]Value.DictEntry = undefined;
-        var entries_len: usize = 0;
+        var entries = std.ArrayListUnmanaged(Value.DictEntry){};
+        errdefer entries.deinit(self.allocator);
+        
         var last_key_start: usize = 0;
         var last_key_end: usize = 0;
 
@@ -1007,7 +1011,7 @@ pub const Parser = struct {
             const val = try self.parse();
 
             // Verify canonical ordering using original input bytes
-            if (entries_len > 0) {
+            if (entries.items.len > 0) {
                 const prev_bytes = self.input[last_key_start..last_key_end];
                 const curr_bytes = self.input[key_start..key_end];
                 if (std.mem.order(u8, curr_bytes, prev_bytes) == .lt) {
@@ -1017,23 +1021,19 @@ pub const Parser = struct {
             last_key_start = key_start;
             last_key_end = key_end;
 
-            if (entries_len >= 256) return error.DictionaryTooLarge;
-            entries_buf[entries_len] = .{ .key = key, .value = val };
-            entries_len += 1;
+            try entries.append(self.allocator, .{ .key = key, .value = val });
         }
 
         if (self.pos >= self.input.len) return error.UnexpectedEOF;
         self.pos += 1;
 
-        const entries = try self.allocator.alloc(Value.DictEntry, entries_len);
-        @memcpy(entries, entries_buf[0..entries_len]);
-        return .{ .dictionary = entries };
+        return .{ .dictionary = try entries.toOwnedSlice(self.allocator) };
     }
 
     /// Parse set: #<values>$
     fn parseSet(self: *Parser) ParseError!Value {
         self.pos += 1;
-        return .{ .set = try self.collectUntil('$', 256, true) };
+        return .{ .set = try self.collectUntil('$', true) };
     }
 
     /// Parse record: <<label><fields>...>
@@ -1084,7 +1084,7 @@ pub const Parser = struct {
 
         const label_alloc = try self.allocator.alloc(Value, 1);
         label_alloc[0] = label;
-        const fields = try self.collectUntil('>', 256, false);
+        const fields = try self.collectUntil('>', false);
         return .{ .record = .{ .label = &label_alloc[0], .fields = fields } };
     }
 

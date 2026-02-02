@@ -10,7 +10,7 @@
 //! - Zero allocations in the event loop itself
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
+const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 
 /// Mock xev types for when libxev is not available
