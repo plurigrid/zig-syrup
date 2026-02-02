@@ -80,7 +80,7 @@ pub const Complex = struct {
     }
 
     pub fn toSyrup(self: Complex, allocator: Allocator) !syrup.Value {
-        const entries = try allocator.alloc(syrup.DictEntry, 2);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 2);
         entries[0] = .{
             .key = syrup.Value{ .symbol = "re" },
             .value = syrup.Value{ .float = self.re },
@@ -146,7 +146,7 @@ pub const Monomial = struct {
             exp_values[idx] = syrup.Value{ .integer = @intCast(e) };
         }
 
-        const entries = try allocator.alloc(syrup.DictEntry, 2);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 2);
         entries[0] = .{
             .key = syrup.Value{ .symbol = "coeff" },
             .value = try self.coeff.toSyrup(allocator),
@@ -186,7 +186,7 @@ pub const Polynomial = struct {
             mono_values[idx] = try mono.toSyrup(allocator);
         }
 
-        const entries = try allocator.alloc(syrup.DictEntry, 2);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 2);
         entries[0] = .{
             .key = syrup.Value{ .symbol = "monomials" },
             .value = syrup.Value{ .list = mono_values },
@@ -218,7 +218,7 @@ pub const PolynomialSystem = struct {
             poly_values[idx] = try poly.toSyrup(allocator);
         }
 
-        const entries = try allocator.alloc(syrup.DictEntry, 2);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 2);
         entries[0] = .{
             .key = syrup.Value{ .symbol = "polynomials" },
             .value = syrup.Value{ .list = poly_values },
@@ -259,7 +259,7 @@ pub const Homotopy = struct {
     }
 
     pub fn toSyrup(self: Homotopy, allocator: Allocator) !syrup.Value {
-        const entries = try allocator.alloc(syrup.DictEntry, 3);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 3);
         entries[0] = .{
             .key = syrup.Value{ .symbol = "start" },
             .value = try self.start.toSyrup(allocator),
@@ -321,7 +321,7 @@ pub const PathResult = struct {
             end_vals[idx] = try c.toSyrup(allocator);
         }
 
-        const entries = try allocator.alloc(syrup.DictEntry, 5);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 5);
         entries[0] = .{
             .key = syrup.Value{ .symbol = "start" },
             .value = syrup.Value{ .list = start_vals },
@@ -525,9 +525,9 @@ pub const HomotopyACSet = struct {
     allocator: Allocator,
 
     // Tables
-    solutions: std.ArrayList(SolutionRow),
-    paths: std.ArrayList(PathRow),
-    systems: std.ArrayList(SystemRow),
+    solutions: std.ArrayListUnmanaged(SolutionRow),
+    paths: std.ArrayListUnmanaged(PathRow),
+    systems: std.ArrayListUnmanaged(SystemRow),
 
     pub const SolutionRow = struct {
         _id: usize,
@@ -554,22 +554,22 @@ pub const HomotopyACSet = struct {
     pub fn init(allocator: Allocator) HomotopyACSet {
         return .{
             .allocator = allocator,
-            .solutions = std.ArrayList(SolutionRow).init(allocator),
-            .paths = std.ArrayList(PathRow).init(allocator),
-            .systems = std.ArrayList(SystemRow).init(allocator),
+            .solutions = .{},
+            .paths = .{},
+            .systems = .{},
         };
     }
 
     pub fn deinit(self: *HomotopyACSet) void {
-        self.solutions.deinit();
-        self.paths.deinit();
-        self.systems.deinit();
+        self.solutions.deinit(self.allocator);
+        self.paths.deinit(self.allocator);
+        self.systems.deinit(self.allocator);
     }
 
     /// Add a solution and return its ID
     pub fn addSolution(self: *HomotopyACSet, values: []const Complex) !usize {
         const id = self.solutions.items.len + 1;
-        try self.solutions.append(.{ ._id = id, .values = values });
+        try self.solutions.append(self.allocator, .{ ._id = id, .values = values });
         return id;
     }
 
@@ -580,7 +580,7 @@ pub const HomotopyACSet = struct {
         for (sys.polynomials, 0..) |poly, idx| {
             degrees[idx] = poly.degree();
         }
-        try self.systems.append(.{
+        try self.systems.append(self.allocator, .{
             ._id = id,
             .num_vars = sys.num_vars,
             .num_polys = sys.polynomials.len,
@@ -594,7 +594,7 @@ pub const HomotopyACSet = struct {
         const start_id = try self.addSolution(result.start_solution);
         const end_id = try self.addSolution(result.end_solution);
         const id = self.paths.items.len + 1;
-        try self.paths.append(.{
+        try self.paths.append(self.allocator, .{
             ._id = id,
             .start_sol = start_id,
             .end_sol = end_id,
@@ -608,8 +608,8 @@ pub const HomotopyACSet = struct {
 
     /// Export to ACSet.jl compatible JSON
     pub fn toJson(self: HomotopyACSet, allocator: Allocator) ![]const u8 {
-        var buf = std.ArrayList(u8).init(allocator);
-        const writer = buf.writer();
+        var buf = std.ArrayListUnmanaged(u8){};
+        const writer = buf.writer(allocator);
 
         try writer.writeAll("{\n");
 
@@ -681,7 +681,7 @@ pub const HomotopyACSet = struct {
         try writer.writeAll("  }\n");
         try writer.writeAll("}\n");
 
-        return buf.toOwnedSlice();
+        return buf.toOwnedSlice(allocator);
     }
 
     /// Convert to Syrup value
@@ -693,7 +693,7 @@ pub const HomotopyACSet = struct {
             for (sol.values, 0..) |c, vidx| {
                 vals[vidx] = try c.toSyrup(allocator);
             }
-            const entries = try allocator.alloc(syrup.DictEntry, 2);
+            const entries = try allocator.alloc(syrup.Value.DictEntry, 2);
             entries[0] = .{ .key = syrup.Value{ .symbol = "_id" }, .value = syrup.Value{ .integer = @intCast(sol._id) } };
             entries[1] = .{ .key = syrup.Value{ .symbol = "values" }, .value = syrup.Value{ .list = vals } };
             sol_list[idx] = syrup.Value{ .dictionary = entries };
@@ -702,7 +702,7 @@ pub const HomotopyACSet = struct {
         // Build paths list
         var path_list = try allocator.alloc(syrup.Value, self.paths.items.len);
         for (self.paths.items, 0..) |path, idx| {
-            const entries = try allocator.alloc(syrup.DictEntry, 6);
+            const entries = try allocator.alloc(syrup.Value.DictEntry, 6);
             entries[0] = .{ .key = syrup.Value{ .symbol = "_id" }, .value = syrup.Value{ .integer = @intCast(path._id) } };
             entries[1] = .{ .key = syrup.Value{ .symbol = "start_sol" }, .value = syrup.Value{ .integer = @intCast(path.start_sol) } };
             entries[2] = .{ .key = syrup.Value{ .symbol = "end_sol" }, .value = syrup.Value{ .integer = @intCast(path.end_sol) } };
@@ -900,4 +900,121 @@ test "acset json export" {
     // Check that it contains expected schema elements
     try std.testing.expect(std.mem.indexOf(u8, json, "\"Ob\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"Solution\"") != null);
+}
+
+test "complex division roundtrip" {
+    const a = Complex.init(3, 4);
+    const b = Complex.init(1, 2);
+
+    // a / b * b ≈ a
+    const quotient = Complex.div(a, b);
+    const product = Complex.mul(quotient, b);
+    try std.testing.expectApproxEqAbs(@as(f64, 3), product.re, 1e-10);
+    try std.testing.expectApproxEqAbs(@as(f64, 4), product.im, 1e-10);
+}
+
+test "Euler identity: exp(i*pi) approx -1" {
+    const i_pi = Complex.init(0, std.math.pi);
+    const result = Complex.exp(i_pi);
+    try std.testing.expectApproxEqAbs(@as(f64, -1.0), result.re, 1e-10);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.0), result.im, 1e-10);
+}
+
+test "polynomial degree calculation" {
+    // p(x,y) = 3*x^2*y + 2*x*y^3 -> degree 4
+    var exp1 = [_]u32{ 2, 1 };
+    var exp2 = [_]u32{ 1, 3 };
+    const monomials = [_]Monomial{
+        .{ .coeff = Complex.init(3, 0), .exponents = &exp1 },
+        .{ .coeff = Complex.init(2, 0), .exponents = &exp2 },
+    };
+    const poly = Polynomial{ .monomials = &monomials, .num_vars = 2 };
+    try std.testing.expectEqual(@as(u32, 4), poly.degree());
+}
+
+test "monomial degree sum" {
+    var exp = [_]u32{ 2, 3, 1 }; // x^2 * y^3 * z^1 = degree 6
+    const mono = Monomial{ .coeff = Complex.one, .exponents = &exp };
+    try std.testing.expectEqual(@as(u32, 6), mono.degree());
+}
+
+test "total degree start system generation" {
+    const allocator = std.testing.allocator;
+
+    // Target: x^2 - 1 (degree 2, 1 variable)
+    var target_exp1 = [_]u32{2};
+    var target_exp2 = [_]u32{0};
+    const target_monos = [_]Monomial{
+        .{ .coeff = Complex.one, .exponents = &target_exp1 },
+        .{ .coeff = Complex.init(-1, 0), .exponents = &target_exp2 },
+    };
+    const target_poly = Polynomial{ .monomials = &target_monos, .num_vars = 1 };
+    const target = PolynomialSystem{ .polynomials = &[_]Polynomial{target_poly}, .num_vars = 1 };
+
+    const start = try totalDegreeStartSystem(target, allocator);
+
+    // Start system should have same structure
+    try std.testing.expectEqual(@as(usize, 1), start.polynomials.len);
+    try std.testing.expectEqual(@as(u32, 2), start.polynomials[0].degree());
+
+    // Clean up
+    for (start.polynomials) |poly| {
+        for (poly.monomials) |mono| {
+            allocator.free(mono.exponents);
+        }
+        allocator.free(poly.monomials);
+    }
+    allocator.free(start.polynomials);
+}
+
+test "start solutions are roots of unity" {
+    const allocator = std.testing.allocator;
+
+    // System of degree 2 in 1 var -> 2 solutions (roots of x^2 - 1)
+    var exp1 = [_]u32{2};
+    var exp2 = [_]u32{0};
+    const monos = [_]Monomial{
+        .{ .coeff = Complex.one, .exponents = &exp1 },
+        .{ .coeff = Complex.init(-1, 0), .exponents = &exp2 },
+    };
+    const poly = Polynomial{ .monomials = &monos, .num_vars = 1 };
+    const system = PolynomialSystem{ .polynomials = &[_]Polynomial{poly}, .num_vars = 1 };
+
+    const solutions = try totalDegreeStartSolutions(system, allocator);
+    defer {
+        for (solutions) |sol| allocator.free(sol);
+        allocator.free(solutions);
+    }
+
+    try std.testing.expectEqual(@as(usize, 2), solutions.len);
+
+    // Each solution should be a root of unity: |z| ≈ 1
+    for (solutions) |sol| {
+        const mag = Complex.abs(sol[0]);
+        try std.testing.expectApproxEqAbs(@as(f64, 1.0), mag, 1e-10);
+    }
+}
+
+test "PathStatus to Trit mapping" {
+    try std.testing.expectEqual(continuation.Trit.plus, PathStatus.success.toTrit());
+    try std.testing.expectEqual(continuation.Trit.zero, PathStatus.tracking.toTrit());
+    try std.testing.expectEqual(continuation.Trit.minus, PathStatus.diverged.toTrit());
+    try std.testing.expectEqual(continuation.Trit.minus, PathStatus.singular.toTrit());
+    try std.testing.expectEqual(continuation.Trit.minus, PathStatus.min_step.toTrit());
+}
+
+test "HomotopyACSet syrup contains expected labels" {
+    const allocator = std.testing.allocator;
+
+    var acset = HomotopyACSet.init(allocator);
+    defer acset.deinit();
+
+    const sol = [_]Complex{Complex.init(1, 0)};
+    _ = try acset.addSolution(&sol);
+
+    const syrup_val = try acset.toSyrup(allocator);
+    // Should be a record with label "homotopy-acset"
+    try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(syrup_val));
+    const label = syrup_val.record.label.*;
+    try std.testing.expectEqualStrings("homotopy-acset", label.symbol);
 }

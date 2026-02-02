@@ -200,7 +200,7 @@ pub const WorldDamage = struct {
         defer region_values.deinit(allocator);
 
         for (regions) |r| {
-            const entries = try allocator.alloc(syrup.DictEntry, 5);
+            const entries = try allocator.alloc(syrup.Value.DictEntry, 5);
             entries[0] = .{ .key = .{ .symbol = "min-x" }, .value = .{ .integer = r.min_x } };
             entries[1] = .{ .key = .{ .symbol = "min-y" }, .value = .{ .integer = r.min_y } };
             entries[2] = .{ .key = .{ .symbol = "max-x" }, .value = .{ .integer = r.max_x } };
@@ -720,9 +720,9 @@ pub const TSEdit = struct {
     /// Convert AABB damage to TSEdit (for syntax re-highlight)
     pub fn fromDamage(damage: AABB, cols: u16) TSEdit {
         return .{
-            .start_byte = @as(u32, damage.min_y) * cols + @as(u32, @intCast(damage.min_x)),
-            .old_end_byte = @as(u32, damage.max_y) * cols + @as(u32, @intCast(damage.max_x)) + 1,
-            .new_end_byte = @as(u32, damage.max_y) * cols + @as(u32, @intCast(damage.max_x)) + 1,
+            .start_byte = @as(u32, @intCast(damage.min_y)) * cols + @as(u32, @intCast(damage.min_x)),
+            .old_end_byte = @as(u32, @intCast(damage.max_y)) * cols + @as(u32, @intCast(damage.max_x)) + 1,
+            .new_end_byte = @as(u32, @intCast(damage.max_y)) * cols + @as(u32, @intCast(damage.max_x)) + 1,
             .start_row = @intCast(damage.min_y),
             .start_col = @intCast(damage.min_x),
             .old_end_row = @intCast(damage.max_y),
@@ -800,7 +800,7 @@ pub const TerminalFrame = struct {
         var it = self.panes.iterator();
         while (it.next()) |entry| {
             const pane = entry.value_ptr;
-            const pane_entries = try allocator.alloc(syrup.DictEntry, 5);
+            const pane_entries = try allocator.alloc(syrup.Value.DictEntry, 5);
             pane_entries[0] = .{ .key = .{ .symbol = "id" }, .value = .{ .integer = pane.id } };
             pane_entries[1] = .{ .key = .{ .symbol = "cols" }, .value = .{ .integer = pane.cols } };
             pane_entries[2] = .{ .key = .{ .symbol = "rows" }, .value = .{ .integer = pane.rows } };
@@ -875,4 +875,144 @@ test "cell comparison" {
 
     try std.testing.expect(Cell.eql(a, b));
     try std.testing.expect(!Cell.eql(a, c));
+}
+
+test "multi-layer damage coalescing" {
+    const allocator = std.testing.allocator;
+    var tracker = DamageTracker.init(allocator);
+    defer tracker.deinit();
+
+    // Damage tiles at different z layers in the active world
+    try tracker.damage(.{ .x = 1, .y = 1, .z = 0 }, .state_mutation);
+    try tracker.damage(.{ .x = 2, .y = 2, .z = 0 }, .state_mutation);
+    try tracker.damage(.{ .x = 5, .y = 5, .z = 1 }, .state_mutation);
+
+    const w = try tracker.world(0);
+    const regions = try w.coalesce();
+
+    // Should have at least 2 regions (one per z-layer)
+    try std.testing.expect(regions.len >= 2);
+}
+
+test "cascade damage 3x3 grid" {
+    const allocator = std.testing.allocator;
+    var tracker = DamageTracker.init(allocator);
+    defer tracker.deinit();
+
+    var world_tiles = try TiledWorld.init(allocator, &tracker, 0, 10, 10, 1);
+    defer world_tiles.deinit();
+
+    // Cascade with radius 1 around center (5,5)
+    try world_tiles.cascadeDamage(.{ .x = 5, .y = 5, .z = 0 }, 1);
+
+    // Should damage 3x3 = 9 tiles
+    try std.testing.expectEqual(@as(usize, 9), world_tiles.damage.dirty_tiles.count());
+}
+
+test "tiled world syrup roundtrip structure" {
+    const allocator = std.testing.allocator;
+    var tracker = DamageTracker.init(allocator);
+    defer tracker.deinit();
+
+    var world_tiles = try TiledWorld.init(allocator, &tracker, 42, 8, 8, 1);
+    defer world_tiles.deinit();
+
+    try world_tiles.setTile(.{ .x = 0, .y = 0, .z = 0 }, .{ .content_hash = 999, .color_seed = 1, .generation = 1 });
+
+    const val = try world_tiles.toSyrup(allocator);
+    // Should be a record
+    try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(val));
+    const label = val.record.label.*;
+    try std.testing.expectEqualStrings("tiled-world", label.symbol);
+}
+
+test "terminal pane scroll damages rows" {
+    const allocator = std.testing.allocator;
+    var pane = try TerminalPane.init(allocator, 0, 20, 10);
+    defer pane.deinit();
+
+    // Commit to clear initial damage
+    const initial = try pane.commit(allocator);
+    allocator.free(initial);
+    try std.testing.expectEqual(@as(usize, 0), pane.dirtyCount());
+
+    // Scroll up 2 lines
+    pane.scrollUp(2);
+
+    // All rows in scroll region should be damaged
+    try std.testing.expect(pane.dirtyCount() > 0);
+    // The full pane cols * rows cells should be dirty
+    try std.testing.expectEqual(@as(usize, 20 * 10), pane.dirtyCount());
+}
+
+test "terminal pane multiple writes single commit" {
+    const allocator = std.testing.allocator;
+    var pane = try TerminalPane.init(allocator, 0, 40, 10);
+    defer pane.deinit();
+
+    // Commit initial state to clear all-dirty mask
+    const initial = try pane.commit(allocator);
+    allocator.free(initial);
+
+    // Write multiple cells
+    pane.setCell(0, 0, .{ .codepoint = 'A', .fg = 0xFF0000 });
+    pane.setCell(1, 0, .{ .codepoint = 'B', .fg = 0x00FF00 });
+    pane.setCell(2, 0, .{ .codepoint = 'C', .fg = 0x0000FF });
+    // Non-adjacent
+    pane.setCell(10, 5, .{ .codepoint = 'X', .fg = 0xFFFFFF });
+
+    try std.testing.expectEqual(@as(usize, 4), pane.dirtyCount());
+
+    const regions = try pane.commit(allocator);
+    defer allocator.free(regions);
+
+    // Should produce 2 damage regions (run at row 0 cols 0-2, and row 5 col 10)
+    try std.testing.expectEqual(@as(usize, 2), regions.len);
+    try std.testing.expectEqual(@as(usize, 0), pane.dirtyCount());
+}
+
+test "damage tracker circular event buffer" {
+    const allocator = std.testing.allocator;
+    var tracker = DamageTracker.init(allocator);
+    defer tracker.deinit();
+    tracker.max_events = 10; // Small buffer for testing
+
+    // Log more events than buffer size
+    for (0..25) |j| {
+        try tracker.damage(.{ .x = @intCast(j), .y = 0, .z = 0 }, .state_mutation);
+    }
+
+    // Should be capped at max_events
+    try std.testing.expectEqual(@as(usize, 10), tracker.event_log.items.len);
+}
+
+test "AABB merge non-overlapping" {
+    const a = AABB{ .min_x = 0, .min_y = 0, .max_x = 2, .max_y = 2, .z = 0 };
+    const b = AABB{ .min_x = 10, .min_y = 10, .max_x = 12, .max_y = 12, .z = 0 };
+
+    try std.testing.expect(!a.intersects(b));
+
+    const merged = a.merge(b);
+    try std.testing.expectEqual(@as(i32, 0), merged.min_x);
+    try std.testing.expectEqual(@as(i32, 0), merged.min_y);
+    try std.testing.expectEqual(@as(i32, 12), merged.max_x);
+    try std.testing.expectEqual(@as(i32, 12), merged.max_y);
+    // Merged area is larger than sum of parts (includes empty space)
+    try std.testing.expect(merged.area() > a.area() + b.area());
+}
+
+test "full redraw flag" {
+    const allocator = std.testing.allocator;
+    var wd = WorldDamage.init(allocator, 0);
+    defer wd.deinit();
+
+    try std.testing.expect(!wd.isDirty());
+
+    wd.damageAll();
+    try std.testing.expect(wd.isDirty());
+    try std.testing.expect(wd.full_redraw);
+
+    wd.clear();
+    try std.testing.expect(!wd.isDirty());
+    try std.testing.expect(!wd.full_redraw);
 }

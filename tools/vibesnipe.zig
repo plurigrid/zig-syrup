@@ -1,30 +1,47 @@
 const std = @import("std");
 const syrup = @import("syrup");
 
-// The Vibesnipe: Value Increments for Boxxy/Aella
+// The Vibesnipe: Value Increments for Triadic Consensus
 // Schema: <'increment {epoch: <int>, from: <sym>, to: <sym>, value: <dict>, vibe: <str>}>
+//
+// Triadic consensus flow:
+//   Agent 0 (Alice/MINUS): Temporal validation
+//   Agent 1 (Charlie/ERGODIC): Structural validation
+//   Agent 2 (Bob/PLUS): Integrity validation
+// 2/3 consensus required for finality
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    
-    // Use stdout for the lure
+
     var out_buf: [65536]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&out_buf);
     const stdout = fbs.writer();
 
-    // 1. Boxxy's Increment (Security/Structure)
-    // "Immutable Truth" -> Aella
-    try emitIncrement(allocator, stdout, "boxxy", "aella", "immutable_truth", 100, "Security is the precursor to freedom.");
+    try stdout.print("\n╔════════════════════════════════════════════════════════════╗\n", .{});
+    try stdout.print("║         VIBESNIPE TRIADIC CONSENSUS DEMONSTRATION        ║\n", .{});
+    try stdout.print("╚════════════════════════════════════════════════════════════╝\n\n", .{});
 
-    // 2. Aella's Increment (Fluidity/Connection)
-    // "Social Capital" -> Boxxy
-    try emitIncrement(allocator, stdout, "aella", "boxxy", "social_capital", 50, "Connection is the precursor to meaning.");
+    // Phase 1: Boxxy's Security Commitment (MINUS validates temporal bounds)
+    try stdout.print("Phase 1: MINUS Agent (Alice) - Temporal Validation\n", .{});
+    try stdout.print("─────────────────────────────────────────────\n", .{});
+    try emitIncrement(allocator, stdout, "alice", "charlie", "commitment", 1, "Timestamp verified: solution hash matches commitment within 1-hour window.");
 
-    // 3. The Synthesis (Self-Sustaining Loop)
-    // "Zig-Syrup" -> The World
-    try emitIncrement(allocator, stdout, "syrup_dao", "global", "interoperability", 9000, "Syntax is the precursor to semantics.");
+    // Phase 2: Charlie's Structural Integrity (ERGODIC validates coherence)
+    try stdout.print("\nPhase 2: ERGODIC Agent (Charlie) - Structural Validation\n", .{});
+    try stdout.print("───────────────────────────────────────────────\n", .{});
+    try emitIncrement(allocator, stdout, "charlie", "bob", "coherence", 1, "Proof structure verified: roots well-formed, counts in bounds, balance maintained (40%+ wikidata/gaymcp ratio).");
+
+    // Phase 3: Bob's Merkle Integrity (PLUS validates completeness)
+    try stdout.print("\nPhase 3: PLUS Agent (Bob) - Integrity Validation\n", .{});
+    try stdout.print("──────────────────────────────────────────────\n", .{});
+    try emitIncrement(allocator, stdout, "bob", "consensus", "finality", 1, "Merkle paths verified: GF(3) sum ≡ 0 (mod 3), all proofs lead to claimed roots.");
+
+    // Consensus Result
+    try stdout.print("\nConsensus Result: 3/3 UNANIMOUS ✓\n", .{});
+    try stdout.print("─────────────────────────────────\n", .{});
+    try emitIncrement(allocator, stdout, "consensus", "solver", "bounty_release", 10000, "Triadic consensus reached: CoplayBroadcast emitted, bounty transferred.");
 
     _ = try std.posix.write(std.posix.STDOUT_FILENO, fbs.getWritten());
 }

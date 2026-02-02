@@ -316,55 +316,67 @@ pub const Message = union(enum) {
     pub fn toSyrup(self: Message, allocator: Allocator) !syrup.Value {
         return switch (self) {
             .initialize => |req| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("initialize");
-                const fields = try allocator.alloc(syrup.Value, 3);
+                // Single allocation: [label, field0, field1, field2]
+                const combined = try allocator.alloc(syrup.Value, 1 + 3);
+                combined[0] = syrup.symbol("initialize");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.integer(req.protocol_version);
                 fields[1] = try req.client_capabilities.toSyrup(allocator);
                 fields[2] = try req.client_info.toSyrup(allocator);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .session_new => |req| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("session/new");
-                const fields = try allocator.alloc(syrup.Value, 1);
+                // Single allocation: [label, field0]
+                const combined = try allocator.alloc(syrup.Value, 1 + 1);
+                combined[0] = syrup.symbol("session/new");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.string(req.cwd);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .session_prompt => |req| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("session/prompt");
                 var content_values = try allocator.alloc(syrup.Value, req.prompt.len);
                 for (req.prompt, 0..) |block, i| {
                     content_values[i] = try block.toSyrup(allocator);
                 }
-                const fields = try allocator.alloc(syrup.Value, 2);
+                // Single allocation: [label, field0, field1]
+                const combined = try allocator.alloc(syrup.Value, 1 + 2);
+                combined[0] = syrup.symbol("session/prompt");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.string(req.session_id);
                 fields[1] = syrup.list(content_values);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .session_cancel => |notif| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("session/cancel");
-                const fields = try allocator.alloc(syrup.Value, 1);
+                // Single allocation: [label, field0]
+                const combined = try allocator.alloc(syrup.Value, 1 + 1);
+                combined[0] = syrup.symbol("session/cancel");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.string(notif.session_id);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .fs_read_text_file => |req| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("fs/read_text_file");
-                const fields = try allocator.alloc(syrup.Value, 2);
+                // Single allocation: [label, field0, field1]
+                const combined = try allocator.alloc(syrup.Value, 1 + 2);
+                combined[0] = syrup.symbol("fs/read_text_file");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.string(req.session_id);
                 fields[1] = syrup.string(req.path);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .terminal_create => |req| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("terminal/create");
-                const fields = try allocator.alloc(syrup.Value, 2);
+                // Single allocation: [label, field0, field1]
+                const combined = try allocator.alloc(syrup.Value, 1 + 2);
+                combined[0] = syrup.symbol("terminal/create");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.string(req.session_id);
                 fields[1] = syrup.string(req.command);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             else => error.NotImplemented,
         };
@@ -406,28 +418,30 @@ pub const ContentBlock = union(enum) {
     pub fn toSyrup(self: ContentBlock, allocator: Allocator) !syrup.Value {
         return switch (self) {
             .text => |t| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("text");
-                const fields = try allocator.alloc(syrup.Value, 1);
+                // Single allocation: [label, field0]
+                const combined = try allocator.alloc(syrup.Value, 1 + 1);
+                combined[0] = syrup.symbol("text");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.string(t.text);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .image => |img| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("image");
-                const fields = try allocator.alloc(syrup.Value, 2);
+                // Single allocation: [label, field0, field1]
+                const combined = try allocator.alloc(syrup.Value, 1 + 2);
+                combined[0] = syrup.symbol("image");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.bytes(img.data);
                 fields[1] = syrup.string(img.mime_type);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             .terminal_frame => |tf| blk: {
-                const label = try allocator.create(syrup.Value);
-                label.* = syrup.symbol("terminal-frame");
                 // Count entries: data + mimeType + optional width + optional height
                 var entry_count: usize = 2;
                 if (tf.width != null) entry_count += 1;
                 if (tf.height != null) entry_count += 1;
-                
+
                 const entries = try allocator.alloc(syrup.Value.DictEntry, entry_count);
                 var idx: usize = 0;
                 entries[idx] = .{ .key = syrup.symbol("data"), .value = syrup.bytes(tf.data) };
@@ -442,9 +456,13 @@ pub const ContentBlock = union(enum) {
                     entries[idx] = .{ .key = syrup.symbol("height"), .value = syrup.integer(h) };
                     idx += 1;
                 }
-                const fields = try allocator.alloc(syrup.Value, 1);
+                // Single allocation: [label, field0]
+                const combined = try allocator.alloc(syrup.Value, 1 + 1);
+                combined[0] = syrup.symbol("terminal-frame");
+                const label_ptr = &combined[0];
+                const fields = combined[1..];
                 fields[0] = syrup.dictionary(entries);
-                break :blk syrup.record(label, fields);
+                break :blk syrup.record(label_ptr, fields);
             },
             else => error.NotImplemented,
         };
@@ -861,37 +879,42 @@ pub const AcpAgent = struct {
 
     /// Send session update to client
     pub fn sendUpdate(self: *AcpAgent, fd: i32, session_id: []const u8, update: SessionUpdate) !void {
-        const label = try self.allocator.create(syrup.Value);
-        label.* = syrup.symbol("session/update");
-
         const update_value = switch (update) {
             .agent_message_chunk => |chunk| blk: {
-                const inner_label = try self.allocator.create(syrup.Value);
-                inner_label.* = syrup.symbol("agent_message_chunk");
-                const inner_fields = try self.allocator.alloc(syrup.Value, 1);
+                // Single allocation: [label, field0]
+                const inner_combined = try self.allocator.alloc(syrup.Value, 1 + 1);
+                inner_combined[0] = syrup.symbol("agent_message_chunk");
+                const inner_label = &inner_combined[0];
+                const inner_fields = inner_combined[1..];
                 inner_fields[0] = try chunk.content.toSyrup(self.allocator);
                 break :blk syrup.record(inner_label, inner_fields);
             },
             .tool_call => |tc| blk: {
-                const inner_label = try self.allocator.create(syrup.Value);
-                inner_label.* = syrup.symbol("tool_call");
                 const entries = try self.allocator.alloc(syrup.Value.DictEntry, 4);
                 entries[0] = .{ .key = syrup.symbol("toolCallId"), .value = syrup.string(tc.tool_call_id) };
                 entries[1] = .{ .key = syrup.symbol("title"), .value = syrup.string(tc.title) };
                 entries[2] = .{ .key = syrup.symbol("kind"), .value = syrup.symbol(@tagName(tc.kind)) };
                 entries[3] = .{ .key = syrup.symbol("status"), .value = syrup.symbol(@tagName(tc.status)) };
-                const inner_fields = try self.allocator.alloc(syrup.Value, 1);
+                // Single allocation: [label, field0]
+                const inner_combined = try self.allocator.alloc(syrup.Value, 1 + 1);
+                inner_combined[0] = syrup.symbol("tool_call");
+                const inner_label = &inner_combined[0];
+                const inner_fields = inner_combined[1..];
                 inner_fields[0] = syrup.dictionary(entries);
                 break :blk syrup.record(inner_label, inner_fields);
             },
             else => return error.NotImplemented,
         };
 
-        const fields = try self.allocator.alloc(syrup.Value, 2);
+        // Single allocation: [label, field0, field1]
+        const combined = try self.allocator.alloc(syrup.Value, 1 + 2);
+        combined[0] = syrup.symbol("session/update");
+        const label_ptr = &combined[0];
+        const fields = combined[1..];
         fields[0] = syrup.string(session_id);
         fields[1] = update_value;
 
-        const msg = syrup.record(label, fields);
+        const msg = syrup.record(label_ptr, fields);
         try self.async_ctx.asyncWrite(fd, msg, null);
     }
 };

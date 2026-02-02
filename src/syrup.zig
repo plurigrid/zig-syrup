@@ -528,6 +528,14 @@ pub const Error = struct {
         return buf[0..stream.pos];
     }
 
+    /// Encode to a fixed buffer, returning the number of bytes written.
+    /// Avoids the slice return when callers only need the length.
+    pub fn encodeLen(self: Value, buf: []u8) !usize {
+        var fbs = std.io.fixedBufferStream(buf);
+        try self.encode(fbs.writer());
+        return fbs.pos;
+    }
+
     /// Encode to allocated buffer
     pub fn encodeAlloc(self: Value, allocator: Allocator) ![]u8 {
         const ByteList = std.array_list.AlignedManaged(u8, null);
@@ -687,7 +695,20 @@ pub fn dictionaryCanonical(allocator: Allocator, entries: []const Value.DictEntr
     if (entries.len == 0) return .{ .dictionary = &[_]Value.DictEntry{} };
     const sorted = try allocator.alloc(Value.DictEntry, entries.len);
     @memcpy(sorted, entries);
-    std.mem.sort(Value.DictEntry, sorted, {}, dictEntryLessThan);
+    if (sorted.len <= 8) {
+        // Insertion sort for small dicts — lower overhead than pdqsort
+        for (1..sorted.len) |i| {
+            const key = sorted[i];
+            var j: usize = i;
+            while (j > 0 and sorted[j - 1].key.compare(key.key) == .gt) {
+                sorted[j] = sorted[j - 1];
+                j -= 1;
+            }
+            sorted[j] = key;
+        }
+    } else {
+        std.mem.sort(Value.DictEntry, sorted, {}, dictEntryLessThan);
+    }
     return .{ .dictionary = sorted };
 }
 
@@ -696,7 +717,20 @@ pub fn setCanonical(allocator: Allocator, items: []const Value) !Value {
     if (items.len == 0) return .{ .set = &[_]Value{} };
     const sorted = try allocator.alloc(Value, items.len);
     @memcpy(sorted, items);
-    std.mem.sort(Value, sorted, {}, valueLessThan);
+    if (sorted.len <= 8) {
+        // Insertion sort for small sets — lower overhead than pdqsort
+        for (1..sorted.len) |i| {
+            const key = sorted[i];
+            var j: usize = i;
+            while (j > 0 and sorted[j - 1].compare(key) == .gt) {
+                sorted[j] = sorted[j - 1];
+                j -= 1;
+            }
+            sorted[j] = key;
+        }
+    } else {
+        std.mem.sort(Value, sorted, {}, valueLessThan);
+    }
     return .{ .set = sorted };
 }
 
@@ -708,6 +742,13 @@ pub fn setCanonical(allocator: Allocator, items: []const Value) !Value {
 pub fn computeCid(value: Value, out: *[32]u8) !void {
     var buf: [4096]u8 = undefined;
     const encoded = try value.encodeBuf(&buf);
+    std.crypto.hash.sha2.Sha256.hash(encoded, out, .{});
+}
+
+/// Compute SHA-256 CID using a caller-provided encode buffer
+/// Avoids the fixed 4096-byte stack allocation when the caller already has a buffer
+pub fn computeCidWithBuf(value: Value, out: *[32]u8, encode_buf: []u8) !void {
+    const encoded = try value.encodeBuf(encode_buf);
     std.crypto.hash.sha2.Sha256.hash(encoded, out, .{});
 }
 
@@ -2375,6 +2416,43 @@ pub inline fn parseDecimalFast(input: []const u8) struct { value: u64, len: usiz
     var value: u64 = 0;
     var i: usize = 0;
 
+    // SWAR fast path: check if first 8 bytes are all digits
+    if (input.len >= 8) {
+        // Load 8 bytes as u64
+        const chunk = std.mem.readInt(u64, input[0..8], .little);
+        // Each byte minus '0', check if all < 10
+        const zeros: u64 = 0x3030303030303030; // '0' repeated
+        const sub = chunk -% zeros;
+        // Check each byte is a valid digit (0-9):
+        // After subtracting '0', each byte should be < 10.
+        // If byte was < '0', the subtraction wraps and sets high bit.
+        // If byte was > '9', (byte - '0') >= 10, so adding 0x76 (= 0x80 - 10) sets high bit.
+        const hi_bits = (sub | (sub +% 0x7676767676767676)) & 0x8080808080808080;
+        if (hi_bits == 0) {
+            // All 8 bytes are ASCII digits, parse directly
+            const b0: u64 = (chunk >> 0) & 0xFF;
+            const b1: u64 = (chunk >> 8) & 0xFF;
+            const b2: u64 = (chunk >> 16) & 0xFF;
+            const b3: u64 = (chunk >> 24) & 0xFF;
+            const b4: u64 = (chunk >> 32) & 0xFF;
+            const b5: u64 = (chunk >> 40) & 0xFF;
+            const b6: u64 = (chunk >> 48) & 0xFF;
+            const b7: u64 = (chunk >> 56) & 0xFF;
+            value = (b0 -% 0x30) * 10000000 + (b1 -% 0x30) * 1000000 +
+                (b2 -% 0x30) * 100000 + (b3 -% 0x30) * 10000 +
+                (b4 -% 0x30) * 1000 + (b5 -% 0x30) * 100 +
+                (b6 -% 0x30) * 10 + (b7 -% 0x30);
+            i = 8;
+            // Continue with remaining digits
+            while (i < input.len and i < 19) : (i += 1) {
+                const c = input[i];
+                if (c < '0' or c > '9') break;
+                value = value * 10 + (c - '0');
+            }
+            return .{ .value = value, .len = i };
+        }
+    }
+
     // Unrolled fast path for common small numbers (1-4 digits)
     if (input.len >= 1 and input[0] >= '0' and input[0] <= '9') {
         value = input[0] - '0';
@@ -2416,6 +2494,8 @@ pub fn estimateCapTPArenaSize(input: []const u8) usize {
             return switch (result.value) {
                 10 => 256, // op:deliver / desc:error (10 chars) - medium
                 14 => 128, // op:deliver-only (14 chars) - smaller
+                5 => 64, // op:start (5 chars) - tiny
+                6 => 32, // op:ping (6 chars) - minimal
                 7 => 64, // op:pick (7 chars) - tiny
                 8 => 128, // op:abort / desc:tag (8 chars) - small
                 9 => 64, // op:listen (9 chars) - tiny
@@ -2423,7 +2503,7 @@ pub fn estimateCapTPArenaSize(input: []const u8) usize {
                 11 => 128, // desc:export/answer (11 chars) - small
                 15, 16 => 256, // desc:import-* (15-16 chars) - medium
                 19 => 512, // desc:handoff-receive - large
-                else => 256, // unknown - reasonable default
+                else => @max(128, input.len * 2), // scale with message size
             };
         }
     }
@@ -2540,4 +2620,107 @@ test "roundtrip struct serialize/deserialize" {
     try std.testing.expectEqualSlices(u8, original.host, restored.host);
     try std.testing.expectEqual(original.port, restored.port);
     try std.testing.expectEqual(original.enabled, restored.enabled);
+}
+
+test "computeCidWithBuf matches computeCid" {
+    const val = integer(42);
+
+    var cid1: [32]u8 = undefined;
+    try computeCid(val, &cid1);
+
+    var caller_buf: [256]u8 = undefined;
+    var cid2: [32]u8 = undefined;
+    try computeCidWithBuf(val, &cid2, &caller_buf);
+
+    try std.testing.expectEqualSlices(u8, &cid1, &cid2);
+
+    // Also test with a more complex value
+    const entries = [_]Value.DictEntry{
+        .{ .key = string("x"), .value = integer(10) },
+        .{ .key = string("y"), .value = integer(20) },
+    };
+    const dict_val = dictionary(&entries);
+
+    var cid3: [32]u8 = undefined;
+    try computeCid(dict_val, &cid3);
+
+    var cid4: [32]u8 = undefined;
+    try computeCidWithBuf(dict_val, &cid4, &caller_buf);
+
+    try std.testing.expectEqualSlices(u8, &cid3, &cid4);
+}
+
+test "insertion sort for small canonical dictionary" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // 5 entries — uses insertion sort path (<=8)
+    const entries = [_]Value.DictEntry{
+        .{ .key = string("e"), .value = integer(5) },
+        .{ .key = string("c"), .value = integer(3) },
+        .{ .key = string("a"), .value = integer(1) },
+        .{ .key = string("d"), .value = integer(4) },
+        .{ .key = string("b"), .value = integer(2) },
+    };
+
+    const d = try dictionaryCanonical(allocator, &entries);
+    try std.testing.expectEqualSlices(u8, "a", d.dictionary[0].key.string);
+    try std.testing.expectEqualSlices(u8, "b", d.dictionary[1].key.string);
+    try std.testing.expectEqualSlices(u8, "c", d.dictionary[2].key.string);
+    try std.testing.expectEqualSlices(u8, "d", d.dictionary[3].key.string);
+    try std.testing.expectEqualSlices(u8, "e", d.dictionary[4].key.string);
+}
+
+test "insertion sort for small canonical set" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // 6 entries — uses insertion sort path (<=8)
+    const items = [_]Value{ integer(6), integer(3), integer(1), integer(5), integer(2), integer(4) };
+    const s = try setCanonical(allocator, &items);
+
+    try std.testing.expectEqual(@as(i64, 1), s.set[0].integer);
+    try std.testing.expectEqual(@as(i64, 2), s.set[1].integer);
+    try std.testing.expectEqual(@as(i64, 3), s.set[2].integer);
+    try std.testing.expectEqual(@as(i64, 4), s.set[3].integer);
+    try std.testing.expectEqual(@as(i64, 5), s.set[4].integer);
+    try std.testing.expectEqual(@as(i64, 6), s.set[5].integer);
+}
+
+test "SWAR fast decimal parsing for 8+ digit numbers" {
+    // 8-digit number: triggers SWAR path
+    const r1 = parseDecimalFast("12345678+");
+    try std.testing.expectEqual(@as(u64, 12345678), r1.value);
+    try std.testing.expectEqual(@as(usize, 8), r1.len);
+
+    // 10-digit number: SWAR parses first 8, loop handles rest
+    const r2 = parseDecimalFast("1234567890:");
+    try std.testing.expectEqual(@as(u64, 1234567890), r2.value);
+    try std.testing.expectEqual(@as(usize, 10), r2.len);
+
+    // Timestamp-like number (13 digits)
+    const r3 = parseDecimalFast("1706745600000+");
+    try std.testing.expectEqual(@as(u64, 1706745600000), r3.value);
+    try std.testing.expectEqual(@as(usize, 13), r3.len);
+
+    // 8 digits exactly at boundary
+    const r4 = parseDecimalFast("99999999\"");
+    try std.testing.expectEqual(@as(u64, 99999999), r4.value);
+    try std.testing.expectEqual(@as(usize, 8), r4.len);
+
+    // Verify small numbers still work (existing unrolled path)
+    const r5 = parseDecimalFast("42+");
+    try std.testing.expectEqual(@as(u64, 42), r5.value);
+    try std.testing.expectEqual(@as(usize, 2), r5.len);
+
+    // 8 bytes but not all digits — should fall through to unrolled path
+    const r6 = parseDecimalFast("1234abc+");
+    try std.testing.expectEqual(@as(u64, 1234), r6.value);
+    try std.testing.expectEqual(@as(usize, 4), r6.len);
 }

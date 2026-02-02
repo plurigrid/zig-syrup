@@ -54,8 +54,19 @@ pub fn jsonToSyrup(allocator: Allocator, jval: json.Value) Allocator.Error!syrup
                 };
                 idx += 1;
             }
-            // Sort for canonical Syrup encoding
-            std.mem.sort(syrup.Value.DictEntry, entries, {}, syrup.dictEntryLessThan);
+            // Check if already sorted before paying O(n log n)
+            var already_sorted = true;
+            if (entries.len > 1) {
+                for (0..entries.len - 1) |i| {
+                    if (syrup.dictEntryLessThan({}, entries[i + 1], entries[i])) {
+                        already_sorted = false;
+                        break;
+                    }
+                }
+            }
+            if (!already_sorted) {
+                std.mem.sort(syrup.Value.DictEntry, entries, {}, syrup.dictEntryLessThan);
+            }
             break :blk syrup.dictionary(entries);
         },
     };

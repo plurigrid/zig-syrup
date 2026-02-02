@@ -19,6 +19,15 @@ pub fn build(b: *std.Build) void {
     });
     geo_mod.addImport("syrup", syrup_mod);
 
+    // Czernowitz location codes module
+    const czernowitz_mod = b.addModule("czernowitz", .{
+        .root_source_file = b.path("src/czernowitz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    czernowitz_mod.addImport("geo", geo_mod);
+    czernowitz_mod.addImport("syrup", syrup_mod);
+
     // XEV I/O module
     const xev_io_mod = b.addModule("xev_io", .{
         .root_source_file = b.path("src/xev_io.zig"),
@@ -249,6 +258,71 @@ pub fn build(b: *std.Build) void {
     const vibesnipe_step = b.step("vibesnipe", "Run the vibesnipe generator");
     vibesnipe_step.dependOn(&run_vibesnipe.step);
 
+    // Create test module for czernowitz.zig
+    const czernowitz_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/czernowitz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    czernowitz_test_mod.addImport("geo", geo_mod);
+    czernowitz_test_mod.addImport("syrup", syrup_mod);
+
+    // Tests for Czernowitz
+    const czernowitz_tests = b.addTest(.{
+        .root_module = czernowitz_test_mod,
+    });
+    const run_czernowitz_tests = b.addRunArtifact(czernowitz_tests);
+
+    // Create test module for snapshot_test.zig
+    const snapshot_test_mod = b.createModule(.{
+        .root_source_file = b.path("test/snapshot_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    snapshot_test_mod.addImport("syrup", syrup_mod);
+
+    // Tests for Snapshot
+    const snapshot_tests = b.addTest(.{
+        .root_module = snapshot_test_mod,
+    });
+    const run_snapshot_tests = b.addRunArtifact(snapshot_tests);
+
+    // Rainbow module tests (uses relative imports, no module deps needed)
+    const rainbow_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/rainbow.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const rainbow_tests = b.addTest(.{ .root_module = rainbow_test_mod });
+    const run_rainbow_tests = b.addRunArtifact(rainbow_tests);
+
+    // Damage module tests
+    const damage_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/damage.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const damage_tests = b.addTest(.{ .root_module = damage_test_mod });
+    const run_damage_tests = b.addRunArtifact(damage_tests);
+
+    // Homotopy module tests
+    const homotopy_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/homotopy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const homotopy_tests = b.addTest(.{ .root_module = homotopy_test_mod });
+    const run_homotopy_tests = b.addRunArtifact(homotopy_tests);
+
+    // Continuation module tests
+    const continuation_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/continuation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const continuation_tests = b.addTest(.{ .root_module = continuation_test_mod });
+    const run_continuation_tests = b.addRunArtifact(continuation_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_xev_tests.step);
@@ -256,6 +330,44 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_bridge_tests.step);
     test_step.dependOn(&run_acp_tests.step);
     test_step.dependOn(&run_liveness_tests.step);
+    test_step.dependOn(&run_czernowitz_tests.step);
+    test_step.dependOn(&run_snapshot_tests.step);
+    test_step.dependOn(&run_rainbow_tests.step);
+    test_step.dependOn(&run_damage_tests.step);
+    test_step.dependOn(&run_homotopy_tests.step);
+    test_step.dependOn(&run_continuation_tests.step);
+
+    // Shader Viz Tool
+    const shader_mod = b.createModule(.{
+        .root_source_file = b.path("tools/shader_viz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    shader_mod.addImport("syrup", syrup_mod);
+
+    const shader_exe = b.addExecutable(.{
+        .name = "shader-viz",
+        .root_module = shader_mod,
+    });
+    const run_shader = b.addRunArtifact(shader_exe);
+    const shader_step = b.step("shader", "Run terminal shader visualization");
+    shader_step.dependOn(&run_shader.step);
+
+    // Test Viz Tool
+    const test_viz_mod = b.createModule(.{
+        .root_source_file = b.path("tools/test_viz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_viz_mod.addImport("syrup", syrup_mod);
+
+    const test_viz_exe = b.addExecutable(.{
+        .name = "test-viz",
+        .root_module = test_viz_mod,
+    });
+    const run_test_viz = b.addRunArtifact(test_viz_exe);
+    const test_viz_step = b.step("test-viz", "Run visual test runner");
+    test_viz_step.dependOn(&run_test_viz.step);
 
     // Benchmark executable
     // const bench_mod = b.createModule(.{

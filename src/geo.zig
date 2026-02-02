@@ -458,7 +458,7 @@ pub fn isValid(code: []const u8) bool {
     for (code, 0..) |c, i| {
         if (c == SEPARATOR) {
             if (separator_idx != null) return false; // Multiple separators
-            if (i != SEPARATOR_POSITION) return false; // Wrong position
+            if (i > SEPARATOR_POSITION or i % 2 == 1) return false; // Must be at or before position 8, at even index
             separator_idx = i;
         } else if (c == PADDING) {
             if (padding_start == null) padding_start = i;
@@ -499,6 +499,116 @@ pub fn isShortCode(code: []const u8) bool {
         }
     }
     return false;
+}
+
+// ============================================================================
+// SHORTEN / RECOVER (ported from bmorphism/open-location-code-zig)
+// ============================================================================
+
+/// Shortens a full Plus Code relative to a reference location.
+/// Closer references allow shorter codes:
+///   < ~50m  → remove 8 chars
+///   < ~1km  → remove 6 chars
+///   < ~20km → remove 4 chars
+///   < ~400km → remove 2 chars
+pub fn shortenOlc(code: []const u8, ref_lat: f64, ref_lng: f64, buffer: []u8) OlcError!usize {
+    if (!isFullCode(code)) return error.InvalidCode;
+
+    const area = try decodeOlc(code);
+    const center_lat = area.centerLatitude();
+    const center_lng = area.centerLongitude();
+
+    const lat_diff = @abs(ref_lat - center_lat);
+    const lng_diff = @abs(ref_lng - center_lng);
+    const range = @max(lat_diff, lng_diff);
+
+    var removal: usize = 0;
+    if (range < 0.000625) {
+        removal = 8;
+    } else if (range < 0.0125) {
+        removal = 6;
+    } else if (range < 0.25) {
+        removal = 4;
+    } else if (range < 5.0) {
+        removal = 2;
+    }
+
+    if (removal == 0) {
+        if (buffer.len < code.len) return error.BufferTooSmall;
+        @memcpy(buffer[0..code.len], code);
+        return code.len;
+    }
+
+    const short_len = code.len - removal;
+    if (buffer.len < short_len) return error.BufferTooSmall;
+
+    @memcpy(buffer[0..short_len], code[removal..code.len]);
+    return short_len;
+}
+
+/// Recovers a full Plus Code from a short code and reference location.
+pub fn recoverOlc(short_code: []const u8, ref_lat: f64, ref_lng: f64, buffer: []u8) OlcError!usize {
+    if (!isShortCode(short_code)) {
+        if (buffer.len < short_code.len) return error.BufferTooSmall;
+        @memcpy(buffer[0..short_code.len], short_code);
+        return short_code.len;
+    }
+
+    // Find separator position in short code
+    var sep_idx: usize = 0;
+    for (short_code, 0..) |c, i| {
+        if (c == SEPARATOR) {
+            sep_idx = i;
+            break;
+        }
+    }
+
+    // Encode reference to get prefix
+    var ref_buf: [20]u8 = undefined;
+    _ = try encodeOlc(ref_lat, ref_lng, 10, &ref_buf);
+
+    const prefix_len = SEPARATOR_POSITION - sep_idx;
+    const full_len = prefix_len + short_code.len;
+    if (buffer.len < full_len) return error.BufferTooSmall;
+
+    @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+    @memcpy(buffer[prefix_len..full_len], short_code);
+
+    // Decode and check proximity, adjust if needed
+    const area = try decodeOlc(buffer[0..full_len]);
+    const center_lat = area.centerLatitude();
+    const center_lng = area.centerLongitude();
+
+    const res = shortenResolution(prefix_len);
+
+    if (center_lat - ref_lat > res / 2.0) {
+        // Re-encode with adjusted lat
+        _ = try encodeOlc(center_lat - res, ref_lng, 10, &ref_buf);
+        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+    } else if (ref_lat - center_lat > res / 2.0) {
+        _ = try encodeOlc(center_lat + res, ref_lng, 10, &ref_buf);
+        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+    }
+
+    if (center_lng - ref_lng > res / 2.0) {
+        _ = try encodeOlc(ref_lat, center_lng - res, 10, &ref_buf);
+        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+    } else if (ref_lng - center_lng > res / 2.0) {
+        _ = try encodeOlc(ref_lat, center_lng + res, 10, &ref_buf);
+        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+    }
+
+    return full_len;
+}
+
+fn shortenResolution(prefix_len: usize) f64 {
+    return switch (prefix_len) {
+        2 => 20.0,
+        4 => 1.0,
+        6 => 0.05,
+        8 => 0.0025,
+        else => 20.0,
+    };
 }
 
 // ============================================================================
@@ -1005,6 +1115,52 @@ test "code area to JSON dict" {
 }
 
 // ---- Multiple locations CID uniqueness ----
+
+// ---- Shorten / Recover tests (ported from bmorphism/open-location-code-zig) ----
+
+test "shorten: close reference shortens code" {
+    var buf: [20]u8 = undefined;
+    // SF code with very close reference
+    const len = try shortenOlc("849VQHFJ+X6", 37.775, -122.419, &buf);
+    try std.testing.expect(len < 11);
+    try std.testing.expect(isShortCode(buf[0..len]));
+}
+
+test "shorten: far reference keeps full code" {
+    var buf: [20]u8 = undefined;
+    // SF code with distant reference (New York)
+    const len = try shortenOlc("849VQHFJ+X6", 40.7128, -74.0060, &buf);
+    try std.testing.expectEqualStrings("849VQHFJ+X6", buf[0..len]);
+}
+
+test "recover: short code recovers to full" {
+    var buf: [20]u8 = undefined;
+    const len = try recoverOlc("QHFJ+X6", 37.775, -122.419, &buf);
+    try std.testing.expect(isFullCode(buf[0..len]));
+    const area = try decodeOlc(buf[0..len]);
+    try std.testing.expect(area.centerLatitude() > 37.0);
+    try std.testing.expect(area.centerLatitude() < 38.0);
+}
+
+test "recover: full code unchanged" {
+    var buf: [20]u8 = undefined;
+    const len = try recoverOlc("849VQHFJ+X6", 0.0, 0.0, &buf);
+    try std.testing.expectEqualStrings("849VQHFJ+X6", buf[0..len]);
+}
+
+test "shorten/recover roundtrip" {
+    var short_buf: [20]u8 = undefined;
+    const short_len = try shortenOlc("849VQHFJ+X6", 37.775, -122.419, &short_buf);
+
+    var recovered_buf: [20]u8 = undefined;
+    const recovered_len = try recoverOlc(short_buf[0..short_len], 37.775, -122.419, &recovered_buf);
+
+    const orig_area = try decodeOlc("849VQHFJ+X6");
+    const recov_area = try decodeOlc(recovered_buf[0..recovered_len]);
+
+    try std.testing.expectApproxEqAbs(orig_area.centerLatitude(), recov_area.centerLatitude(), 0.01);
+    try std.testing.expectApproxEqAbs(orig_area.centerLongitude(), recov_area.centerLongitude(), 0.01);
+}
 
 test "distinct locations produce distinct CIDs" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);

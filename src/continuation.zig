@@ -109,7 +109,7 @@ pub const Step = struct {
     error_msg: ?[]const u8 = null,
 
     pub fn toSyrup(self: Step, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.DictEntry){};
+        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{
@@ -289,26 +289,26 @@ pub const BeliefSet = struct {
 
     /// Convert to Syrup set
     pub fn toSyrup(self: BeliefSet, allocator: Allocator) !syrup.Value {
-        var values = std.ArrayList(syrup.Value).init(allocator);
-        defer values.deinit();
+        var values = std.ArrayListUnmanaged(syrup.Value){};
+        defer values.deinit(allocator);
 
         var iter = self.beliefs.valueIterator();
         while (iter.next()) |belief| {
-            try values.append(belief.toSyrup());
+            try values.append(allocator, belief.toSyrup());
         }
 
-        return syrup.Value{ .set = try values.toOwnedSlice() };
+        return syrup.Value{ .set = try values.toOwnedSlice(allocator) };
     }
 };
 
 /// Grove sphere system - ordered collection of possible worlds
 pub const GroveSpheres = struct {
-    worlds: std.ArrayList(BeliefSet),
+    worlds: std.ArrayListUnmanaged(BeliefSet),
     allocator: Allocator,
 
     pub fn init(allocator: Allocator) GroveSpheres {
         return .{
-            .worlds = std.ArrayList(BeliefSet).init(allocator),
+            .worlds = .{},
             .allocator = allocator,
         };
     }
@@ -317,12 +317,12 @@ pub const GroveSpheres = struct {
         for (self.worlds.items) |*world| {
             world.deinit();
         }
-        self.worlds.deinit();
+        self.worlds.deinit(self.allocator);
     }
 
     /// Add a new possible world (branch)
     pub fn addWorld(self: *GroveSpheres, world: BeliefSet) !void {
-        try self.worlds.append(world);
+        try self.worlds.append(self.allocator, world);
     }
 
     /// Get the actual world (innermost sphere)
@@ -333,14 +333,14 @@ pub const GroveSpheres = struct {
 
     /// Serialize to Syrup list of sets
     pub fn toSyrup(self: GroveSpheres, allocator: Allocator) !syrup.Value {
-        var values = std.ArrayList(syrup.Value).init(allocator);
-        defer values.deinit();
+        var values = std.ArrayListUnmanaged(syrup.Value){};
+        defer values.deinit(allocator);
 
         for (self.worlds.items) |world| {
-            try values.append(try world.toSyrup(allocator));
+            try values.append(allocator, try world.toSyrup(allocator));
         }
 
-        return syrup.Value{ .list = try values.toOwnedSlice() };
+        return syrup.Value{ .list = try values.toOwnedSlice(allocator) };
     }
 };
 
@@ -483,4 +483,99 @@ test "continuation state serialization" {
     try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(syrup_val));
     const label = syrup_val.record.label.*;
     try std.testing.expectEqualStrings("continuation", label.symbol);
+}
+
+test "full GF(3) addition table" {
+    const t = std.testing;
+
+    // All 9 combinations
+    try t.expectEqual(Trit.zero, Trit.add(.zero, .zero));
+    try t.expectEqual(Trit.plus, Trit.add(.zero, .plus));
+    try t.expectEqual(Trit.minus, Trit.add(.zero, .minus));
+    try t.expectEqual(Trit.plus, Trit.add(.plus, .zero));
+    try t.expectEqual(Trit.minus, Trit.add(.plus, .plus));
+    try t.expectEqual(Trit.zero, Trit.add(.plus, .minus));
+    try t.expectEqual(Trit.minus, Trit.add(.minus, .zero));
+    try t.expectEqual(Trit.zero, Trit.add(.minus, .plus));
+    try t.expectEqual(Trit.plus, Trit.add(.minus, .minus));
+}
+
+test "trit double negation" {
+    try std.testing.expectEqual(Trit.plus, Trit.neg(Trit.neg(.plus)));
+    try std.testing.expectEqual(Trit.minus, Trit.neg(Trit.neg(.minus)));
+    try std.testing.expectEqual(Trit.zero, Trit.neg(Trit.neg(.zero)));
+}
+
+test "belief revision entails revised proposition" {
+    const allocator = std.testing.allocator;
+    var bs = BeliefSet.init(allocator);
+    defer bs.deinit();
+
+    try bs.revise(.{ .proposition = "raining" });
+    try std.testing.expect(bs.entails("raining"));
+}
+
+test "belief contraction removes proposition" {
+    const allocator = std.testing.allocator;
+    var bs = BeliefSet.init(allocator);
+    defer bs.deinit();
+
+    try bs.expand(.{ .proposition = "sunny" });
+    try std.testing.expect(bs.entails("sunny"));
+
+    bs.contract("sunny");
+    try std.testing.expect(!bs.entails("sunny"));
+}
+
+test "belief consistency after revision" {
+    const allocator = std.testing.allocator;
+    var bs = BeliefSet.init(allocator);
+    defer bs.deinit();
+
+    // Add p
+    try bs.revise(.{ .proposition = "alive" });
+    try std.testing.expect(bs.isConsistent());
+
+    // Revise with not-p (should remove p, add not-p)
+    try bs.revise(.{ .proposition = "not-alive" });
+    try std.testing.expect(bs.isConsistent());
+    try std.testing.expect(bs.entails("not-alive"));
+    try std.testing.expect(!bs.entails("alive"));
+}
+
+test "pipeline step execution with yield" {
+    const allocator = std.testing.allocator;
+
+    const step_fn = struct {
+        fn execute(_: syrup.Value, _: Allocator) StepResult {
+            return .{ .yield = syrup.Value{ .symbol = "paused-state" } };
+        }
+    }.execute;
+
+    const steps = [_]Step{
+        .{ .name = "step1", .trit = .plus },
+    };
+    var pipeline = try Pipeline.init(allocator, &steps, &[_]StepFn{step_fn});
+
+    const result = pipeline.run(syrup.Value{ .symbol = "start" });
+    switch (result) {
+        .yield => |v| try std.testing.expectEqualStrings("paused-state", v.symbol),
+        else => return error.TestUnexpectedResult,
+    }
+    try std.testing.expectEqual(ContinuationStatus.paused, pipeline.state.status);
+}
+
+test "continuation state syrup has correct fields" {
+    const allocator = std.testing.allocator;
+
+    const steps = [_]Step{
+        .{ .name = "alpha", .trit = .plus },
+        .{ .name = "beta", .trit = .zero },
+    };
+    var state = try ContinuationState.init(allocator, &steps);
+    const val = try state.toSyrup(allocator);
+
+    try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(val));
+    // Should have 6 fields
+    try std.testing.expectEqual(@as(usize, 6), val.record.fields.len);
 }

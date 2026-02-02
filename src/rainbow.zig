@@ -89,7 +89,7 @@ pub const RGB = struct {
     }
 
     pub fn toSyrup(self: RGB, allocator: Allocator) !syrup.Value {
-        const entries = try allocator.alloc(syrup.DictEntry, 3);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 3);
         entries[0] = .{ .key = syrup.Value{ .symbol = "r" }, .value = syrup.Value{ .integer = self.r } };
         entries[1] = .{ .key = syrup.Value{ .symbol = "g" }, .value = syrup.Value{ .integer = self.g } };
         entries[2] = .{ .key = syrup.Value{ .symbol = "b" }, .value = syrup.Value{ .integer = self.b } };
@@ -254,7 +254,7 @@ pub const ColoredToken = struct {
     };
 
     pub fn toSyrup(self: ColoredToken, allocator: Allocator) !syrup.Value {
-        const entries = try allocator.alloc(syrup.DictEntry, 4);
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 4);
         entries[0] = .{ .key = syrup.Value{ .symbol = "text" }, .value = syrup.Value{ .string = self.text } };
         entries[1] = .{ .key = syrup.Value{ .symbol = "color" }, .value = try self.color.toSyrup(allocator) };
         entries[2] = .{ .key = syrup.Value{ .symbol = "depth" }, .value = syrup.Value{ .integer = @intCast(self.depth) } };
@@ -636,4 +636,164 @@ test "homotopy path through color space" {
     try std.testing.expectEqual(@as(u8, 255), path[4].r);
     // Middle should be gray
     try std.testing.expect(path[2].r > 100 and path[2].r < 200);
+}
+
+test "HCL to RGB clamping" {
+    // High chroma can produce out-of-gamut; toRGB must clamp to [0,255]
+    const extreme = HCL{ .h = 0, .c = 2.0, .l = 0.5 };
+    const rgb = extreme.toRGB();
+    // All values must be in valid range (implicit by u8 type, but verify no overflow)
+    try std.testing.expect(rgb.r <= 255);
+    try std.testing.expect(rgb.g <= 255);
+    try std.testing.expect(rgb.b <= 255);
+}
+
+test "golden vs plastic spiral color distinctness" {
+    const allocator = std.testing.allocator;
+    const golden = try goldenSpiral(8, 0.0, 0.7, 0.55, allocator);
+    defer allocator.free(golden);
+    const plastic = try plasticSpiral(8, 0.0, 0.7, 0.55, allocator);
+    defer allocator.free(plastic);
+
+    // Adjacent colors in each spiral should be distinct
+    // At least some pairs must differ (golden angle guarantees dispersion)
+    var golden_distinct: usize = 0;
+    var plastic_distinct: usize = 0;
+    for (0..7) |i| {
+        if (golden[i].r != golden[i + 1].r or golden[i].g != golden[i + 1].g or golden[i].b != golden[i + 1].b) {
+            golden_distinct += 1;
+        }
+        if (plastic[i].r != plastic[i + 1].r or plastic[i].g != plastic[i + 1].g or plastic[i].b != plastic[i + 1].b) {
+            plastic_distinct += 1;
+        }
+    }
+    // Most adjacent pairs should be distinct
+    try std.testing.expect(golden_distinct >= 5);
+    try std.testing.expect(plastic_distinct >= 5);
+}
+
+test "CRT phosphor scanline darkens odd rows" {
+    const color = RGB{ .r = 200, .g = 150, .b = 100 };
+    const even = CRTPhosphor.applyScanlines(color, 0);
+    const odd = CRTPhosphor.applyScanlines(color, 1);
+
+    // Even row unchanged
+    try std.testing.expectEqual(color.r, even.r);
+    try std.testing.expectEqual(color.g, even.g);
+    try std.testing.expectEqual(color.b, even.b);
+
+    // Odd row darkened (halved)
+    try std.testing.expectEqual(@as(u8, 100), odd.r);
+    try std.testing.expectEqual(@as(u8, 75), odd.g);
+    try std.testing.expectEqual(@as(u8, 50), odd.b);
+}
+
+test "CRT bloom increases brightness" {
+    const color = RGB{ .r = 100, .g = 100, .b = 100 };
+    const bloomed = CRTPhosphor.applyBloom(color, 1.0);
+
+    // Bloom should increase brightness
+    try std.testing.expect(bloomed.r > color.r);
+    try std.testing.expect(bloomed.g > color.g);
+    try std.testing.expect(bloomed.b > color.b);
+
+    // Zero intensity should not change
+    const no_bloom = CRTPhosphor.applyBloom(color, 0.0);
+    try std.testing.expectEqual(color.r, no_bloom.r);
+}
+
+test "colored parser nested Clojure code" {
+    const allocator = std.testing.allocator;
+    const source = "(defn fib [n] (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))";
+    var parser = try ColoredParser.init(source, allocator);
+    defer allocator.free(parser.palette);
+
+    const sexp = try parser.parse();
+    defer allocator.free(sexp.tokens);
+
+    // Should have tokens
+    try std.testing.expect(sexp.tokens.len > 0);
+    // Balanced parens: should have trit_sum 0
+    try std.testing.expectEqual(@as(i32, 0), sexp.trit_sum);
+}
+
+test "unbalanced parens detection" {
+    const allocator = std.testing.allocator;
+    const source = "((hello world)";
+    var parser = try ColoredParser.init(source, allocator);
+    defer allocator.free(parser.palette);
+
+    const sexp = try parser.parse();
+    defer allocator.free(sexp.tokens);
+
+    // Unbalanced: 2 opens, 1 close -> trit_sum != 0
+    try std.testing.expect(sexp.trit_sum != 0);
+    try std.testing.expectEqual(@as(i32, 1), sexp.trit_sum);
+}
+
+test "HTML render contains span color tags" {
+    const allocator = std.testing.allocator;
+    var parser = try ColoredParser.init("(+ 1 2)", allocator);
+    defer allocator.free(parser.palette);
+
+    const sexp = try parser.parse();
+    defer allocator.free(sexp.tokens);
+
+    const html = try sexp.renderHtml(allocator);
+    defer allocator.free(html);
+
+    try std.testing.expect(std.mem.indexOf(u8, html, "<span style=\"color:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, html, "</span>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, html, "<pre") != null);
+}
+
+test "ANSI render contains escape sequences" {
+    const allocator = std.testing.allocator;
+    var parser = try ColoredParser.init("(hello)", allocator);
+    defer allocator.free(parser.palette);
+
+    const sexp = try parser.parse();
+    defer allocator.free(sexp.tokens);
+
+    const ansi = try sexp.renderAnsi(allocator);
+    defer allocator.free(ansi);
+
+    try std.testing.expect(std.mem.indexOf(u8, ansi, "\x1b[38;2;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ansi, "\x1b[0m") != null);
+}
+
+test "RGB lerp midpoint accuracy" {
+    const mid = RGB.lerp(RGB.black, RGB.white, 0.5);
+    // Midpoint should be close to 127/128
+    try std.testing.expect(mid.r >= 127 and mid.r <= 128);
+    try std.testing.expect(mid.g >= 127 and mid.g <= 128);
+    try std.testing.expect(mid.b >= 127 and mid.b <= 128);
+
+    // Endpoints
+    const start = RGB.lerp(RGB.black, RGB.white, 0.0);
+    try std.testing.expectEqual(@as(u8, 0), start.r);
+    const end_color = RGB.lerp(RGB.black, RGB.white, 1.0);
+    try std.testing.expectEqual(@as(u8, 255), end_color.r);
+}
+
+test "RGB toU24/fromU24 roundtrip" {
+    // Test all primary and secondary colors
+    const colors = [_]RGB{
+        RGB{ .r = 255, .g = 0, .b = 0 }, // Red
+        RGB{ .r = 0, .g = 255, .b = 0 }, // Green
+        RGB{ .r = 0, .g = 0, .b = 255 }, // Blue
+        RGB{ .r = 255, .g = 255, .b = 0 }, // Yellow
+        RGB{ .r = 0, .g = 255, .b = 255 }, // Cyan
+        RGB{ .r = 255, .g = 0, .b = 255 }, // Magenta
+        RGB.black,
+        RGB.white,
+        RGB.purple,
+    };
+    for (colors) |c| {
+        const u24_val = c.toU24();
+        const roundtrip = RGB.fromU24(u24_val);
+        try std.testing.expectEqual(c.r, roundtrip.r);
+        try std.testing.expectEqual(c.g, roundtrip.g);
+        try std.testing.expectEqual(c.b, roundtrip.b);
+    }
 }
