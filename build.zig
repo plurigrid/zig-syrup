@@ -314,6 +314,33 @@ pub fn build(b: *std.Build) void {
     const homotopy_tests = b.addTest(.{ .root_module = homotopy_test_mod });
     const run_homotopy_tests = b.addRunArtifact(homotopy_tests);
 
+    // Linalg module tests
+    const linalg_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/linalg.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const linalg_tests = b.addTest(.{ .root_module = linalg_test_mod });
+    const run_linalg_tests = b.addRunArtifact(linalg_tests);
+
+    // Ripser module tests (persistent homology)
+    const ripser_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ripser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ripser_tests = b.addTest(.{ .root_module = ripser_test_mod });
+    const run_ripser_tests = b.addRunArtifact(ripser_tests);
+
+    // SCS wrapper module tests (conic optimization)
+    const scs_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/scs_wrapper.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const scs_tests = b.addTest(.{ .root_module = scs_test_mod });
+    const run_scs_tests = b.addRunArtifact(scs_tests);
+
     // Continuation module tests
     const continuation_test_mod = b.createModule(.{
         .root_source_file = b.path("src/continuation.zig"),
@@ -322,6 +349,57 @@ pub fn build(b: *std.Build) void {
     });
     const continuation_tests = b.addTest(.{ .root_module = continuation_test_mod });
     const run_continuation_tests = b.addRunArtifact(continuation_tests);
+
+    // Prigogine module (dissipative structures & non-equilibrium thermodynamics)
+    const prigogine_mod = b.addModule("prigogine", .{
+        .root_source_file = b.path("src/prigogine.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = prigogine_mod;
+
+    // Prigogine tests
+    const prigogine_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/prigogine.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const prigogine_tests = b.addTest(.{ .root_module = prigogine_test_mod });
+    const run_prigogine_tests = b.addRunArtifact(prigogine_tests);
+
+    // Spectral Tensor module (thalamocortical integration)
+    const spectral_tensor_mod = b.addModule("spectral_tensor", .{
+        .root_source_file = b.path("src/spectral_tensor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = spectral_tensor_mod;
+
+    // Spectral Tensor tests
+    const spectral_tensor_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/spectral_tensor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const spectral_tensor_tests = b.addTest(.{ .root_module = spectral_tensor_test_mod });
+    const run_spectral_tensor_tests = b.addRunArtifact(spectral_tensor_tests);
+
+    // FEM module
+    const fem_mod = b.addModule("fem", .{
+        .root_source_file = b.path("src/fem.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = fem_mod;
+
+    // FEM module tests
+    const fem_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/fem.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fem_tests = b.addTest(.{ .root_module = fem_test_mod });
+    const run_fem_tests = b.addRunArtifact(fem_tests);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
@@ -335,7 +413,13 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_rainbow_tests.step);
     test_step.dependOn(&run_damage_tests.step);
     test_step.dependOn(&run_homotopy_tests.step);
+    test_step.dependOn(&run_linalg_tests.step);
+    test_step.dependOn(&run_ripser_tests.step);
+    test_step.dependOn(&run_scs_tests.step);
     test_step.dependOn(&run_continuation_tests.step);
+    test_step.dependOn(&run_fem_tests.step);
+    test_step.dependOn(&run_spectral_tensor_tests.step);
+    test_step.dependOn(&run_prigogine_tests.step);
 
     // Shader Viz Tool
     const shader_mod = b.createModule(.{
@@ -368,6 +452,21 @@ pub fn build(b: *std.Build) void {
     const run_test_viz = b.addRunArtifact(test_viz_exe);
     const test_viz_step = b.step("test-viz", "Run visual test runner");
     test_viz_step.dependOn(&run_test_viz.step);
+
+    // Persistence Viz Tool
+    const persistence_mod = b.createModule(.{
+        .root_source_file = b.path("tools/persistence_viz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const persistence_exe = b.addExecutable(.{
+        .name = "persistence-viz",
+        .root_module = persistence_mod,
+    });
+    const run_persistence = b.addRunArtifact(persistence_exe);
+    const persistence_step = b.step("persistence", "Render persistence diagram in terminal");
+    persistence_step.dependOn(&run_persistence.step);
 
     // Benchmark executable
     // const bench_mod = b.createModule(.{

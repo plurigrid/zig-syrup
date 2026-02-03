@@ -205,6 +205,88 @@ pub const Error = struct {
         return .{ .null = {} };
     }
 
+    /// Free ALL allocations in a Value tree, including leaf strings and bytes.
+    /// Use this only when every string/bytes was heap-allocated (e.g. from toSyrup).
+    /// For mixed ownership (some static, some heap), use deinitContainers instead
+    /// and manually free known heap strings.
+    pub fn deinitAll(self: Value, allocator: Allocator) void {
+        switch (self) {
+            .record => |r| {
+                for (r.fields) |f| f.deinitAll(allocator);
+                allocator.free(r.fields);
+                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
+                allocator.free(label_slice);
+            },
+            .list => |items| {
+                for (items) |item| item.deinitAll(allocator);
+                allocator.free(items);
+            },
+            .set => |items| {
+                for (items) |item| item.deinitAll(allocator);
+                allocator.free(items);
+            },
+            .dictionary => |entries| {
+                for (entries) |entry| {
+                    entry.key.deinitAll(allocator);
+                    entry.value.deinitAll(allocator);
+                }
+                allocator.free(entries);
+            },
+            .tagged => |t| {
+                t.payload.deinitAll(allocator);
+                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
+                allocator.free(payload_slice);
+            },
+            .@"error" => |e| {
+                e.data.deinitAll(allocator);
+                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
+                allocator.free(data_slice);
+            },
+            .string => |s| allocator.free(s),
+            .bytes => |b| allocator.free(b),
+            else => {},
+        }
+    }
+
+    /// Free container allocations in a Value tree.
+    /// Frees record labels, record fields, list/set slices, and dictionary slices
+    /// recursively. Does NOT free leaf string/symbol/bytes data since those may
+    /// be borrowed from static memory.
+    pub fn deinitContainers(self: Value, allocator: Allocator) void {
+        switch (self) {
+            .record => |r| {
+                for (r.fields) |f| f.deinitContainers(allocator);
+                allocator.free(r.fields);
+                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
+                allocator.free(label_slice);
+            },
+            .list => |items| {
+                for (items) |item| item.deinitContainers(allocator);
+                allocator.free(items);
+            },
+            .set => |items| {
+                for (items) |item| item.deinitContainers(allocator);
+                allocator.free(items);
+            },
+            .dictionary => |entries| {
+                for (entries) |entry| {
+                    entry.key.deinitContainers(allocator);
+                    entry.value.deinitContainers(allocator);
+                }
+                allocator.free(entries);
+            },
+            .tagged => |t| {
+                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
+                allocator.free(payload_slice);
+            },
+            .@"error" => |e| {
+                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
+                allocator.free(data_slice);
+            },
+            else => {},
+        }
+    }
+
     // ========================================================================
     // COMPARISON - Based on canonical wire format (essential for OCapN)
     // ========================================================================

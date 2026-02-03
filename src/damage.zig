@@ -920,6 +920,7 @@ test "tiled world syrup roundtrip structure" {
     try world_tiles.setTile(.{ .x = 0, .y = 0, .z = 0 }, .{ .content_hash = 999, .color_seed = 1, .generation = 1 });
 
     const val = try world_tiles.toSyrup(allocator);
+    defer val.deinitContainers(allocator);
     // Should be a record
     try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(val));
     const label = val.record.label.*;

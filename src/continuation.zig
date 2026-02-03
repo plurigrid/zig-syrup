@@ -262,6 +262,8 @@ pub const BeliefSet = struct {
     /// AGM Revision: K * p (Levi identity: (K - ¬p) + p)
     pub fn revise(self: *BeliefSet, belief: Belief) !void {
         const negated = try belief.negate(self.allocator);
+        defer if (!std.mem.startsWith(u8, belief.proposition, "not-"))
+            self.allocator.free(negated.proposition);
         self.contract(negated.proposition);
         try self.expand(belief);
     }
@@ -478,6 +480,11 @@ test "continuation state serialization" {
 
     var state = try ContinuationState.init(allocator, &steps);
     const syrup_val = try state.toSyrup(allocator);
+    defer {
+        // Free the allocPrint'd id string in fields[0]
+        allocator.free(syrup_val.record.fields[0].string);
+        syrup_val.deinitContainers(allocator);
+    }
 
     // Should be a record with label "continuation"
     try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(syrup_val));
@@ -574,6 +581,10 @@ test "continuation state syrup has correct fields" {
     };
     var state = try ContinuationState.init(allocator, &steps);
     const val = try state.toSyrup(allocator);
+    defer {
+        allocator.free(val.record.fields[0].string);
+        val.deinitContainers(allocator);
+    }
 
     try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(val));
     // Should have 6 fields

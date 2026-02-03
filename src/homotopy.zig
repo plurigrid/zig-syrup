@@ -16,6 +16,7 @@
 const std = @import("std");
 const syrup = @import("syrup.zig");
 const continuation = @import("continuation.zig");
+const linalg = @import("linalg.zig");
 const Allocator = std.mem.Allocator;
 
 // ============================================================================
@@ -212,6 +213,47 @@ pub const PolynomialSystem = struct {
         return results;
     }
 
+    /// Compute Jacobian matrix J[i][j] = df_i/dx_j evaluated at vars
+    pub fn jacobian(self: PolynomialSystem, vars: []const Complex, allocator: Allocator) ![][]Complex {
+        const n = self.polynomials.len;
+        const m = self.num_vars;
+        var J = try linalg.allocMatrix(n, m, allocator);
+
+        for (self.polynomials, 0..) |poly, i_poly| {
+            for (0..m) |j_var| {
+                var deriv = Complex.zero;
+                for (poly.monomials) |mono| {
+                    if (j_var < mono.exponents.len and mono.exponents[j_var] > 0) {
+                        // d/dx_j (c * x_0^e0 * ... * x_j^ej * ...) = c * ej * x_0^e0 * ... * x_j^(ej-1) * ...
+                        var term = Complex.scale(mono.coeff, @as(f64, @floatFromInt(mono.exponents[j_var])));
+                        for (mono.exponents, 0..) |exp_val, k| {
+                            if (k == j_var) {
+                                // x_j^(ej-1)
+                                if (exp_val > 1) {
+                                    var power = Complex.one;
+                                    for (0..exp_val - 1) |_| {
+                                        power = Complex.mul(power, vars[k]);
+                                    }
+                                    term = Complex.mul(term, power);
+                                }
+                                // if exp_val == 1, derivative contributes factor 1 (already in coeff)
+                            } else if (k < vars.len) {
+                                var power = Complex.one;
+                                for (0..exp_val) |_| {
+                                    power = Complex.mul(power, vars[k]);
+                                }
+                                term = Complex.mul(term, power);
+                            }
+                        }
+                        deriv = Complex.add(deriv, term);
+                    }
+                }
+                J[i_poly][j_var] = deriv;
+            }
+        }
+        return J;
+    }
+
     pub fn toSyrup(self: PolynomialSystem, allocator: Allocator) !syrup.Value {
         var poly_values = try allocator.alloc(syrup.Value, self.polynomials.len);
         for (self.polynomials, 0..) |poly, idx| {
@@ -393,16 +435,75 @@ pub const PathTracker = struct {
                 break;
             }
 
-            // Predictor step (Euler)
+            // RK4 predictor
             const dt = @min(step_size, 1.0 - t);
+
+            const k1 = try self.tangentVector(current, t) orelse {
+                step_size *= 0.5;
+                if (step_size < self.config.min_step_size) {
+                    status = .singular;
+                    break;
+                }
+                continue;
+            };
+            defer self.allocator.free(k1);
+
+            // tmp = x + dt/2 * k1
+            var tmp = try self.allocator.alloc(Complex, current.len);
+            defer self.allocator.free(tmp);
+            for (current, k1, 0..) |c, k, idx| {
+                tmp[idx] = Complex.add(c, Complex.scale(k, dt * 0.5));
+            }
+
+            const k2 = try self.tangentVector(tmp, t + dt * 0.5) orelse {
+                step_size *= 0.5;
+                if (step_size < self.config.min_step_size) {
+                    status = .singular;
+                    break;
+                }
+                continue;
+            };
+            defer self.allocator.free(k2);
+
+            // tmp = x + dt/2 * k2
+            for (current, k2, 0..) |c, k, idx| {
+                tmp[idx] = Complex.add(c, Complex.scale(k, dt * 0.5));
+            }
+
+            const k3 = try self.tangentVector(tmp, t + dt * 0.5) orelse {
+                step_size *= 0.5;
+                if (step_size < self.config.min_step_size) {
+                    status = .singular;
+                    break;
+                }
+                continue;
+            };
+            defer self.allocator.free(k3);
+
+            // tmp = x + dt * k3
+            for (current, k3, 0..) |c, k, idx| {
+                tmp[idx] = Complex.add(c, Complex.scale(k, dt));
+            }
+
+            const k4 = try self.tangentVector(tmp, t + dt) orelse {
+                step_size *= 0.5;
+                if (step_size < self.config.min_step_size) {
+                    status = .singular;
+                    break;
+                }
+                continue;
+            };
+            defer self.allocator.free(k4);
+
+            // x_predicted = x + (k1 + 2*k2 + 2*k3 + k4) * dt/6
             var predicted = try self.allocator.alloc(Complex, current.len);
             defer self.allocator.free(predicted);
-
-            // Simple Euler prediction: x(t+dt) ≈ x(t) + dt * dx/dt
-            // For now, just step forward (full implementation needs Jacobian)
             for (current, 0..) |c, idx| {
-                // Simplified: perturb slightly in direction of solution
-                predicted[idx] = Complex.add(c, Complex.scale(Complex.init(0.01, 0.01), dt));
+                const weighted = Complex.add(
+                    Complex.add(k1[idx], Complex.scale(k2[idx], 2.0)),
+                    Complex.add(Complex.scale(k3[idx], 2.0), k4[idx]),
+                );
+                predicted[idx] = Complex.add(c, Complex.scale(weighted, dt / 6.0));
             }
 
             // Corrector step (Newton iteration)
@@ -412,7 +513,6 @@ pub const PathTracker = struct {
 
             const newton_success = try self.newtonCorrector(corrected, t + dt);
             if (!newton_success) {
-                // Reduce step size and retry
                 step_size *= 0.5;
                 if (step_size < self.config.min_step_size) {
                     status = .min_step;
@@ -426,8 +526,19 @@ pub const PathTracker = struct {
             t += dt;
             steps += 1;
 
-            // Adaptive step size
-            step_size = @min(step_size * 1.2, self.config.max_step_size);
+            // Adaptive step size based on error estimate: ||k4 - k3|| as proxy
+            var err: f64 = 0;
+            for (0..current.len) |idx| {
+                const diff = Complex.sub(k4[idx], k3[idx]);
+                err += diff.re * diff.re + diff.im * diff.im;
+            }
+            err = @sqrt(err) * dt;
+
+            if (err < self.config.tolerance * 0.1) {
+                step_size = @min(step_size * 1.5, self.config.max_step_size);
+            } else if (err > self.config.tolerance) {
+                step_size *= 0.5;
+            }
         }
 
         if (status == .tracking and t >= 1.0 - self.config.tolerance) {
@@ -451,35 +562,109 @@ pub const PathTracker = struct {
         };
     }
 
-    /// Newton corrector iteration
+    /// Newton corrector iteration using Jacobian + LU solve
     fn newtonCorrector(self: *PathTracker, x: []Complex, t: f64) !bool {
         const max_iters = 10;
+        const n = x.len;
         var iter: usize = 0;
+
+        const perm = try self.allocator.alloc(usize, n);
+        defer self.allocator.free(perm);
+        const dx = try self.allocator.alloc(Complex, n);
+        defer self.allocator.free(dx);
+        const neg_h = try self.allocator.alloc(Complex, n);
+        defer self.allocator.free(neg_h);
 
         while (iter < max_iters) : (iter += 1) {
             const h_val = try self.homotopy.evaluate(x, t, self.allocator);
             defer self.allocator.free(h_val);
 
-            // Check convergence
-            var norm: f64 = 0;
-            for (h_val) |h| {
-                norm += Complex.abs(h) * Complex.abs(h);
-            }
-            norm = @sqrt(norm);
+            // Check convergence: ||H(x,t)||
+            var norm_sq: f64 = 0;
+            for (h_val) |h| norm_sq += h.re * h.re + h.im * h.im;
+            if (@sqrt(norm_sq) < self.config.tolerance) return true;
 
-            if (norm < self.config.tolerance) {
-                return true;
+            // Compute Jacobian of the homotopy w.r.t. x
+            // J_H = (1-t)*gamma*J_G + t*J_F
+            const J_start = try self.homotopy.start.jacobian(x, self.allocator);
+            defer linalg.freeMatrix(J_start, self.allocator);
+            const J_target = try self.homotopy.target.jacobian(x, self.allocator);
+            defer linalg.freeMatrix(J_target, self.allocator);
+
+            var J = try linalg.allocMatrix(n, n, self.allocator);
+            defer linalg.freeMatrix(J, self.allocator);
+
+            const one_minus_t = 1.0 - t;
+            for (0..n) |i| {
+                for (0..n) |j| {
+                    const scaled_start = Complex.mul(Complex.scale(J_start[i][j], one_minus_t), self.homotopy.gamma);
+                    const scaled_target = Complex.scale(J_target[i][j], t);
+                    J[i][j] = Complex.add(scaled_start, scaled_target);
+                }
             }
 
-            // Simplified Newton step (would need Jacobian for full implementation)
-            for (x, h_val) |*xi, hi| {
-                // x_new = x - J^(-1) * H(x)
-                // Simplified: just subtract a small multiple of H
-                xi.* = Complex.sub(xi.*, Complex.scale(hi, 0.1));
+            // Solve J * dx = -H(x,t)
+            for (h_val, 0..) |h, idx| neg_h[idx] = Complex.scale(h, -1.0);
+
+            linalg.luDecompose(n, J, perm) catch return false;
+            linalg.luSolve(n, J, perm, neg_h, dx);
+
+            // Update: x += dx
+            for (x, dx) |*xi, dxi| xi.* = Complex.add(xi.*, dxi);
+        }
+        return false;
+    }
+
+    /// Compute tangent vector: dx/dt = -J_H^{-1} * (dH/dt)
+    fn tangentVector(self: *PathTracker, x: []const Complex, t: f64) !?[]Complex {
+        const n = x.len;
+
+        // dH/dt = -gamma*G(x) + F(x)
+        const g_val = try self.homotopy.start.evaluate(x, self.allocator);
+        defer self.allocator.free(g_val);
+        const f_val = try self.homotopy.target.evaluate(x, self.allocator);
+        defer self.allocator.free(f_val);
+
+        var dHdt = try self.allocator.alloc(Complex, n);
+        defer self.allocator.free(dHdt);
+        for (0..n) |i| {
+            dHdt[i] = Complex.sub(f_val[i], Complex.mul(self.homotopy.gamma, g_val[i]));
+        }
+
+        // J_H = (1-t)*gamma*J_G + t*J_F
+        const J_start = try self.homotopy.start.jacobian(x, self.allocator);
+        defer linalg.freeMatrix(J_start, self.allocator);
+        const J_target = try self.homotopy.target.jacobian(x, self.allocator);
+        defer linalg.freeMatrix(J_target, self.allocator);
+
+        var J = try linalg.allocMatrix(n, n, self.allocator);
+        defer linalg.freeMatrix(J, self.allocator);
+
+        const one_minus_t = 1.0 - t;
+        for (0..n) |i| {
+            for (0..n) |j| {
+                const s = Complex.mul(Complex.scale(J_start[i][j], one_minus_t), self.homotopy.gamma);
+                const tgt = Complex.scale(J_target[i][j], t);
+                J[i][j] = Complex.add(s, tgt);
             }
         }
 
-        return false;
+        // Solve J * result = -dHdt
+        var neg_dHdt = try self.allocator.alloc(Complex, n);
+        defer self.allocator.free(neg_dHdt);
+        for (0..n) |i| neg_dHdt[i] = Complex.scale(dHdt[i], -1.0);
+
+        const perm = try self.allocator.alloc(usize, n);
+        defer self.allocator.free(perm);
+        const result = try self.allocator.alloc(Complex, n);
+
+        linalg.luDecompose(n, J, perm) catch {
+            self.allocator.free(result);
+            return null;
+        };
+        linalg.luSolve(n, J, perm, neg_dHdt, result);
+
+        return result;
     }
 
     /// Track all paths from start solutions
@@ -1013,6 +1198,7 @@ test "HomotopyACSet syrup contains expected labels" {
     _ = try acset.addSolution(&sol);
 
     const syrup_val = try acset.toSyrup(allocator);
+    defer syrup_val.deinitContainers(allocator);
     // Should be a record with label "homotopy-acset"
     try std.testing.expectEqual(syrup.Value.record, std.meta.activeTag(syrup_val));
     const label = syrup_val.record.label.*;
