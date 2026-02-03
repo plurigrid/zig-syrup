@@ -217,6 +217,27 @@ pub fn build(b: *std.Build) void {
     const bench_step = b.step("bench", "Run the benchmark");
     bench_step.dependOn(&run_bench.step);
 
+    // Cell Sync Benchmark Tool (flamegraph visualization)
+    const bench_cell_sync = b.createModule(.{
+        .root_source_file = b.path("src/cell_sync.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const bench_cs_mod = b.createModule(.{
+        .root_source_file = b.path("benchmarks/bench_cell_sync.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bench_cs_mod.addImport("cell_sync", bench_cell_sync);
+
+    const bench_cs_exe = b.addExecutable(.{
+        .name = "bench-cell-sync",
+        .root_module = bench_cs_mod,
+    });
+    const run_bench_cs = b.addRunArtifact(bench_cs_exe);
+    const bench_cs_step = b.step("bench-cell-sync", "Run cell sync benchmarks with flamegraph viz");
+    bench_cs_step.dependOn(&run_bench_cs.step);
+
     // Bristol Converter Tool
     const bristol_mod = b.createModule(.{
         .root_source_file = b.path("tools/bristol_converter.zig"),
@@ -296,14 +317,43 @@ pub fn build(b: *std.Build) void {
     const rainbow_tests = b.addTest(.{ .root_module = rainbow_test_mod });
     const run_rainbow_tests = b.addRunArtifact(rainbow_tests);
 
+    // Damage module
+    const damage_mod = b.addModule("damage", .{
+        .root_source_file = b.path("src/damage.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    damage_mod.addImport("syrup", syrup_mod);
+
     // Damage module tests
     const damage_test_mod = b.createModule(.{
         .root_source_file = b.path("src/damage.zig"),
         .target = target,
         .optimize = optimize,
     });
+    damage_test_mod.addImport("syrup", syrup_mod);
     const damage_tests = b.addTest(.{ .root_module = damage_test_mod });
     const run_damage_tests = b.addRunArtifact(damage_tests);
+
+    // Cell Dispatch module (transducer-based parallel cell rendering)
+    const cell_dispatch_mod = b.addModule("cell_dispatch", .{
+        .root_source_file = b.path("src/cell_dispatch.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cell_dispatch_mod.addImport("syrup", syrup_mod);
+    cell_dispatch_mod.addImport("damage", damage_mod);
+
+    // Cell Dispatch module tests
+    const cell_dispatch_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/cell_dispatch.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cell_dispatch_test_mod.addImport("syrup", syrup_mod);
+    cell_dispatch_test_mod.addImport("damage", damage_mod);
+    const cell_dispatch_tests = b.addTest(.{ .root_module = cell_dispatch_test_mod });
+    const run_cell_dispatch_tests = b.addRunArtifact(cell_dispatch_tests);
 
     // Homotopy module tests
     const homotopy_test_mod = b.createModule(.{
@@ -401,6 +451,33 @@ pub fn build(b: *std.Build) void {
     const fem_tests = b.addTest(.{ .root_module = fem_test_mod });
     const run_fem_tests = b.addRunArtifact(fem_tests);
 
+    // Spectrum module (GF(3) triadic color bridge)
+    const spectrum_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/spectrum.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const spectrum_tests = b.addTest(.{ .root_module = spectrum_test_mod });
+    const run_spectrum_tests = b.addRunArtifact(spectrum_tests);
+
+    // Cell Sync module (distributed terminal cell synchronization)
+    const cell_sync_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/cell_sync.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const cell_sync_tests = b.addTest(.{ .root_module = cell_sync_test_mod });
+    const run_cell_sync_tests = b.addRunArtifact(cell_sync_tests);
+
+    // QASM renderer module (quantum circuit ASCII art)
+    const qasm_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/qasm.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const qasm_tests = b.addTest(.{ .root_module = qasm_test_mod });
+    const run_qasm_tests = b.addRunArtifact(qasm_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_xev_tests.step);
@@ -412,6 +489,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_snapshot_tests.step);
     test_step.dependOn(&run_rainbow_tests.step);
     test_step.dependOn(&run_damage_tests.step);
+    test_step.dependOn(&run_cell_dispatch_tests.step);
     test_step.dependOn(&run_homotopy_tests.step);
     test_step.dependOn(&run_linalg_tests.step);
     test_step.dependOn(&run_ripser_tests.step);
@@ -420,6 +498,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_fem_tests.step);
     test_step.dependOn(&run_spectral_tensor_tests.step);
     test_step.dependOn(&run_prigogine_tests.step);
+    test_step.dependOn(&run_spectrum_tests.step);
+    test_step.dependOn(&run_cell_sync_tests.step);
+    test_step.dependOn(&run_qasm_tests.step);
 
     // Shader Viz Tool
     const shader_mod = b.createModule(.{

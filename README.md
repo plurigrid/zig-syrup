@@ -29,6 +29,7 @@ High-performance Zig implementation of the OCapN Syrup data format with CapTP-fo
 | `liveness.zig` | Terminal/ACP health probes |
 | `rainbow.zig` | Golden/plastic/silver angle color spirals, CRT phosphor, colored S-expression parsing |
 | `damage.zig` | Dirty-cell tracking for terminal multiplexers, AABB coalescing |
+| `cell_dispatch.zig` | Transducer-based parallel cell dispatch for distributed terminal rendering |
 | `homotopy.zig` | Polynomial homotopy continuation, ACSet export, GF(3) path status |
 | `continuation.zig` | Belief revision (AGM), GF(3) trit arithmetic, resumable pipelines |
 
@@ -55,6 +56,67 @@ zig build bristol      # Bristol circuit converter
 
 **`zig build test-viz`** exercises all visualization modules with labeled ANSI output:
 rainbow palette strips, damage grids, homotopy root tracking, GF(3) trit balance, and Syrup encode verification.
+
+## Distributed Terminal Rendering Architecture
+
+`cell_dispatch.zig` implements a **compute-shader-inspired** terminal cell renderer combining research from Zutty, Mosh, and Erlang's actor model:
+
+### Key Components
+
+| Component | Design |
+|-----------|--------|
+| **Cell** | 16-byte GPU-friendly struct (codepoint, ARGB fg/bg, attrs) - matches Zutty's SSBO layout |
+| **CellBatch** | Aligned cell arrays processed in parallel chunks (cache-line friendly) |
+| **Damage Tracking** | Integration with `damage.zig` - only dirty cells dispatched |
+| **Transducers** | Composable Cell→Cell transformations (filter dirty, map colors, etc.) |
+| **Thread Pool** | Parallel dispatch across CPU cores; ACP integration for remote nodes |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Terminal Grid (80x24 = 1,920 cells)                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ Damage Tracker (dirty cell coordinates)               │  │
+│  └──────────────────┬────────────────────────────────────┘  │
+│                     │ coalesce()                            │
+│  ┌──────────────────▼────────────────────────────────────┐  │
+│  │ CellBatches (64x64 cells, cache-aligned)              │  │
+│  │ ┌─────────┐ ┌─────────┐ ┌─────────┐                   │  │
+│  │ │Batch 0  │ │Batch 1  │ │Batch N  │  → Thread Pool     │  │
+│  │ │(dirty)  │ │(clean)  │ │(dirty)  │     ↓              │  │
+│  │ └────┬────┘ └────┬────┘ └────┬────┘  Transducers       │  │
+│  │      │           │ (skip)    │      filter_dirty()     │  │
+│  │      └───────────┴───────────┘      map_colors()       │  │
+│  │                  │                      ↓               │  │
+│  │            GPU/Terminal              ACP (optional)     │  │
+│  │            Rendering              Remote nodes          │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Comparison with Existing Systems
+
+| Feature | tmux | Zutty | Mosh | zig-syrup cell_dispatch |
+|---------|------|-------|------|-------------------------|
+| State location | Server (escape sequences) | GPU SSBO | Client+Server snapshots | Configurable (local/remote) |
+| Parallelism | None (single-threaded) | GPU compute shaders | None | Thread pool + SIMD |
+| Damage tracking | Per-pane regions | Per-cell dirty flags | Screen diffing | Both + coalescing |
+| Network protocol | Byte stream (SSH) | Local only | UDP + SSP | ACP over Syrup |
+| Cell dispatch | Sequential | Parallel (GPU) | Differential | Transducer pipelines |
+
+### Example Usage
+
+```zig
+var engine = try DispatchEngine.init(allocator, .{ .thread_count = 4 });
+var batch = try CellBatch.init(allocator, origin, 64, 64);
+
+// Only dirty cells processed
+const filter = cell_dispatch.filterDirty();
+try engine.dispatchBatch(&batch, filter, renderCallback);
+```
+
+See `examples/distributed_terminal.zig` for a complete demo.
 
 ## Roadmap: Persistent Homology & Topological Data Analysis
 
