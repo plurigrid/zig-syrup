@@ -1057,6 +1057,87 @@ fn renderScalingAnalysis(writer: anytype, results: []const BenchResult) !void {
 }
 
 // ============================================================================
+// VISUALIZATION: FRAME BUDGET
+// ============================================================================
+
+fn renderFrameBudget(writer: anytype, results: []const BenchResult) !void {
+    try writer.writeAll("\n");
+    try COLOR_TITLE.fg(writer);
+    try writer.print("  {s}\u{2550}\u{2550}\u{2550} FRAME BUDGET \u{2550}\u{2550}\u{2550}{s}\n\n", .{ BOLD, RESET });
+
+    // Budget thresholds in nanoseconds
+    const budget_60fps: f64 = 16_600_000.0; // 16.6ms
+    const budget_30fps: f64 = 33_300_000.0; // 33.3ms
+
+    try COLOR_LABEL.fg(writer);
+    try writer.print("  {s: <10}{s: >10}   {s: <22}{s: <22}\n", .{
+        "Size", "pipeline", "@60fps (16.6ms)", "@30fps (33.3ms)",
+    });
+    try COLOR_BORDER.fg(writer);
+    try writer.writeAll("  ");
+    try hline(writer, 66);
+    try writer.writeAll(RESET);
+    try writer.writeAll("\n");
+
+    for (results) |r| {
+        const pipeline_ns = r.totalFastNs();
+        const pipeline_f: f64 = @floatFromInt(pipeline_ns);
+
+        const frames_60 = budget_60fps / pipeline_f;
+        const frames_30 = budget_30fps / pipeline_f;
+
+        try COLOR_LABEL.fg(writer);
+        try writer.print("  {s: <10}", .{r.workload.name});
+
+        // Pipeline time
+        try COLOR_DIM.fg(writer);
+        try formatNs(writer, pipeline_ns);
+
+        // @60fps bar + count
+        try writer.writeAll("   ");
+        const bar_max: usize = 16;
+        const fill_60: usize = @min(bar_max, @as(usize, @intFromFloat(@min(frames_60, @as(f64, @floatFromInt(bar_max))))));
+        if (frames_60 >= 1.0) {
+            try COLOR_GOOD.fg(writer);
+        } else {
+            try COLOR_BAD.fg(writer);
+        }
+        for (0..fill_60) |_| try writer.writeAll("\u{2588}");
+        try COLOR_DIM.fg(writer);
+        for (0..bar_max - fill_60) |_| try writer.writeAll("\u{2591}");
+        try writer.writeAll(" ");
+        if (frames_60 >= 1.0) {
+            try COLOR_GOOD.fg(writer);
+        } else {
+            try COLOR_BAD.fg(writer);
+        }
+        try writer.print("{d:.0}", .{frames_60});
+
+        // @30fps bar + count
+        try writer.writeAll("   ");
+        const fill_30: usize = @min(bar_max, @as(usize, @intFromFloat(@min(frames_30, @as(f64, @floatFromInt(bar_max))))));
+        if (frames_30 >= 1.0) {
+            try COLOR_GOOD.fg(writer);
+        } else {
+            try COLOR_BAD.fg(writer);
+        }
+        for (0..fill_30) |_| try writer.writeAll("\u{2588}");
+        try COLOR_DIM.fg(writer);
+        for (0..bar_max - fill_30) |_| try writer.writeAll("\u{2591}");
+        try writer.writeAll(" ");
+        if (frames_30 >= 1.0) {
+            try COLOR_GOOD.fg(writer);
+        } else {
+            try COLOR_BAD.fg(writer);
+        }
+        try writer.print("{d:.0}", .{frames_30});
+
+        try writer.writeAll(RESET);
+        try writer.writeAll("\n");
+    }
+}
+
+// ============================================================================
 // MAIN
 // ============================================================================
 
@@ -1116,6 +1197,7 @@ pub fn main() !void {
     try renderPerCellTable(stdout, &all_results);
     try renderFastPathComparison(stdout, &all_results);
     try renderScalingAnalysis(stdout, &all_results);
+    try renderFrameBudget(stdout, &all_results);
 
     try stdout.writeAll("\n  ");
     try COLOR_TITLE.fg(stdout);

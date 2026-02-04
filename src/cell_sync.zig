@@ -56,11 +56,13 @@ pub const FrameSnapshot = struct {
     diffs: []CellDiff,
     is_full: bool,
     source: NodeId,
-    /// Cached packed binary from commit(), reused by snapshotToSyrup() to avoid double-packing.
-    packed_cache: ?[]u8 = null,
+    /// Borrowed slice into log ring's packed data. Not owned — do NOT free.
+    /// Valid until LOG_CAPACITY commits evict the entry. In practice the
+    /// snapshot is always consumed (via snapshotToSyrup) before that happens.
+    packed_cache: ?[]const u8 = null,
 
     pub fn deinit(self: *FrameSnapshot, allocator: Allocator) void {
-        if (self.packed_cache) |cache| allocator.free(cache);
+        // packed_cache is borrowed from the log ring — not freed here
         allocator.free(self.diffs);
     }
 };
@@ -185,10 +187,8 @@ pub const CellSync = struct {
         };
         self.log_head = (self.log_head + 1) % LOG_CAPACITY;
 
-        // Cache a copy of packed bytes for snapshotToSyrup() to reuse,
-        // eliminating a redundant second packDiffs call on the same data.
-        const cache = try self.allocator.dupe(u8, log_packed);
-
+        // Borrow the packed data from the log ring entry (no dupe needed).
+        // The snapshot must be consumed before LOG_CAPACITY commits evict it.
         return .{
             .gen = self.gen,
             .cols = self.pane.cols,
@@ -196,7 +196,7 @@ pub const CellSync = struct {
             .diffs = owned_diffs,
             .is_full = false,
             .source = self.node_id,
-            .packed_cache = cache,
+            .packed_cache = log_packed,
         };
     }
 
@@ -210,7 +210,8 @@ pub const CellSync = struct {
                 const idx = @as(usize, diff.y) * cols + diff.x;
                 self.pane.front[idx] = diff.cell;
                 self.pane.back[idx] = diff.cell;
-                self.pane.damage_mask[idx] = true;
+                self.pane.damage_mask.set(idx);
+                self.pane.row_dirty.set(diff.y);
             }
         }
     }
@@ -233,7 +234,8 @@ pub const CellSync = struct {
                 const idx = @as(usize, diff.y) * cols + diff.x;
                 self.pane.front[idx] = diff.cell;
                 self.pane.back[idx] = diff.cell;
-                self.pane.damage_mask[idx] = true;
+                self.pane.damage_mask.set(idx);
+                self.pane.row_dirty.set(diff.y);
             }
 
             // Expand RLE inline
@@ -247,6 +249,7 @@ pub const CellSync = struct {
                 const base_x = diff.x;
                 const y = diff.y;
                 if (y < rows) {
+                    self.pane.row_dirty.set(y);
                     var j: u16 = 0;
                     while (j < count) : (j += 1) {
                         const x = base_x +| (1 + j);
@@ -254,7 +257,7 @@ pub const CellSync = struct {
                             const idx = @as(usize, y) * cols + x;
                             self.pane.front[idx] = cell;
                             self.pane.back[idx] = cell;
-                            self.pane.damage_mask[idx] = true;
+                            self.pane.damage_mask.set(idx);
                         }
                     }
                 }

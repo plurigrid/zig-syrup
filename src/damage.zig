@@ -72,6 +72,19 @@ pub const AABB = struct {
             a.z == b.z;
     }
 
+    /// Compute the intersection region of two AABBs (CSG boolean intersection).
+    /// Returns null if the AABBs do not overlap.
+    pub fn intersection(a: AABB, b: AABB) ?AABB {
+        if (!a.intersects(b)) return null;
+        return .{
+            .min_x = @max(a.min_x, b.min_x),
+            .min_y = @max(a.min_y, b.min_y),
+            .max_x = @min(a.max_x, b.max_x),
+            .max_y = @min(a.max_y, b.max_y),
+            .z = a.z,
+        };
+    }
+
     pub fn fromTile(coord: TileCoord) AABB {
         return .{
             .min_x = coord.x,
@@ -224,18 +237,22 @@ pub const WorldDamage = struct {
 /// Global damage tracker across all worlds
 pub const DamageTracker = struct {
     worlds: std.AutoHashMapUnmanaged(WorldId, WorldDamage),
-    event_log: std.ArrayListUnmanaged(DamageEvent),
+    event_ring: [EVENT_LOG_CAPACITY]DamageEvent,
+    event_head: usize,
+    event_count: usize,
     active_world: WorldId,
     allocator: Allocator,
-    max_events: usize,
+
+    const EVENT_LOG_CAPACITY = 1024;
 
     pub fn init(allocator: Allocator) DamageTracker {
         return .{
             .worlds = .{},
-            .event_log = .{},
+            .event_ring = undefined,
+            .event_head = 0,
+            .event_count = 0,
             .active_world = 0,
             .allocator = allocator,
-            .max_events = 1024,
         };
     }
 
@@ -243,7 +260,6 @@ pub const DamageTracker = struct {
         var it = self.worlds.valueIterator();
         while (it.next()) |w| w.deinit();
         self.worlds.deinit(self.allocator);
-        self.event_log.deinit(self.allocator);
     }
 
     /// Get or create world damage state
@@ -259,7 +275,7 @@ pub const DamageTracker = struct {
     pub fn damage(self: *DamageTracker, coord: TileCoord, cause: DamageCause) !void {
         const w = try self.world(self.active_world);
         try w.damageTile(coord, cause);
-        try self.logEvent(.{
+        self.logEvent(.{
             .region = AABB.fromTile(coord),
             .cause = cause,
             .world_id = self.active_world,
@@ -271,7 +287,7 @@ pub const DamageTracker = struct {
     pub fn damageRect(self: *DamageTracker, region: AABB, cause: DamageCause) !void {
         const w = try self.world(self.active_world);
         try w.damageRegion(region, cause);
-        try self.logEvent(.{
+        self.logEvent(.{
             .region = region,
             .cause = cause,
             .world_id = self.active_world,
@@ -288,7 +304,7 @@ pub const DamageTracker = struct {
 
             self.active_world = new_world;
 
-            try self.logEvent(.{
+            self.logEvent(.{
                 .region = .{ .min_x = 0, .min_y = 0, .max_x = 0, .max_y = 0 },
                 .cause = .world_transition,
                 .world_id = new_world,
@@ -317,11 +333,12 @@ pub const DamageTracker = struct {
         return false;
     }
 
-    fn logEvent(self: *DamageTracker, event: DamageEvent) !void {
-        if (self.event_log.items.len >= self.max_events) {
-            _ = self.event_log.orderedRemove(0);
+    fn logEvent(self: *DamageTracker, event: DamageEvent) void {
+        self.event_ring[self.event_head] = event;
+        self.event_head = (self.event_head + 1) % EVENT_LOG_CAPACITY;
+        if (self.event_count < EVENT_LOG_CAPACITY) {
+            self.event_count += 1;
         }
-        try self.event_log.append(self.allocator, event);
     }
 };
 
@@ -569,7 +586,8 @@ pub const TerminalPane = struct {
     rows: u16,
     front: []Cell, // Currently displayed
     back: []Cell, // Being rendered to
-    damage_mask: []bool, // Per-cell dirty bit
+    damage_mask: std.DynamicBitSet, // Per-cell dirty bit (1 bit/cell)
+    row_dirty: std.DynamicBitSet, // Per-row dirty bit for commit skip
     cursor_x: u16,
     cursor_y: u16,
     cursor_visible: bool,
@@ -581,11 +599,12 @@ pub const TerminalPane = struct {
         const size = @as(usize, cols) * rows;
         const front = try allocator.alloc(Cell, size);
         const back = try allocator.alloc(Cell, size);
-        const mask = try allocator.alloc(bool, size);
 
         @memset(front, Cell{});
         @memset(back, Cell{});
-        @memset(mask, true); // Initially all dirty
+
+        const mask = try std.DynamicBitSet.initFull(allocator, size);
+        const row_dirty = try std.DynamicBitSet.initFull(allocator, rows);
 
         return .{
             .id = id,
@@ -594,6 +613,7 @@ pub const TerminalPane = struct {
             .front = front,
             .back = back,
             .damage_mask = mask,
+            .row_dirty = row_dirty,
             .cursor_x = 0,
             .cursor_y = 0,
             .cursor_visible = true,
@@ -606,7 +626,8 @@ pub const TerminalPane = struct {
     pub fn deinit(self: *TerminalPane) void {
         self.allocator.free(self.front);
         self.allocator.free(self.back);
-        self.allocator.free(self.damage_mask);
+        self.damage_mask.deinit();
+        self.row_dirty.deinit();
     }
 
     fn cellIndex(self: *const TerminalPane, x: u16, y: u16) ?usize {
@@ -619,7 +640,8 @@ pub const TerminalPane = struct {
         if (self.cellIndex(x, y)) |idx| {
             self.back[idx] = cell;
             if (!Cell.eql(self.front[idx], cell)) {
-                self.damage_mask[idx] = true;
+                self.damage_mask.set(idx);
+                self.row_dirty.set(y);
             }
         }
     }
@@ -632,25 +654,28 @@ pub const TerminalPane = struct {
         return null;
     }
 
-    /// Swap buffers after render, return damaged regions
+    /// Swap buffers after render, return damaged regions.
+    /// Uses row_dirty bitmap to skip clean rows entirely ("sphere tracing").
     pub fn commit(self: *TerminalPane, allocator: Allocator) ![]AABB {
         var regions = std.ArrayListUnmanaged(AABB){};
 
-        // Find damaged runs and convert to AABBs
+        // Only iterate rows where row_dirty is set
         var y: u16 = 0;
         while (y < self.rows) : (y += 1) {
+            if (!self.row_dirty.isSet(y)) continue;
+
             var x: u16 = 0;
             while (x < self.cols) {
                 const idx = self.cellIndex(x, y).?;
-                if (self.damage_mask[idx]) {
+                if (self.damage_mask.isSet(idx)) {
                     // Start of damaged run
                     const start_x = x;
                     while (x < self.cols) {
                         const run_idx = self.cellIndex(x, y).?;
-                        if (!self.damage_mask[run_idx]) break;
+                        if (!self.damage_mask.isSet(run_idx)) break;
                         // Copy back to front
                         self.front[run_idx] = self.back[run_idx];
-                        self.damage_mask[run_idx] = false;
+                        self.damage_mask.unset(run_idx);
                         x += 1;
                     }
                     try regions.append(allocator, .{
@@ -664,6 +689,7 @@ pub const TerminalPane = struct {
                     x += 1;
                 }
             }
+            self.row_dirty.unset(y);
         }
 
         return regions.toOwnedSlice(allocator);
@@ -671,7 +697,8 @@ pub const TerminalPane = struct {
 
     /// Damage entire pane (resize, etc)
     pub fn damageAll(self: *TerminalPane) void {
-        @memset(self.damage_mask, true);
+        self.damage_mask.setAll();
+        self.row_dirty.setAll();
     }
 
     /// Scroll region up, damaging affected rows
@@ -684,24 +711,23 @@ pub const TerminalPane = struct {
             const dst_row = @as(usize, y) * self.cols;
             const src_row = @as(usize, y + lines) * self.cols;
             @memcpy(self.back[dst_row..][0..self.cols], self.back[src_row..][0..self.cols]);
-            @memset(self.damage_mask[dst_row..][0..self.cols], true);
+            // Mark all cells in this row as dirty
+            for (dst_row..dst_row + self.cols) |idx| self.damage_mask.set(idx);
+            self.row_dirty.set(y);
         }
 
         // Clear scrolled-in lines
         while (y <= bot) : (y += 1) {
             const row = @as(usize, y) * self.cols;
             @memset(self.back[row..][0..self.cols], Cell{});
-            @memset(self.damage_mask[row..][0..self.cols], true);
+            for (row..row + self.cols) |idx| self.damage_mask.set(idx);
+            self.row_dirty.set(y);
         }
     }
 
     /// Count dirty cells
     pub fn dirtyCount(self: *const TerminalPane) usize {
-        var count: usize = 0;
-        for (self.damage_mask) |d| {
-            if (d) count += 1;
-        }
-        return count;
+        return self.damage_mask.count();
     }
 };
 
@@ -976,15 +1002,36 @@ test "damage tracker circular event buffer" {
     const allocator = std.testing.allocator;
     var tracker = DamageTracker.init(allocator);
     defer tracker.deinit();
-    tracker.max_events = 10; // Small buffer for testing
 
-    // Log more events than buffer size
-    for (0..25) |j| {
-        try tracker.damage(.{ .x = @intCast(j), .y = 0, .z = 0 }, .state_mutation);
+    // Log more events than ring buffer capacity
+    for (0..DamageTracker.EVENT_LOG_CAPACITY + 100) |j| {
+        try tracker.damage(.{ .x = @intCast(j % 1000), .y = 0, .z = 0 }, .state_mutation);
     }
 
-    // Should be capped at max_events
-    try std.testing.expectEqual(@as(usize, 10), tracker.event_log.items.len);
+    // Should be capped at EVENT_LOG_CAPACITY
+    try std.testing.expectEqual(@as(usize, DamageTracker.EVENT_LOG_CAPACITY), tracker.event_count);
+}
+
+test "AABB intersection" {
+    const a = AABB{ .min_x = 0, .min_y = 0, .max_x = 5, .max_y = 5, .z = 0 };
+    const b = AABB{ .min_x = 3, .min_y = 3, .max_x = 8, .max_y = 8, .z = 0 };
+
+    const inter = a.intersection(b);
+    try std.testing.expect(inter != null);
+    const i = inter.?;
+    try std.testing.expectEqual(@as(i32, 3), i.min_x);
+    try std.testing.expectEqual(@as(i32, 3), i.min_y);
+    try std.testing.expectEqual(@as(i32, 5), i.max_x);
+    try std.testing.expectEqual(@as(i32, 5), i.max_y);
+    try std.testing.expectEqual(@as(u64, 9), i.area());
+
+    // Non-overlapping returns null
+    const c = AABB{ .min_x = 10, .min_y = 10, .max_x = 12, .max_y = 12, .z = 0 };
+    try std.testing.expect(a.intersection(c) == null);
+
+    // Different z returns null
+    const d = AABB{ .min_x = 0, .min_y = 0, .max_x = 5, .max_y = 5, .z = 1 };
+    try std.testing.expect(a.intersection(d) == null);
 }
 
 test "AABB merge non-overlapping" {
