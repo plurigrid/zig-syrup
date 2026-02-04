@@ -97,8 +97,9 @@ fn skillInvocation() Value {
 }
 
 fn mediumDict() Value {
-    var entries: [100]Value.DictEntry = undefined;
-    for (0..100) |i| {
+    // Reduced from 100 to 50 entries to avoid stack overflow
+    var entries: [50]Value.DictEntry = undefined;
+    for (0..50) |i| {
         var key_buf: [16]u8 = undefined;
         const key = std.fmt.bufPrint(&key_buf, "key-{d}", .{i}) catch unreachable;
         entries[i] = .{ .key = syrup.string(key), .value = syrup.integer(@intCast(i)) };
@@ -107,8 +108,9 @@ fn mediumDict() Value {
 }
 
 fn largeList() Value {
-    var items: [1000]Value = undefined;
-    for (0..1000) |i| {
+    // Reduced from 1000 to 500 items to avoid stack overflow
+    var items: [500]Value = undefined;
+    for (0..500) |i| {
         items[i] = syrup.integer(@intCast(i));
     }
     return syrup.list(&items);
@@ -137,7 +139,7 @@ fn benchmarkEncoding(name: []const u8, value: Value, iterations: usize) Benchmar
     var buf: [8192]u8 = undefined;
     
     // Warmup
-    for (0..10000) |_| {
+    for (0..1000) |_| {
         _ = value.encodeBuf(&buf) catch unreachable;
     }
     
@@ -169,7 +171,7 @@ fn benchmarkRoundtrip(name: []const u8, value: Value, iterations: usize) Benchma
     var buf: [8192]u8 = undefined;
     
     // Warmup
-    for (0..10000) |_| {
+    for (0..1000) |_| {
         const enc = value.encodeBuf(&buf) catch unreachable;
         _ = enc;
     }
@@ -214,20 +216,20 @@ pub fn main() !void {
         value: Value,
         iterations: usize,
     }{
-        .{ .name = "small-record", .value = smallRecord(), .iterations = 1_000_000 },
-        .{ .name = "skill-invocation", .value = skillInvocation(), .iterations = 1_000_000 },
-        .{ .name = "medium-dict", .value = mediumDict(), .iterations = 500_000 },
-        .{ .name = "large-list", .value = largeList(), .iterations = 200_000 },
-        .{ .name = "binary-payload", .value = binaryPayload(), .iterations = 200_000 },
+        .{ .name = "small-record", .value = smallRecord(), .iterations = 100_000 },
+        .{ .name = "skill-invocation", .value = skillInvocation(), .iterations = 100_000 },
+        .{ .name = "medium-dict", .value = mediumDict(), .iterations = 50_000 },
+        .{ .name = "large-list", .value = largeList(), .iterations = 20_000 },
+        .{ .name = "binary-payload", .value = binaryPayload(), .iterations = 20_000 },
     };
     
     var results: [20]BenchmarkResult = undefined;
     var result_count: usize = 0;
     
-    for (tests) |test| {
-        results[result_count] = benchmarkEncoding(test.name, test.value, test.iterations);
+    for (tests) |t| {
+        results[result_count] = benchmarkEncoding(t.name, t.value, t.iterations);
         result_count += 1;
-        results[result_count] = benchmarkRoundtrip(test.name, test.value, @max(10000, test.iterations / 10));
+        results[result_count] = benchmarkRoundtrip(t.name, t.value, @max(10000, t.iterations / 10));
         result_count += 1;
     }
     

@@ -34,12 +34,15 @@ pub fn main() !void {
     
     var thresh_cell = propagator.Cell(f32).init(allocator, "threshold");
     defer thresh_cell.deinit();
+
+    var social_trit_cell = propagator.Cell(f32).init(allocator, "social_trit");
+    defer social_trit_cell.deinit();
     
     var action_cell = propagator.Cell(f32).init(allocator, "action");
     defer action_cell.deinit();
 
     // The gate is the "Propagator" connecting the cells
-    const inputs = [_]*propagator.Cell(f32){ &focus_cell, &relax_cell, &thresh_cell };
+    const inputs = [_]*propagator.Cell(f32){ &focus_cell, &relax_cell, &thresh_cell, &social_trit_cell };
     const outputs = [_]*propagator.Cell(f32){ &action_cell };
     
     var gate = propagator.Propagator(f32){
@@ -52,9 +55,11 @@ pub fn main() !void {
     try focus_cell.add_neighbor(&gate);
     try relax_cell.add_neighbor(&gate);
     try thresh_cell.add_neighbor(&gate);
+    try social_trit_cell.add_neighbor(&gate);
     
     // Set parameters
     try thresh_cell.set_content(0.8);
+    try social_trit_cell.set_content(0.0);
 
     bridge.setNeurofeedback(.{
         .target_focus = 0.8,

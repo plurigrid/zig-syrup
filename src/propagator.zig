@@ -89,8 +89,12 @@ pub fn neurofeedback_gate(args: []const ?f32) ?f32 {
     const focus = args[0] orelse return null;
     const relax = args[1] orelse return null;
     const threshold = args[2] orelse return null; // passed as content
+    const social = if (args.len > 3) (args[3] orelse 0.0) else 0.0; // Optional social trit
 
-    if (focus > threshold and relax < 0.3) {
+    // Social trit modulates threshold (positive social interaction lowers barrier to flow)
+    const effective_threshold = threshold - (social * 0.1);
+
+    if (focus > effective_threshold and relax < 0.3) {
         return 1.0; // Trigger Action
     } else {
         return 0.0; // No Action
