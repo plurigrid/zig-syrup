@@ -14,8 +14,8 @@
 //! Reference: https://www.juliahomotopycontinuation.org/
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
-const continuation = @import("continuation.zig");
+const syrup = @import("syrup");
+const continuation = @import("continuation");
 const linalg = @import("linalg.zig");
 const Allocator = std.mem.Allocator;
 

@@ -1,0 +1,80 @@
+# Containerfile.bci-processor
+# BCI Data Processing System for Apple Containerization
+# Optimized for Apple Silicon (ARM64)
+
+FROM ubuntu:24.04
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set architecture-specific environment
+ENV TARGETARCH=arm64
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    libatlas-base-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    gfortran \
+    pkg-config \
+    git \
+    wget \
+    curl \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r bciuser && \
+    useradd -r -g bciuser -m -s /bin/bash bciuser && \
+    mkdir -p /app/data /app/logs && \
+    chown -R bciuser:bciuser /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better layer caching
+COPY requirements-container.txt .
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements-container.txt
+
+# Download and install liblsl (Lab Streaming Layer) for ARM64
+RUN cd /tmp && \
+    wget -q https://github.com/sccn/liblsl/releases/download/v1.16.2/liblsl-1.16.2-jammy_arm64.deb && \
+    dpkg -i liblsl-1.16.2-jammy_arm64.deb || apt-get install -f -y && \
+    rm -f liblsl-1.16.2-jammy_arm64.deb
+
+# Copy application code
+COPY --chown=bciuser:bciuser container_receiver.py .
+COPY --chown=bciuser:bciuser start_processor.sh .
+COPY --chown=bciuser:bciuser processors/ ./processors/
+
+# Make scripts executable
+RUN chmod +x start_processor.sh
+
+# Create directories for data output
+RUN mkdir -p /app/data/recordings /app/data/logs && \
+    chown -R bciuser:bciuser /app/data
+
+# Switch to non-root user
+USER bciuser
+
+# Expose ports
+# 16571: LSL (Lab Streaming Layer)
+# 16572: TCP fallback
+# 8080: WebSocket server for visualization
+# 8081: Health check endpoint
+EXPOSE 16571 16572 8080 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Entrypoint
+ENTRYPOINT ["./start_processor.sh"]

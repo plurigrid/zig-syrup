@@ -1,0 +1,178 @@
+# OpenBCI Host Acquisition Configuration
+# Platform: macOS
+# 
+# This configuration file controls the behavior of the host_acquisition.py
+# script for acquiring EEG data from OpenBCI boards.
+
+# =============================================================================
+# Board Configuration
+# =============================================================================
+board:
+  # Board type: 'cyton' or 'ganglion'
+  # Set to null or remove to enable auto-detection
+  type: null
+  
+  # Sampling rate in Hz
+  # Cyton: 250 Hz (fixed)
+  # Ganglion: 200 Hz (fixed)
+  sampling_rate: 250
+  
+  # Number of EEG channels
+  # Cyton: 8 or 16 (with Daisy)
+  # Ganglion: 4
+  num_channels: 8
+  
+  # Channel names (for LSL metadata)
+  channel_names:
+    - Fp1
+    - Fp2
+    - C3
+    - C4
+    - P7
+    - P8
+    - O1
+    - O2
+  
+  # Serial port for Cyton (USB)
+  # Common macOS patterns:
+  #   - /dev/tty.usbserial-DM00D7PA
+  #   - /dev/cu.usbserial-DM00D7PA
+  #   - /dev/tty.usbserial-*
+  # Set to null for auto-detection
+  serial_port: null
+  
+  # MAC address for Ganglion (Bluetooth LE)
+  # Format: XX:XX:XX:XX:XX:XX
+  # Set to null for auto-detection (requires bleak)
+  mac_address: null
+  
+  # Connection timeout in milliseconds
+  timeout_ms: 5000
+
+# =============================================================================
+# LSL (Lab Streaming Layer) Configuration
+# =============================================================================
+lsl:
+  # Stream name (visible in LSL viewers)
+  stream_name: "OpenBCI-EEG"
+  
+  # Stream type
+  stream_type: "EEG"
+  
+  # Unique source identifier
+  source_id: "openbci-host-001"
+  
+  # LSL stream port (not usually needed - LSL uses multicast)
+  # This is used for additional metadata
+  port: 16571
+
+# =============================================================================
+# TCP Socket Configuration
+# =============================================================================
+tcp:
+  # Bind address
+  # Use "0.0.0.0" to accept connections from any interface
+  # Use "127.0.0.1" for localhost only
+  host: "0.0.0.0"
+  
+  # TCP server port
+  port: 16572
+  
+  # Maximum number of concurrent client connections
+  max_clients: 5
+
+# =============================================================================
+# Acquisition Settings
+# =============================================================================
+
+# Buffer size in samples (affects memory usage)
+# Default: 450000 samples (~50 seconds at 250Hz)
+buffer_size: 450000
+
+# Enable impedance checking
+# Note: Requires board support
+impedance_check: true
+
+# Signal quality threshold (0.0 - 1.0)
+# Higher values = stricter quality requirements
+signal_quality_threshold: 0.5
+
+# =============================================================================
+# Cyton-Specific Settings
+# =============================================================================
+cyton:
+  # Board mode
+  # Options: 'default', 'debug', 'analog', 'digital', 'marker'
+  mode: default
+  
+  # Enable Daisy module (16 channels)
+  use_daisy: false
+  
+  # SD card recording (if equipped)
+  # Options: '5min', '15min', '30min', '1hour', '2hour', '4hour', '12hour', '24hour', null
+  sd_recording: null
+
+# =============================================================================
+# Ganglion-Specific Settings
+# =============================================================================
+ganglion:
+  # Enable accelerometer
+  enable_accel: true
+  
+  # BLE connection timeout
+  ble_timeout: 10.0
+
+# =============================================================================
+# Signal Processing
+# =============================================================================
+processing:
+  # Enable notch filter (50/60 Hz)
+  notch_filter: true
+  notch_freq: 60  # 50 for Europe/Asia, 60 for Americas
+  
+  # Enable bandpass filter
+  bandpass_filter: true
+  bandpass_low: 1.0   # Hz
+  bandpass_high: 50.0  # Hz
+  
+  # Detrending
+  detrend: true
+
+# =============================================================================
+# Logging
+# =============================================================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+  
+  # Log to file
+  log_to_file: false
+  log_file: "openbci_host.log"
+  
+  # Log rotation
+  max_log_size_mb: 10
+  max_log_files: 5
+
+# =============================================================================
+# macOS-Specific Settings
+# =============================================================================
+macos:
+  # USB device patterns for auto-detection
+  # FTDI chips used by Cyton
+  usb_patterns:
+    - "/dev/tty.usbserial*"
+    - "/dev/cu.usbserial*"
+    - "/dev/tty.usbmodem*"
+    - "/dev/cu.usbmodem*"
+  
+  # Request Bluetooth permissions on startup
+  # Set to true if Ganglion connection fails due to permissions
+  request_ble_permissions: true
+  
+  # IOKit matching dictionary for USB
+  # Used for advanced device detection
+  iokit_match:
+    - vendor_id: 0x0403   # FTDI
+      product_id: 0x6015  # FT231X
+    - vendor_id: 0x0403
+      product_id: 0x6001  # FT232R

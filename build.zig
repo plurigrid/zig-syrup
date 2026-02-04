@@ -11,6 +11,20 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Cyton Parser module (OpenBCI packet parsing)
+    const cyton_parser_mod = b.addModule("cyton_parser", .{
+        .root_source_file = b.path("src/cyton_parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // FFT Bands module (Frequency analysis)
+    const fft_bands_mod = b.addModule("fft_bands", .{
+        .root_source_file = b.path("src/fft_bands.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Geo module (Open Location Code / Plus Codes)
     const geo_mod = b.addModule("geo", .{
         .root_source_file = b.path("src/geo.zig"),
@@ -45,6 +59,33 @@ pub fn build(b: *std.Build) void {
     acp_mod.addImport("syrup", syrup_mod);
     acp_mod.addImport("xev_io", xev_io_mod);
 
+    // Continuation module
+    const continuation_mod = b.addModule("continuation", .{
+        .root_source_file = b.path("src/continuation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    continuation_mod.addImport("syrup", syrup_mod);
+
+    // Homotopy module (needs continuation)
+    const homotopy_mod = b.addModule("homotopy", .{
+        .root_source_file = b.path("src/homotopy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    homotopy_mod.addImport("syrup", syrup_mod);
+    homotopy_mod.addImport("continuation", continuation_mod);
+
+    // BCI Homotopy module
+    const bci_mod = b.addModule("bci_homotopy", .{
+        .root_source_file = b.path("src/bci_homotopy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bci_mod.addImport("syrup", syrup_mod);
+    bci_mod.addImport("continuation", continuation_mod);
+    bci_mod.addImport("homotopy", homotopy_mod);
+
     // Create module for main.zig
     const main_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -74,6 +115,20 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(cli_exe);
 
+    // EEG Processing Binary (Tier 1)
+    const eeg_mod = b.createModule(.{
+        .root_source_file = b.path("src/eeg.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    eeg_mod.addImport("cyton_parser", cyton_parser_mod);
+    eeg_mod.addImport("fft_bands", fft_bands_mod);
+
+    const eeg_exe = b.addExecutable(.{
+        .name = "eeg",
+        .root_module = eeg_mod,
+    });
+    b.installArtifact(eeg_exe);
 
     // Run step
     const run_cmd = b.addRunArtifact(exe);
@@ -400,6 +455,15 @@ pub fn build(b: *std.Build) void {
     const continuation_tests = b.addTest(.{ .root_module = continuation_test_mod });
     const run_continuation_tests = b.addRunArtifact(continuation_tests);
 
+    // BCI Homotopy module tests
+    const bci_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/bci_homotopy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const bci_tests = b.addTest(.{ .root_module = bci_test_mod });
+    const run_bci_tests = b.addRunArtifact(bci_tests);
+
     // Prigogine module (dissipative structures & non-equilibrium thermodynamics)
     const prigogine_mod = b.addModule("prigogine", .{
         .root_source_file = b.path("src/prigogine.zig"),
@@ -478,6 +542,272 @@ pub fn build(b: *std.Build) void {
     const qasm_tests = b.addTest(.{ .root_module = qasm_test_mod });
     const run_qasm_tests = b.addRunArtifact(qasm_tests);
 
+    // ========================================
+    // Worlds Module (A/B Testing, Multiplayer, OpenBCI Integration)
+    // ========================================
+    
+    // Main worlds module (using mod.zig as entry point)
+    const worlds_mod = b.addModule("worlds", .{
+        .root_source_file = b.path("src/worlds/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    worlds_mod.addImport("syrup", syrup_mod);
+    worlds_mod.addImport("bristol", bristol_lib);
+    worlds_mod.addImport("bci_homotopy", bci_mod);
+    worlds_mod.addImport("continuation", continuation_mod);
+    worlds_mod.addImport("homotopy", homotopy_mod);
+
+    // Persistent data structures (persistent.zig - Immer/Ewig-style)
+    const persistent_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/persistent.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const persistent_tests = b.addTest(.{ .root_module = persistent_test_mod });
+    const run_persistent_tests = b.addRunArtifact(persistent_tests);
+
+    // Syrup adapter for world-tile integration
+    const syrup_adapter_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/syrup_adapter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    syrup_adapter_test_mod.addImport("syrup", syrup_mod);
+    const syrup_adapter_tests = b.addTest(.{ .root_module = syrup_adapter_test_mod });
+    const run_syrup_adapter_tests = b.addRunArtifact(syrup_adapter_tests);
+
+    // Core world module (world.zig)
+    const world_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const world_tests = b.addTest(.{ .root_module = world_test_mod });
+    const run_world_tests = b.addRunArtifact(world_tests);
+
+    // A/B Testing module
+    const ab_test_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/ab_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ab_test_tests = b.addTest(.{ .root_module = ab_test_test_mod });
+    const run_ab_test_tests = b.addRunArtifact(ab_test_tests);
+
+    // Benchmark adapter
+    const benchmark_adapter_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/benchmark_adapter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    benchmark_adapter_test_mod.addImport("syrup", syrup_mod);
+    const benchmark_adapter_tests = b.addTest(.{ .root_module = benchmark_adapter_test_mod });
+    const run_benchmark_adapter_tests = b.addRunArtifact(benchmark_adapter_tests);
+
+    // Circuit world for ZK proofs
+    const circuit_world_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/circuit_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    circuit_world_test_mod.addImport("syrup", syrup_mod);
+    circuit_world_test_mod.addImport("bristol", bristol_lib);
+    const circuit_world_tests = b.addTest(.{ .root_module = circuit_world_test_mod });
+    const run_circuit_world_tests = b.addRunArtifact(circuit_world_tests);
+
+    // OpenBCI bridge for neurofeedback
+    const openbci_bridge_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/openbci_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    openbci_bridge_test_mod.addImport("syrup", syrup_mod);
+    const openbci_bridge_tests = b.addTest(.{ .root_module = openbci_bridge_test_mod });
+    const run_openbci_bridge_tests = b.addRunArtifact(openbci_bridge_tests);
+
+    // BCI-Aptos Bridge module
+    const bci_aptos_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/bci_aptos.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bci_aptos_test_mod.addImport("syrup", syrup_mod);
+    bci_aptos_test_mod.addImport("bci_homotopy", bci_mod);
+    bci_aptos_test_mod.addImport("continuation", continuation_mod);
+    // Note: bci_aptos uses relative import for openbci_bridge.zig, which is in same dir
+
+    const bci_aptos_tests = b.addTest(.{ .root_module = bci_aptos_test_mod });
+    const run_bci_aptos_tests = b.addRunArtifact(bci_aptos_tests);
+
+    // Worlds integration tests
+    const worlds_integration_test_mod = b.createModule(.{
+        .root_source_file = b.path("tests/worlds_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    worlds_integration_test_mod.addImport("syrup", syrup_mod);
+    worlds_integration_test_mod.addImport("worlds", worlds_mod);
+    const worlds_integration_tests = b.addTest(.{ .root_module = worlds_integration_test_mod });
+    const run_worlds_integration_tests = b.addRunArtifact(worlds_integration_tests);
+
+    // World Demo executable
+    const world_demo_mod = b.createModule(.{
+        .root_source_file = b.path("examples/world_demo.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    world_demo_mod.addImport("syrup", syrup_mod);
+    world_demo_mod.addImport("worlds", worlds_mod);
+    
+    const world_demo_exe = b.addExecutable(.{
+        .name = "world-demo",
+        .root_module = world_demo_mod,
+    });
+    b.installArtifact(world_demo_exe);
+    
+    const world_demo_cmd = b.addRunArtifact(world_demo_exe);
+    const world_demo_step = b.step("world-demo", "Run world A/B testing demo");
+    world_demo_step.dependOn(&world_demo_cmd.step);
+
+    // BCI Propagator module (SDF Ch 7)
+    const propagator_mod = b.addModule("propagator", .{
+        .root_source_file = b.path("src/propagator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // BCI Demo executable
+    const bci_demo_mod = b.createModule(.{
+        .root_source_file = b.path("examples/bci_demo.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bci_demo_mod.addImport("syrup", syrup_mod);
+    bci_demo_mod.addImport("worlds", worlds_mod);
+    bci_demo_mod.addImport("propagator", propagator_mod);
+    
+    const bci_demo_exe = b.addExecutable(.{
+        .name = "bci-demo",
+        .root_module = bci_demo_mod,
+    });
+    // bci_demo_exe.root_module.link_libc = true;
+
+    b.installArtifact(bci_demo_exe);
+    
+    const bci_demo_cmd = b.addRunArtifact(bci_demo_exe);
+    const bci_demo_step = b.step("bci-demo", "Run BCI-Aptos bridge demo");
+    bci_demo_step.dependOn(&bci_demo_cmd.step);
+
+    // Cross-Runtime Exchange Demo (Syrup CLJ ↔ Rust ↔ Zig)
+    const cross_runtime_mod = b.createModule(.{
+        .root_source_file = b.path("examples/cross_runtime_exchange.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cross_runtime_mod.addImport("syrup", syrup_mod);
+    
+    const cross_runtime_exe = b.addExecutable(.{
+        .name = "cross-runtime-exchange",
+        .root_module = cross_runtime_mod,
+    });
+    b.installArtifact(cross_runtime_exe);
+    
+    const cross_runtime_cmd = b.addRunArtifact(cross_runtime_exe);
+    const cross_runtime_step = b.step("cross-runtime", "Run cross-runtime syrup exchange demo");
+    cross_runtime_step.dependOn(&cross_runtime_cmd.step);
+    
+    // Bandwidth Benchmark
+    const bandwidth_mod = b.createModule(.{
+        .root_source_file = b.path("benchmarks/bandwidth_benchmark.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bandwidth_mod.addImport("syrup", syrup_mod);
+    
+    const bandwidth_exe = b.addExecutable(.{
+        .name = "bandwidth-benchmark",
+        .root_module = bandwidth_mod,
+    });
+    b.installArtifact(bandwidth_exe);
+    
+    const bandwidth_cmd = b.addRunArtifact(bandwidth_exe);
+    const bandwidth_step = b.step("bandwidth", "Run bandwidth benchmark");
+    bandwidth_step.dependOn(&bandwidth_cmd.step);
+
+    // Legacy modules (currently have compilation issues)
+    // TODO: Fix immer.zig, uri.zig, ewig.zig, multiplayer.zig, simulation.zig, root.zig
+
+    // Persistent storage (ewig.zig)
+    // const ewig_test_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/worlds/ewig.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const ewig_tests = b.addTest(.{ .root_module = ewig_test_mod });
+    // const run_ewig_tests = b.addRunArtifact(ewig_tests);
+
+    // Multiplayer module (multiplayer.zig)
+    // const multiplayer_test_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/worlds/multiplayer.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const multiplayer_tests = b.addTest(.{ .root_module = multiplayer_test_mod });
+    // const run_multiplayer_tests = b.addRunArtifact(multiplayer_tests);
+
+    // Simulation module (simulation.zig)
+    // const simulation_test_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/worlds/simulation.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const simulation_tests = b.addTest(.{ .root_module = simulation_test_mod });
+    // const run_simulation_tests = b.addRunArtifact(simulation_tests);
+
+    // A/B testing engine (ab_test.zig)
+    // Removed duplicate block here
+
+
+    // Worlds root module integration tests
+    // const worlds_test_mod = b.createModule(.{
+    //     .root_source_file = b.path("src/worlds/root.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const worlds_tests = b.addTest(.{ .root_module = worlds_test_mod });
+    // const run_worlds_tests = b.addRunArtifact(worlds_tests);
+
+    // Worlds-specific test step
+    const test_worlds_step = b.step("test-worlds", "Run worlds module tests");
+    // test_worlds_step.dependOn(&run_persistent_tests.step);
+    // test_worlds_step.dependOn(&run_syrup_adapter_tests.step);
+    // test_worlds_step.dependOn(&run_world_tests.step);
+    // test_worlds_step.dependOn(&run_ab_test_tests.step);
+    // test_worlds_step.dependOn(&run_benchmark_adapter_tests.step);
+    // test_worlds_step.dependOn(&run_circuit_world_tests.step);
+    // test_worlds_step.dependOn(&run_openbci_bridge_tests.step);
+    test_worlds_step.dependOn(&run_bci_aptos_tests.step);
+    // test_worlds_step.dependOn(&run_worlds_integration_tests.step);
+
+    // Tests for Cyton Parser
+    const cyton_parser_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/cyton_parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const cyton_parser_tests = b.addTest(.{ .root_module = cyton_parser_test_mod });
+    const run_cyton_parser_tests = b.addRunArtifact(cyton_parser_tests);
+
+    // Tests for FFT Bands
+    const fft_bands_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/fft_bands.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fft_bands_tests = b.addTest(.{ .root_module = fft_bands_test_mod });
+    const run_fft_bands_tests = b.addRunArtifact(fft_bands_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_xev_tests.step);
@@ -495,12 +825,24 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_ripser_tests.step);
     test_step.dependOn(&run_scs_tests.step);
     test_step.dependOn(&run_continuation_tests.step);
+    test_step.dependOn(&run_bci_tests.step);
     test_step.dependOn(&run_fem_tests.step);
     test_step.dependOn(&run_spectral_tensor_tests.step);
     test_step.dependOn(&run_prigogine_tests.step);
     test_step.dependOn(&run_spectrum_tests.step);
     test_step.dependOn(&run_cell_sync_tests.step);
     test_step.dependOn(&run_qasm_tests.step);
+    // Worlds module tests (new implementation)
+    test_step.dependOn(&run_persistent_tests.step);
+    test_step.dependOn(&run_syrup_adapter_tests.step);
+    test_step.dependOn(&run_world_tests.step);
+    test_step.dependOn(&run_ab_test_tests.step);
+    test_step.dependOn(&run_benchmark_adapter_tests.step);
+    test_step.dependOn(&run_circuit_world_tests.step);
+    test_step.dependOn(&run_openbci_bridge_tests.step);
+    test_step.dependOn(&run_worlds_integration_tests.step);
+    test_step.dependOn(&run_cyton_parser_tests.step);
+    test_step.dependOn(&run_fft_bands_tests.step);
 
     // Shader Viz Tool
     const shader_mod = b.createModule(.{

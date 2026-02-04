@@ -5,3 +5,4 @@ zig-out/
 
 # local tooling
 *.log
+zig-cache/\nzig-out/\n.DS_Store

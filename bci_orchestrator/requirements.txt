@@ -1,0 +1,21 @@
+# Core dependencies
+pyyaml>=6.0
+numpy>=1.24.0
+
+# Optional: Web dashboard
+aiohttp>=3.8.0
+
+# Optional: LSL (Lab Streaming Layer) support
+# pylsl>=1.16.0
+
+# Optional: WebSocket support
+websockets>=11.0
+
+# Optional: Metrics and monitoring
+# prometheus-client>=0.17.0
+
+# Development
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# black>=23.0.0
+# mypy>=1.5.0

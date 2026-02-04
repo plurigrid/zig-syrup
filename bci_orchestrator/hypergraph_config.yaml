@@ -1,0 +1,178 @@
+# BCI Hypergraph Orchestration Configuration
+# Defines the phased processing pipeline as a hypergraph structure
+
+phases:
+  - name: acquisition
+    type: host_process
+    command: python host_acquisition.py
+    outputs: [raw_eeg]
+    resources:
+      cpu_limit: 2
+      memory_limit: 512M
+    health_check:
+      interval: 5
+      timeout: 3
+      retries: 3
+
+  - name: preprocessing
+    type: container
+    image: bci-processor:latest
+    inputs: [raw_eeg]
+    outputs: [filtered_eeg, features]
+    containerization: apple
+    resources:
+      cpu_limit: 4
+      memory_limit: 2G
+    replicas: 1
+    scaling:
+      min: 1
+      max: 4
+      metric: cpu_percent
+      target: 70
+
+  - name: analysis
+    type: container
+    image: bci-analyzer:latest
+    inputs: [features]
+    outputs: [classification, states]
+    containerization: apple
+    resources:
+      cpu_limit: 2
+      memory_limit: 1G
+    replicas: 1
+
+  - name: visualizer
+    type: container
+    image: bci-visualizer:latest
+    inputs: [raw_eeg, filtered_eeg, classification]
+    outputs: [display_stream]
+    containerization: apple
+    resources:
+      cpu_limit: 2
+      memory_limit: 1G
+    replicas: 1
+
+  - name: storage
+    type: container
+    image: bci-storage:latest
+    inputs: [raw_eeg, filtered_eeg, features, classification, states]
+    outputs: [storage_confirm]
+    containerization: apple
+    resources:
+      cpu_limit: 1
+      memory_limit: 4G
+    volumes:
+      - /data/bci:/app/data
+
+streams:
+  raw_eeg:
+    protocol: lsl
+    port: 16571
+    format: float32
+    channels: 8
+    sampling_rate: 256
+    buffer_size: 1024
+
+  filtered_eeg:
+    protocol: tcp
+    port: 16573
+    format: float32
+    channels: 8
+    sampling_rate: 256
+    buffer_size: 1024
+
+  features:
+    protocol: tcp
+    port: 16574
+    format: json
+    schema: feature_vector
+    buffer_size: 256
+
+  classification:
+    protocol: websocket
+    port: 16575
+    format: json
+    schema: classification_result
+    buffer_size: 64
+
+  states:
+    protocol: tcp
+    port: 16576
+    format: json
+    schema: bci_state
+    buffer_size: 32
+
+  display_stream:
+    protocol: tcp
+    port: 16577
+    format: binary
+    buffer_size: 512
+
+  storage_confirm:
+    protocol: tcp
+    port: 16578
+    format: json
+    buffer_size: 16
+
+# Hypergraph edges define multicast relationships
+hyperedges:
+  - name: raw_distribution
+    source: acquisition
+    targets: [preprocessing, visualizer, storage]
+    stream: raw_eeg
+    multicast: true
+    qos: guaranteed_delivery
+
+  - name: filtered_distribution
+    source: preprocessing
+    targets: [visualizer, storage]
+    stream: filtered_eeg
+    multicast: true
+    qos: best_effort
+
+  - name: feature_distribution
+    source: preprocessing
+    targets: [analysis, storage]
+    stream: features
+    multicast: true
+    qos: guaranteed_delivery
+
+  - name: analysis_output
+    source: analysis
+    targets: [visualizer, storage]
+    streams: [classification, states]
+    multicast: true
+    qos: guaranteed_delivery
+
+# Orchestration settings
+orchestration:
+  startup_order:
+    - acquisition
+    - preprocessing
+    - analysis
+    - visualizer
+    - storage
+
+  shutdown_order:
+    - storage
+    - visualizer
+    - analysis
+    - preprocessing
+    - acquisition
+
+  restart_policy:
+    max_restarts: 5
+    restart_window: 300
+    backoff_base: 1.0
+    backoff_max: 60.0
+
+  synchronization:
+    clock_sync_interval: 1.0
+    timestamp_precision: microseconds
+    max_latency_ms: 50
+
+  monitoring:
+    metrics_interval: 5
+    health_check_interval: 10
+    latency_threshold_ms: 100
+    drop_rate_threshold: 0.001

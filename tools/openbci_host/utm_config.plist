@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- UTM VM Configuration for OpenBCI Hardware Passthrough -->
+    <!-- Import this into UTM to create a pre-configured VM -->
+    
+    <key>ConfigurationVersion</key>
+    <integer>4</integer>
+    
+    <key>Information</key>
+    <dict>
+        <key>Icon</key>
+        <string>macOS</string>
+        <key>IconCustom</key>
+        <false/>
+        <key>Name</key>
+        <string>OpenBCI-macOS</string>
+        <key>Notes</key>
+        <string>macOS VM configured for OpenBCI hardware passthrough. USB filters configured for FT232R dongle. BLE devices require host bridge.</string>
+        <key>UUID</key>
+        <string>OPENBCI-VM-001</string>
+    </dict>
+    
+    <key>System</key>
+    <dict>
+        <key>Architecture</key>
+        <string>arm64</string>
+        <key>CPU</key>
+        <string>default</string>
+        <key>CPUCount</key>
+        <integer>4</integer>
+        <key>MemorySize</key>
+        <integer>8192</integer>
+        <key>Boot</key>
+        <dict>
+            <key>BootOrder</key>
+            <array>
+                <string>cd</string>
+                <string>hd</string>
+            </array>
+            <key>UEFIBoot</key>
+            <true/>
+            <key>EFIFirmware</key>
+            <string>edk2-aarch64-code.fd</string>
+        </dict>
+        <key>MachineProperties</key>
+        <dict>
+            <key>vmport</key>
+            <false/>
+            <key>ich9-pci-bridges</key>
+            <true/>
+        </dict>
+    </dict>
+    
+    <key>Display</key>
+    <dict>
+        <key>RetinaMode</key>
+        <true/>
+        <key>DisplayBackend</key>
+        <string>metal</string>
+        <key>DisplayCard</key>
+        <string>virtio-ramfb</string>
+    </dict>
+    
+    <key>Sound</key>
+    <dict>
+        <key>SoundEnabled</key>
+        <true/>
+        <key>SoundCard</key>
+        <string>intel-hda</string>
+    </dict>
+    
+    <key>Input</key>
+    <dict>
+        <key>InputLegacy</key>
+        <false/>
+        <key>InputUSB</key>
+        <array>
+            <!-- OpenBCI Cyton Dongle: FT232R USB UART -->
+            <dict>
+                <key>VendorID</key>
+                <integer>1027</integer>
+                <key>ProductID</key>
+                <integer>24577</integer>
+                <key>Name</key>
+                <string>OpenBCI Cyton (FT232R)</string>
+                <key>Description</key>
+                <string>FT232R USB UART</string>
+            </dict>
+            <!-- Generic FTDI FT232 -->
+            <dict>
+                <key>VendorID</key>
+                <integer>1027</integer>
+                <key>ProductID</key>
+                <integer>24592</integer>
+                <key>Name</key>
+                <string>FTDI FT232</string>
+            </dict>
+            <!-- Generic FTDI Devices (any PID) -->
+            <dict>
+                <key>VendorID</key>
+                <integer>1027</integer>
+                <key>Name</key>
+                <string>FTDI Generic</string>
+            </dict>
+            <!-- FT231X (alternative OpenBCI dongle) -->
+            <dict>
+                <key>VendorID</key>
+                <integer>1027</integer>
+                <key>ProductID</key>
+                <integer>24597</integer>
+                <key>Name</key>
+                <string>OpenBCI USB Dongle (FT231X)</string>
+            </dict>
+        </array>
+    </dict>
+    
+    <key>Network</key>
+    <dict>
+        <key>NetworkEnabled</key>
+        <true/>
+        <key>NetworkMode</key>
+        <string>shared</string>
+        <key>NetworkCard</key>
+        <string>virtio-net-pci</string>
+        <key>NetworkCardMac</key>
+        <string>auto</string>
+    </dict>
+    
+    <key>Serial</key>
+    <array>
+        <dict>
+            <key>Mode</key>
+            <string>ptty</string>
+            <key>Target</key>
+            <string></string>
+        </dict>
+    </array>
+    
+    <key>Sharing</key>
+    <dict>
+        <key>ClipboardSharing</key>
+        <true/>
+        <key>DirectorySharing</key>
+        <true/>
+        <key>DirectorySharePath</key>
+        <string>~/OpenBCI-Shared</string>
+        <key>DirectoryShareReadOnly</key>
+        <false/>
+    </dict>
+    
+    <key>Drives</key>
+    <array>
+        <dict>
+            <key>Name</key>
+            <string>Main Disk</string>
+            <key>Interface</key>
+            <string>virtio</string>
+            <key>ImageType</key>
+            <string>disk</string>
+            <key>Size</key>
+            <integer>68719476736</integer>
+        </dict>
+    </array>
+    
+    <key>QEMU</key>
+    <dict>
+        <key>AdditionalArguments</key>
+        <array>
+            <!-- Enable USB controller with proper settings -->
+            <string>-device</string>
+            <string>qemu-xhci,id=usb-controller</string>
+            <string>-device</string>
+            <string>usb-host,vendorid=0x0403,productid=0x6001,id=openbci-cyton</string>
+        </array>
+        <key>Hypervisor</key>
+        <string>Apple</string>
+        <key>CPU</key>
+        <string>cortex-a72</string>
+    </dict>
+    
+    <key>Virtualization</key>
+    <dict>
+        <key>useAppleVirtualization</key>
+        <true/>
+        <key>useHypervisor</key>
+        <true/>
+        <key>memoryBalloon</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

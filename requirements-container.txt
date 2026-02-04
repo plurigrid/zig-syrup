@@ -1,0 +1,42 @@
+# BCI Data Processing Container Dependencies
+# Optimized for Apple Silicon (ARM64)
+
+# Core BCI/LSL
+pylsl>=1.16.0
+
+# Scientific Computing
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+
+# WebSocket for real-time visualization
+websockets>=11.0.0
+
+# EDF file format support
+pyedflib>=0.1.34
+
+# Async processing
+asyncio-mqtt>=0.13.0
+
+# Data handling
+pandas>=2.0.0
+
+# Real-time processing
+ringbuffer>=0.2.0
+
+# Configuration
+pyyaml>=6.0.0
+
+# Logging
+python-json-logger>=2.0.7
+
+# Signal processing
+mne>=1.5.0
+
+# Optional: Real-time plotting (lightweight)
+plotly>=5.15.0
+
+# Networking
+aiohttp>=3.8.0

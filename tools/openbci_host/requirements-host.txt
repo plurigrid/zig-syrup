@@ -1,0 +1,75 @@
+# OpenBCI Host Acquisition System - Python Requirements
+# Platform: macOS
+# Python: 3.8+
+
+# =============================================================================
+# Core Dependencies
+# =============================================================================
+
+# BrainFlow - OpenBCI hardware interface
+# Provides unified API for Cyton, Ganglion, and other boards
+brainflow>=5.10.0
+
+# Lab Streaming Layer - Network streaming
+# For streaming data to containers/VMs
+pylsl>=1.16.0
+
+# PyYAML - Configuration file parsing
+pyyaml>=6.0
+
+# NumPy - Numerical processing
+numpy>=1.21.0
+
+# =============================================================================
+# Hardware Interface Dependencies
+# =============================================================================
+
+# PySerial - USB serial communication for Cyton
+pyserial>=3.5
+
+# Bleak - Bluetooth LE for Ganglion
+# Required only if using Ganglion board
+bleak>=0.21.0
+
+# pyusb - Optional USB backend for advanced detection
+pyusb>=1.2.1
+
+# =============================================================================
+# macOS-Specific Dependencies
+# =============================================================================
+
+# pyobjc-framework-IOKit - USB device detection on macOS
+# Helps with auto-detection of Cyton USB devices
+pyobjc-framework-IOKit>=9.0; sys_platform == 'darwin'
+
+# pyobjc-framework-CoreBluetooth - BLE on macOS
+# Native macOS Bluetooth support (alternative to bleak)
+pyobjc-framework-CoreBluetooth>=9.0; sys_platform == 'darwin'
+
+# =============================================================================
+# Optional Dependencies
+# =============================================================================
+
+# SciPy - Advanced signal processing
+# Optional: for additional filters and analysis
+scipy>=1.9.0; extra == 'full'
+
+# Matplotlib - Real-time plotting
+# Optional: for local signal visualization
+matplotlib>=3.5.0; extra == 'full'
+
+# Pandas - Data export
+# Optional: for saving data to CSV/HD5
+pandas>=1.3.0; extra == 'full'
+
+# H5py - HDF5 data format support
+h5py>=3.7.0; extra == 'full'
+
+# =============================================================================
+# Development Dependencies
+# =============================================================================
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+# black>=22.0.0
+# flake8>=5.0.0
+# mypy>=1.0.0
