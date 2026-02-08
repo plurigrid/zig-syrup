@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) void {
     bci_mod.addImport("homotopy", homotopy_mod);
 
     // CSV SIMD module (Bridge 9 optimization)
-    const csv_simd_mod = b.addModule("csv_simd", .{
+    _ = b.addModule("csv_simd", .{
         .root_source_file = b.path("src/csv_simd.zig"),
         .target = target,
         .optimize = optimize,
@@ -496,12 +496,11 @@ pub fn build(b: *std.Build) void {
     const run_bci_tests = b.addRunArtifact(bci_tests);
 
     // Prigogine module (dissipative structures & non-equilibrium thermodynamics)
-    const prigogine_mod = b.addModule("prigogine", .{
+    _ = b.addModule("prigogine", .{
         .root_source_file = b.path("src/prigogine.zig"),
         .target = target,
         .optimize = optimize,
     });
-    _ = prigogine_mod;
 
     // Prigogine tests
     const prigogine_test_mod = b.createModule(.{
@@ -513,12 +512,11 @@ pub fn build(b: *std.Build) void {
     const run_prigogine_tests = b.addRunArtifact(prigogine_tests);
 
     // Spectral Tensor module (thalamocortical integration)
-    const spectral_tensor_mod = b.addModule("spectral_tensor", .{
+    _ = b.addModule("spectral_tensor", .{
         .root_source_file = b.path("src/spectral_tensor.zig"),
         .target = target,
         .optimize = optimize,
     });
-    _ = spectral_tensor_mod;
 
     // Spectral Tensor tests
     const spectral_tensor_test_mod = b.createModule(.{
@@ -530,12 +528,11 @@ pub fn build(b: *std.Build) void {
     const run_spectral_tensor_tests = b.addRunArtifact(spectral_tensor_tests);
 
     // FEM module
-    const fem_mod = b.addModule("fem", .{
+    _ = b.addModule("fem", .{
         .root_source_file = b.path("src/fem.zig"),
         .target = target,
         .optimize = optimize,
     });
-    _ = fem_mod;
 
     // FEM module tests
     const fem_test_mod = b.createModule(.{
@@ -547,12 +544,12 @@ pub fn build(b: *std.Build) void {
     const run_fem_tests = b.addRunArtifact(fem_tests);
 
     // Color SIMD module (Vectorized color space conversions)
-    const color_simd_mod = b.addModule("color_simd", .{
+    _ = b.addModule("color_simd", .{
         .root_source_file = b.path("src/color_simd.zig"),
         .target = target,
         .optimize = optimize,
     });
-    _ = color_simd_mod;
+
 
     // Color SIMD module tests
     const color_simd_test_mod = b.createModule(.{
@@ -591,9 +588,20 @@ pub fn build(b: *std.Build) void {
     const run_qasm_tests = b.addRunArtifact(qasm_tests);
 
     // ========================================
+    // Color Modules (for Colored Operads)
+    // ========================================
+
+    // Lux color module (GF(3) operadic coloring) - standalone, no dependencies
+    const lux_color_mod = b.addModule("lux_color", .{
+        .root_source_file = b.path("src/lux_color.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // ========================================
     // Worlds Module (A/B Testing, Multiplayer, OpenBCI Integration)
     // ========================================
-    
+
     // Main worlds module (using mod.zig as entry point)
     const worlds_mod = b.addModule("worlds", .{
         .root_source_file = b.path("src/worlds/mod.zig"),
@@ -605,6 +613,7 @@ pub fn build(b: *std.Build) void {
     worlds_mod.addImport("bci_homotopy", bci_mod);
     worlds_mod.addImport("continuation", continuation_mod);
     worlds_mod.addImport("homotopy", homotopy_mod);
+    worlds_mod.addImport("lux_color", lux_color_mod);
 
     // Persistent data structures (persistent.zig - Immer/Ewig-style)
     const persistent_test_mod = b.createModule(.{
@@ -687,6 +696,26 @@ pub fn build(b: *std.Build) void {
 
     const bci_aptos_tests = b.addTest(.{ .root_module = bci_aptos_test_mod });
     const run_bci_aptos_tests = b.addRunArtifact(bci_aptos_tests);
+
+    // World Enumeration module (326 worlds)
+    const world_enum_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/world_enum.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    world_enum_test_mod.addImport("lux_color", lux_color_mod);
+    const world_enum_tests = b.addTest(.{ .root_module = world_enum_test_mod });
+    const run_world_enum_tests = b.addRunArtifact(world_enum_tests);
+
+    // Colored Parentheses World module
+    const colored_parens_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/colored_parens.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    colored_parens_test_mod.addImport("lux_color", lux_color_mod);
+    const colored_parens_tests = b.addTest(.{ .root_module = colored_parens_test_mod });
+    const run_colored_parens_tests = b.addRunArtifact(colored_parens_tests);
 
     // Worlds integration tests
     const worlds_integration_test_mod = b.createModule(.{
@@ -785,6 +814,19 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(spatial_lib);
 
+    // GF(3) Goblins FFI — shared library for Guile Goblins integration
+    const goblins_ffi_mod = b.createModule(.{
+        .root_source_file = b.path("src/goblins_ffi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const goblins_ffi_lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = "gf3_goblins",
+        .root_module = goblins_ffi_mod,
+    });
+    b.installArtifact(goblins_ffi_lib);
+
     // Cross-Runtime Exchange Demo (Syrup CLJ ↔ Rust ↔ Zig)
     const cross_runtime_mod = b.createModule(.{
         .root_source_file = b.path("examples/cross_runtime_exchange.zig"),
@@ -874,7 +916,34 @@ pub fn build(b: *std.Build) void {
     // test_worlds_step.dependOn(&run_circuit_world_tests.step);
     // test_worlds_step.dependOn(&run_openbci_bridge_tests.step);
     test_worlds_step.dependOn(&run_bci_aptos_tests.step);
+    test_worlds_step.dependOn(&run_world_enum_tests.step);
+    test_worlds_step.dependOn(&run_colored_parens_tests.step);
     // test_worlds_step.dependOn(&run_worlds_integration_tests.step);
+
+    // Fuzz testing step — `zig build fuzz-worlds --fuzz` for continuous fuzzing
+    const fuzz_world_enum_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/world_enum.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fuzz_world_enum_mod.addImport("lux_color", lux_color_mod);
+    const fuzz_world_enum = b.addTest(.{ .root_module = fuzz_world_enum_mod });
+    fuzz_world_enum.root_module.fuzz = true;
+    const run_fuzz_world_enum = b.addRunArtifact(fuzz_world_enum);
+
+    const fuzz_colored_parens_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/colored_parens.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fuzz_colored_parens_mod.addImport("lux_color", lux_color_mod);
+    const fuzz_colored_parens = b.addTest(.{ .root_module = fuzz_colored_parens_mod });
+    fuzz_colored_parens.root_module.fuzz = true;
+    const run_fuzz_colored_parens = b.addRunArtifact(fuzz_colored_parens);
+
+    const fuzz_worlds_step = b.step("fuzz-worlds", "Fuzz test worlds modules");
+    fuzz_worlds_step.dependOn(&run_fuzz_world_enum.step);
+    fuzz_worlds_step.dependOn(&run_fuzz_colored_parens.step);
 
     // Tests for Cyton Parser
     const cyton_parser_test_mod = b.createModule(.{
@@ -950,7 +1019,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    _ = message_frame_mod;
     const message_frame_test_mod = b.createModule(.{
         .root_source_file = b.path("src/message_frame.zig"),
         .target = target,
@@ -1089,7 +1157,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    _ = tcp_transport_mod;
     const tcp_transport_test_mod = b.createModule(.{
         .root_source_file = b.path("src/tcp_transport.zig"),
         .target = target,
@@ -1098,6 +1165,57 @@ pub fn build(b: *std.Build) void {
     const tcp_transport_tests = b.addTest(.{ .root_module = tcp_transport_test_mod });
     const run_tcp_transport_tests = b.addRunArtifact(tcp_transport_tests);
     test_step.dependOn(&run_tcp_transport_tests.step);
+
+    // Fountain module (Luby Transform rateless erasure codes)
+    const fountain_mod = b.addModule("fountain", .{
+        .root_source_file = b.path("src/fountain.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fountain_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/fountain.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fountain_tests = b.addTest(.{ .root_module = fountain_test_mod });
+    const run_fountain_tests = b.addRunArtifact(fountain_tests);
+    test_step.dependOn(&run_fountain_tests.step);
+
+    // QRTP Frame module (QR Transfer Protocol framing as Syrup records)
+    const qrtp_frame_mod = b.addModule("qrtp_frame", .{
+        .root_source_file = b.path("src/qrtp_frame.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    qrtp_frame_mod.addImport("fountain", fountain_mod);
+    const qrtp_frame_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/qrtp_frame.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    qrtp_frame_test_mod.addImport("fountain", fountain_mod);
+    const qrtp_frame_tests = b.addTest(.{ .root_module = qrtp_frame_test_mod });
+    const run_qrtp_frame_tests = b.addRunArtifact(qrtp_frame_tests);
+    test_step.dependOn(&run_qrtp_frame_tests.step);
+
+    // QRTP Transport module (screen↔camera air-gapped transport)
+    const qrtp_transport_mod = b.addModule("qrtp_transport", .{
+        .root_source_file = b.path("src/qrtp_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    qrtp_transport_mod.addImport("fountain", fountain_mod);
+    qrtp_transport_mod.addImport("qrtp_frame", qrtp_frame_mod);
+    const qrtp_transport_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/qrtp_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    qrtp_transport_test_mod.addImport("fountain", fountain_mod);
+    qrtp_transport_test_mod.addImport("qrtp_frame", qrtp_frame_mod);
+    const qrtp_transport_tests = b.addTest(.{ .root_module = qrtp_transport_test_mod });
+    const run_qrtp_transport_tests = b.addRunArtifact(qrtp_transport_tests);
+    test_step.dependOn(&run_qrtp_transport_tests.step);
 
     // UR Robot Adapter module (Bridge 9 Phase 3) + tests
     const ur_robot_adapter_mod = b.addModule("ur_robot_adapter", .{
@@ -1315,12 +1433,11 @@ pub fn build(b: *std.Build) void {
     // ========================================
 
     // Terminal module (native, for library use)
-    const terminal_mod = b.addModule("terminal", .{
+    _ = b.addModule("terminal", .{
         .root_source_file = b.path("src/terminal.zig"),
         .target = target,
         .optimize = optimize,
     });
-    _ = terminal_mod;
 
     // Terminal tests (native)
     const terminal_test_mod = b.createModule(.{
