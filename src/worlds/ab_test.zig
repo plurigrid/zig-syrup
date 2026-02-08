@@ -84,7 +84,7 @@ pub const ABTest = struct {
             .config = config,
             .worlds = StringHashMap(*World).init(allocator),
             .player_assignments = StringHashMap(WorldVariant).init(allocator),
-            .metrics = ArrayList(SessionMetrics).init(allocator),
+            .metrics = std.ArrayList(SessionMetrics).init(allocator),
             .random = prng.random(),
             .start_time = null,
         };
@@ -96,7 +96,7 @@ pub const ABTest = struct {
         self.worlds.deinit();
         
         self.player_assignments.deinit();
-        self.metrics.deinit();
+        self.metrics.deinit(self.allocator);
     }
     
     /// Register a world variant
@@ -188,7 +188,7 @@ pub const ABTest = struct {
     
     /// Record session metrics
     pub fn recordMetrics(self: *ABTest, metrics: SessionMetrics) !void {
-        try self.metrics.append(metrics);
+        try self.metrics.append(self.allocator, metrics);
     }
     
     /// Check if test should end

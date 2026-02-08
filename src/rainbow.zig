@@ -16,6 +16,7 @@ const std = @import("std");
 const syrup = @import("syrup.zig");
 const homotopy = @import("homotopy.zig");
 const continuation = @import("continuation.zig");
+const quantize = @import("quantize.zig");
 const Allocator = std.mem.Allocator;
 
 // ============================================================================
@@ -573,6 +574,48 @@ pub const CRTPhosphor = struct {
 };
 
 // ============================================================================
+// COLOR QUANTIZATION INTEGRATION
+// ============================================================================
+
+/// Export XTERM-256 palette for external use
+pub const XTERM256_PALETTE = quantize.XTERM256_PALETTE;
+
+/// Export XTERM-16 palette for external use
+pub const XTERM16_PALETTE = quantize.XTERM16_PALETTE;
+
+/// Re-export QuantizationLUT from quantize module
+pub const QuantizationLUT = quantize.QuantizationLUT;
+
+/// Create xterm-256 quantizer
+pub fn createXterm256Quantizer(allocator: Allocator) !quantize.QuantizationLUT {
+    return try quantize.buildXterm256LUT(allocator);
+}
+
+/// Create xterm-16 quantizer
+pub fn createXterm16Quantizer(allocator: Allocator) !quantize.QuantizationLUT {
+    return try quantize.buildXterm16LUT(allocator);
+}
+
+/// Quantize RGB color to nearest palette index
+pub fn quantizeRGBtoIndex(lut: *const quantize.QuantizationLUT, r: u8, g: u8, b: u8) u8 {
+    return lut.quantize(r, g, b);
+}
+
+/// Quantize RGB color to nearest xterm-256 palette color
+pub fn quantizeRGBtoXterm256(allocator: Allocator, r: u8, g: u8, b: u8) !u8 {
+    var lut = try createXterm256Quantizer(allocator);
+    defer lut.deinit();
+    return lut.quantize(r, g, b);
+}
+
+/// Quantize RGB color to nearest xterm-16 palette color
+pub fn quantizeRGBtoXterm16(allocator: Allocator, r: u8, g: u8, b: u8) !u8 {
+    var lut = try createXterm16Quantizer(allocator);
+    defer lut.deinit();
+    return lut.quantize(r, g, b);
+}
+
+// ============================================================================
 // TESTS
 // ============================================================================
 
@@ -795,5 +838,23 @@ test "RGB toU24/fromU24 roundtrip" {
         try std.testing.expectEqual(c.r, roundtrip.r);
         try std.testing.expectEqual(c.g, roundtrip.g);
         try std.testing.expectEqual(c.b, roundtrip.b);
+    }
+}
+
+test "rainbow_golden_spiral_to_xterm256_quantize" {
+    const allocator = std.testing.allocator;
+
+    // Generate golden spiral colors (24-bit)
+    const colors = try goldenSpiral(256, 271.0, 0.7, 0.55, allocator);
+    defer allocator.free(colors);
+
+    // Create quantizer
+    var lut = try createXterm256Quantizer(allocator);
+    defer lut.deinit();
+
+    // Quantize all colors to xterm-256 palette
+    for (colors) |color| {
+        const idx = lut.quantize(color.r, color.g, color.b);
+        try std.testing.expect(idx < 256);
     }
 }

@@ -14,6 +14,7 @@
 const std = @import("std");
 const syrup = @import("syrup");
 const xev_io = @import("xev_io");
+const acp_mnxfi = @import("acp_mnxfi");
 
 const Allocator = std.mem.Allocator;
 
@@ -227,6 +228,14 @@ pub const Message = union(enum) {
     terminal_output: TerminalOutputRequest,
     terminal_output_response: TerminalOutputResponse,
     terminal_kill: TerminalKillRequest,
+
+    // Market (mnx.fi prediction markets)
+    market_state_update: acp_mnxfi.MarketStateUpdate,
+    position_open_request: acp_mnxfi.PositionOpenRequest,
+    position_open_response: acp_mnxfi.PositionOpenResponse,
+    portfolio_snapshot: acp_mnxfi.PortfolioSnapshot,
+    brick_diagram_meta: acp_mnxfi.BrickDiagramMeta,
+    arkhai_liquidation: acp_mnxfi.ArkaiLiquidation,
 
     pub const InitializeRequest = struct {
         protocol_version: i64,

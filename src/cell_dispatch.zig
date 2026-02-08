@@ -441,13 +441,21 @@ pub const TransducerContext = struct {
     allocator: Allocator,
     generation: u8,
     world_id: damage.WorldId,
-    
+    /// Optional user data for transform extensions (e.g., spatial propagator state).
+    user_data: ?*anyopaque = null,
+
     pub fn init(allocator: Allocator, world_id: damage.WorldId, gen: u8) TransducerContext {
         return .{
             .allocator = allocator,
             .generation = gen,
             .world_id = world_id,
         };
+    }
+
+    pub fn withUserData(self: TransducerContext, data: *anyopaque) TransducerContext {
+        var ctx = self;
+        ctx.user_data = data;
+        return ctx;
     }
 };
 

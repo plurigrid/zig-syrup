@@ -46,30 +46,30 @@ pub const WorldTile = struct {
         
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
-        const allocator = arena.allocator();
-        try entries.append(allocator, .{
+        const arena_allocator = arena.allocator();
+        try entries.append(arena_allocator, .{
             .key = syrup.Value.fromSymbol("x"),
             .value = syrup.Value.fromInteger(self.x),
         });
-        try entries.append(allocator, .{
+        try entries.append(arena_allocator, .{
             .key = syrup.Value.fromSymbol("y"),
             .value = syrup.Value.fromInteger(self.y),
         });
-        try entries.append(allocator, .{
+        try entries.append(arena_allocator, .{
             .key = syrup.Value.fromSymbol("z"),
             .value = syrup.Value.fromInteger(self.z),
         });
-        try entries.append(allocator, .{
+        try entries.append(arena_allocator, .{
             .key = syrup.Value.fromSymbol("type"),
             .value = syrup.Value.fromSymbol(@tagName(self.metadata.tile_type)),
         });
-        try entries.append(allocator, .{
+        try entries.append(arena_allocator, .{
             .key = syrup.Value.fromSymbol("modified"),
             .value = syrup.Value.fromInteger(@intCast(self.metadata.modified_tick)),
         });
         
         if (self.metadata.owner) |owner| {
-            try entries.append(allocator, .{
+            try entries.append(arena_allocator, .{
                 .key = syrup.Value.fromSymbol("owner"),
                 .value = syrup.Value.fromInteger(owner),
             });
@@ -244,7 +244,7 @@ pub const SyrupAdapter = struct {
         };
         
         try self.tile_cache.put(self.allocator, key, new_tile);
-        return self.tile_cache.getPtr(key).?;
+        return @as(*WorldTile, self.tile_cache.getPtr(key).?);
     }
     
     /// Update tile content

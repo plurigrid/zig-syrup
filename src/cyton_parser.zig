@@ -136,7 +136,7 @@ pub fn parseStream(
     allocator: std.mem.Allocator,
 ) ParseError![]CytonSample {
     var samples = std.ArrayList(CytonSample).init(allocator);
-    errdefer samples.deinit();
+    errdefer samples.deinit(allocator);
 
     var i: usize = 0;
     var timestamp: i64 = 0;
@@ -157,7 +157,7 @@ pub fn parseStream(
 
         // Try to parse
         if (parseCytonPacket(packet, timestamp)) |sample| {
-            try samples.append(sample);
+            try samples.append(allocator, sample);
             timestamp += @as(i64, @intFromFloat(1e9 / CYTON_SAMPLE_RATE)); // ~4ms intervals
         } else |_| {
             // Skip this packet and continue searching

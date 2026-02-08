@@ -50,6 +50,14 @@ pub fn build(b: *std.Build) void {
     });
     xev_io_mod.addImport("syrup", syrup_mod);
 
+    // ACP mnx.fi extensions module (defined first for dependency ordering)
+    const acp_mnxfi_mod = b.addModule("acp_mnxfi", .{
+        .root_source_file = b.path("src/acp_mnxfi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    acp_mnxfi_mod.addImport("syrup", syrup_mod);
+
     // ACP module (Agent Client Protocol)
     const acp_mod = b.addModule("acp", .{
         .root_source_file = b.path("src/acp.zig"),
@@ -58,6 +66,7 @@ pub fn build(b: *std.Build) void {
     });
     acp_mod.addImport("syrup", syrup_mod);
     acp_mod.addImport("xev_io", xev_io_mod);
+    acp_mod.addImport("acp_mnxfi", acp_mnxfi_mod);
 
     // Continuation module
     const continuation_mod = b.addModule("continuation", .{
@@ -85,6 +94,13 @@ pub fn build(b: *std.Build) void {
     bci_mod.addImport("syrup", syrup_mod);
     bci_mod.addImport("continuation", continuation_mod);
     bci_mod.addImport("homotopy", homotopy_mod);
+
+    // CSV SIMD module (Bridge 9 optimization)
+    const csv_simd_mod = b.addModule("csv_simd", .{
+        .root_source_file = b.path("src/csv_simd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // Create module for main.zig
     const main_mod = b.createModule(.{
@@ -209,12 +225,27 @@ pub fn build(b: *std.Build) void {
     });
     acp_test_mod.addImport("syrup", syrup_mod);
     acp_test_mod.addImport("xev_io", xev_io_mod);
+    acp_test_mod.addImport("acp_mnxfi", acp_mnxfi_mod);
 
     // Tests for ACP
     const acp_tests = b.addTest(.{
         .root_module = acp_test_mod,
     });
     const run_acp_tests = b.addRunArtifact(acp_tests);
+
+    // Create test module for acp_mnxfi.zig
+    const acp_mnxfi_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/acp_mnxfi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    acp_mnxfi_test_mod.addImport("syrup", syrup_mod);
+
+    // Tests for ACP mnx.fi
+    const acp_mnxfi_tests = b.addTest(.{
+        .root_module = acp_mnxfi_test_mod,
+    });
+    const run_acp_mnxfi_tests = b.addRunArtifact(acp_mnxfi_tests);
 
     // Liveness module (terminal probes)
     const liveness_mod = b.addModule("liveness", .{
@@ -515,6 +546,23 @@ pub fn build(b: *std.Build) void {
     const fem_tests = b.addTest(.{ .root_module = fem_test_mod });
     const run_fem_tests = b.addRunArtifact(fem_tests);
 
+    // Color SIMD module (Vectorized color space conversions)
+    const color_simd_mod = b.addModule("color_simd", .{
+        .root_source_file = b.path("src/color_simd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = color_simd_mod;
+
+    // Color SIMD module tests
+    const color_simd_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/color_simd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const color_simd_tests = b.addTest(.{ .root_module = color_simd_test_mod });
+    const run_color_simd_tests = b.addRunArtifact(color_simd_tests);
+
     // Spectrum module (GF(3) triadic color bridge)
     const spectrum_test_mod = b.createModule(.{
         .root_source_file = b.path("src/spectrum.zig"),
@@ -694,10 +742,48 @@ pub fn build(b: *std.Build) void {
     // bci_demo_exe.root_module.link_libc = true;
 
     b.installArtifact(bci_demo_exe);
-    
+
     const bci_demo_cmd = b.addRunArtifact(bci_demo_exe);
     const bci_demo_step = b.step("bci-demo", "Run BCI-Aptos bridge demo");
     bci_demo_step.dependOn(&bci_demo_cmd.step);
+
+    // Spatial Propagator module (SplitTree topology → cell dispatch bridge)
+    const spatial_propagator_mod = b.addModule("spatial_propagator", .{
+        .root_source_file = b.path("src/spatial_propagator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Spatial Propagator tests
+    const spatial_propagator_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/spatial_propagator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const spatial_propagator_tests = b.addTest(.{ .root_module = spatial_propagator_test_mod });
+    const run_spatial_propagator_tests = b.addRunArtifact(spatial_propagator_tests);
+
+    // Spatial Propagator shared library (C ABI for Swift bridge)
+    // Quantization tests (terminal palette reduction)
+    const quantize_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/quantize.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const quantize_tests = b.addTest(.{ .root_module = quantize_test_mod });
+    const run_quantize_tests = b.addRunArtifact(quantize_tests);
+
+    const spatial_lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/spatial_propagator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const spatial_lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = "spatial_propagator",
+        .root_module = spatial_lib_mod,
+    });
+    b.installArtifact(spatial_lib);
 
     // Cross-Runtime Exchange Demo (Syrup CLJ ↔ Rust ↔ Zig)
     const cross_runtime_mod = b.createModule(.{
@@ -808,12 +894,22 @@ pub fn build(b: *std.Build) void {
     const fft_bands_tests = b.addTest(.{ .root_module = fft_bands_test_mod });
     const run_fft_bands_tests = b.addRunArtifact(fft_bands_tests);
 
+    // Tests for CSV SIMD
+    const csv_simd_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/csv_simd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const csv_simd_tests = b.addTest(.{ .root_module = csv_simd_test_mod });
+    const run_csv_simd_tests = b.addRunArtifact(csv_simd_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_xev_tests.step);
     test_step.dependOn(&run_geo_tests.step);
     test_step.dependOn(&run_bridge_tests.step);
     test_step.dependOn(&run_acp_tests.step);
+    test_step.dependOn(&run_acp_mnxfi_tests.step);
     test_step.dependOn(&run_liveness_tests.step);
     test_step.dependOn(&run_czernowitz_tests.step);
     test_step.dependOn(&run_snapshot_tests.step);
@@ -832,6 +928,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_spectrum_tests.step);
     test_step.dependOn(&run_cell_sync_tests.step);
     test_step.dependOn(&run_qasm_tests.step);
+    test_step.dependOn(&run_color_simd_tests.step);
     // Worlds module tests (new implementation)
     test_step.dependOn(&run_persistent_tests.step);
     test_step.dependOn(&run_syrup_adapter_tests.step);
@@ -843,6 +940,187 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_worlds_integration_tests.step);
     test_step.dependOn(&run_cyton_parser_tests.step);
     test_step.dependOn(&run_fft_bands_tests.step);
+    test_step.dependOn(&run_csv_simd_tests.step);
+    test_step.dependOn(&run_spatial_propagator_tests.step);
+    test_step.dependOn(&run_quantize_tests.step);
+
+    // Message Framing module + tests
+    const message_frame_mod = b.addModule("message_frame", .{
+        .root_source_file = b.path("src/message_frame.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = message_frame_mod;
+    const message_frame_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/message_frame.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const message_frame_tests = b.addTest(.{ .root_module = message_frame_test_mod });
+    const run_message_frame_tests = b.addRunArtifact(message_frame_tests);
+    test_step.dependOn(&run_message_frame_tests.step);
+
+    // WebSocket Framing module (Ghostty-Emacs protocol) + tests
+    const websocket_framing_mod = b.addModule("websocket_framing", .{
+        .root_source_file = b.path("src/websocket_framing.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const websocket_framing_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/websocket_framing.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const websocket_framing_tests = b.addTest(.{ .root_module = websocket_framing_test_mod });
+    const run_websocket_framing_tests = b.addRunArtifact(websocket_framing_tests);
+    test_step.dependOn(&run_websocket_framing_tests.step);
+
+    // Ghostty Web Server module
+    const ghostty_web_server_mod = b.createModule(.{
+        .root_source_file = b.path("src/ghostty_web_server.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_web_server_mod.addImport("websocket_framing", websocket_framing_mod);
+
+    const ghostty_web_exe = b.addExecutable(.{
+        .name = "ghostty-web",
+        .root_module = ghostty_web_server_mod,
+    });
+    b.installArtifact(ghostty_web_exe);
+
+    // Ghostty IX (Interactive Execution) module
+    const ghostty_ix_mod = b.addModule("ghostty_ix", .{
+        .root_source_file = b.path("src/ghostty_ix.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_mod.addImport("websocket_framing", websocket_framing_mod);
+    ghostty_ix_mod.addImport("spatial_propagator", spatial_propagator_mod);
+    ghostty_ix_mod.addImport("propagator", propagator_mod);
+
+    // Tests for ghostty_ix
+    const ghostty_ix_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ghostty_ix.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_test_mod.addImport("websocket_framing", websocket_framing_mod);
+    ghostty_ix_test_mod.addImport("spatial_propagator", spatial_propagator_mod);
+    ghostty_ix_test_mod.addImport("propagator", propagator_mod);
+
+    const ghostty_ix_tests = b.addTest(.{ .root_module = ghostty_ix_test_mod });
+    const run_ghostty_ix_tests = b.addRunArtifact(ghostty_ix_tests);
+    test_step.dependOn(&run_ghostty_ix_tests.step);
+
+    // Ghostty IX Shell Executor module
+    const ghostty_ix_shell_mod = b.addModule("ghostty_ix_shell", .{
+        .root_source_file = b.path("src/ghostty_ix_shell.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_shell_mod.addImport("ghostty_ix", ghostty_ix_mod);
+
+    // Note: shell/spatial/continuation/bim/http sub-module tests are run
+    // transitively via ghostty_ix_test_mod (avoids circular module dependency)
+
+    // Update ghostty_ix_mod to include shell executor
+    ghostty_ix_mod.addImport("ghostty_ix_shell", ghostty_ix_shell_mod);
+    ghostty_ix_test_mod.addImport("ghostty_ix_shell", ghostty_ix_shell_mod);
+
+    // Ghostty IX Spatial Executor module
+    const ghostty_ix_spatial_mod = b.addModule("ghostty_ix_spatial", .{
+        .root_source_file = b.path("src/ghostty_ix_spatial.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_spatial_mod.addImport("ghostty_ix", ghostty_ix_mod);
+    ghostty_ix_spatial_mod.addImport("spatial_propagator", spatial_propagator_mod);
+
+    // Spatial test runs via ghostty_ix_test_mod (avoids circular dependency)
+
+    // Update ghostty_ix_mod to include spatial executor
+    ghostty_ix_mod.addImport("ghostty_ix_spatial", ghostty_ix_spatial_mod);
+    ghostty_ix_test_mod.addImport("ghostty_ix_spatial", ghostty_ix_spatial_mod);
+
+    // Continuation Executor module (Phase 4 - OCapN + Boxxy integration)
+    const ghostty_ix_continuation_mod = b.addModule("ghostty_ix_continuation", .{
+        .root_source_file = b.path("src/ghostty_ix_continuation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_continuation_mod.addImport("ghostty_ix", ghostty_ix_mod);
+
+    // Continuation test runs via ghostty_ix_test_mod (avoids circular dependency)
+
+    // BIM (Basic Interaction Machine) module (Phase 4 - Bytecode VM for unification)
+    const ghostty_ix_bim_mod = b.addModule("ghostty_ix_bim", .{
+        .root_source_file = b.path("src/ghostty_ix_bim.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_bim_mod.addImport("ghostty_ix", ghostty_ix_mod);
+
+    // BIM test runs via ghostty_ix_test_mod (avoids circular dependency)
+
+    // Update ghostty_ix_mod to include Phase 4 modules
+    ghostty_ix_mod.addImport("ghostty_ix_continuation", ghostty_ix_continuation_mod);
+    ghostty_ix_test_mod.addImport("ghostty_ix_continuation", ghostty_ix_continuation_mod);
+    ghostty_ix_mod.addImport("ghostty_ix_bim", ghostty_ix_bim_mod);
+    ghostty_ix_test_mod.addImport("ghostty_ix_bim", ghostty_ix_bim_mod);
+
+    // HTTP Server module (Phase 5 - Monitoring & Feedback on :7071)
+    const ghostty_ix_http_mod = b.addModule("ghostty_ix_http", .{
+        .root_source_file = b.path("src/ghostty_ix_http.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ghostty_ix_http_mod.addImport("ghostty_ix", ghostty_ix_mod);
+
+    // HTTP test runs via ghostty_ix_test_mod (avoids circular dependency)
+
+    // Update ghostty_ix_mod to include HTTP server
+    ghostty_ix_mod.addImport("ghostty_ix_http", ghostty_ix_http_mod);
+    ghostty_ix_test_mod.addImport("ghostty_ix_http", ghostty_ix_http_mod);
+
+    // TCP Transport module + tests
+    const tcp_transport_mod = b.addModule("tcp_transport", .{
+        .root_source_file = b.path("src/tcp_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = tcp_transport_mod;
+    const tcp_transport_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/tcp_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const tcp_transport_tests = b.addTest(.{ .root_module = tcp_transport_test_mod });
+    const run_tcp_transport_tests = b.addRunArtifact(tcp_transport_tests);
+    test_step.dependOn(&run_tcp_transport_tests.step);
+
+    // UR Robot Adapter module (Bridge 9 Phase 3) + tests
+    const ur_robot_adapter_mod = b.addModule("ur_robot_adapter", .{
+        .root_source_file = b.path("src/ur_robot_adapter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ur_robot_adapter_mod.addImport("message_frame", message_frame_mod);
+    ur_robot_adapter_mod.addImport("tcp_transport", tcp_transport_mod);
+    ur_robot_adapter_mod.addImport("syrup", syrup_mod);
+
+    const ur_robot_adapter_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ur_robot_adapter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ur_robot_adapter_test_mod.addImport("message_frame", message_frame_mod);
+    ur_robot_adapter_test_mod.addImport("tcp_transport", tcp_transport_mod);
+    ur_robot_adapter_test_mod.addImport("syrup", syrup_mod);
+
+    const ur_robot_adapter_tests = b.addTest(.{ .root_module = ur_robot_adapter_test_mod });
+    const run_ur_robot_adapter_tests = b.addRunArtifact(ur_robot_adapter_tests);
+    test_step.dependOn(&run_ur_robot_adapter_tests.step);
 
     // Shader Viz Tool
     const shader_mod = b.createModule(.{
@@ -909,4 +1187,164 @@ pub fn build(b: *std.Build) void {
     // bench_cmd.step.dependOn(b.getInstallStep());
     // const bench_step = b.step("bench", "Run benchmarks");
     // bench_step.dependOn(&bench_cmd.step);
+
+    // ========================================
+    // Stellogen Compiler (wasm32-standalone target)
+    // ========================================
+
+    // Stellogen module (native target for CLI/tests)
+    const stellogen_mod = b.addModule("stellogen", .{
+        .root_source_file = b.path("src/stellogen/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Stellogen tests (native)
+    const stellogen_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_tests = b.addTest(.{ .root_module = stellogen_test_mod });
+    const run_stellogen_tests = b.addRunArtifact(stellogen_tests);
+    test_step.dependOn(&run_stellogen_tests.step);
+
+    // Stellogen AST tests
+    const stellogen_ast_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/ast.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_ast_tests = b.addTest(.{ .root_module = stellogen_ast_test_mod });
+    const run_stellogen_ast_tests = b.addRunArtifact(stellogen_ast_tests);
+    test_step.dependOn(&run_stellogen_ast_tests.step);
+
+    // Stellogen Unify tests
+    const stellogen_unify_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/unify.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_unify_tests = b.addTest(.{ .root_module = stellogen_unify_test_mod });
+    const run_stellogen_unify_tests = b.addRunArtifact(stellogen_unify_tests);
+    test_step.dependOn(&run_stellogen_unify_tests.step);
+
+    // Stellogen Lexer tests
+    const stellogen_lexer_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/lexer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_lexer_tests = b.addTest(.{ .root_module = stellogen_lexer_test_mod });
+    const run_stellogen_lexer_tests = b.addRunArtifact(stellogen_lexer_tests);
+    test_step.dependOn(&run_stellogen_lexer_tests.step);
+
+    // Stellogen Parser tests
+    const stellogen_parser_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_parser_tests = b.addTest(.{ .root_module = stellogen_parser_test_mod });
+    const run_stellogen_parser_tests = b.addRunArtifact(stellogen_parser_tests);
+    test_step.dependOn(&run_stellogen_parser_tests.step);
+
+    // Stellogen Executor tests
+    const stellogen_executor_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/executor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_executor_tests = b.addTest(.{ .root_module = stellogen_executor_test_mod });
+    const run_stellogen_executor_tests = b.addRunArtifact(stellogen_executor_tests);
+    test_step.dependOn(&run_stellogen_executor_tests.step);
+
+    // Stellogen Codegen tests
+    const stellogen_codegen_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/codegen.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stellogen_codegen_tests = b.addTest(.{ .root_module = stellogen_codegen_test_mod });
+    const run_stellogen_codegen_tests = b.addRunArtifact(stellogen_codegen_tests);
+    test_step.dependOn(&run_stellogen_codegen_tests.step);
+
+    // Stellogen CLI compiler
+    const stellogen_cli_mod = b.createModule(.{
+        .root_source_file = b.path("tools/stellogen_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    stellogen_cli_mod.addImport("stellogen", stellogen_mod);
+
+    const stellogen_cli_exe = b.addExecutable(.{
+        .name = "stellogen",
+        .root_module = stellogen_cli_mod,
+    });
+    b.installArtifact(stellogen_cli_exe);
+
+    const run_stellogen_cli = b.addRunArtifact(stellogen_cli_exe);
+    if (b.args) |args| {
+        run_stellogen_cli.addArgs(args);
+    }
+    const stellogen_step = b.step("stellogen", "Run Stellogen compiler");
+    stellogen_step.dependOn(&run_stellogen_cli.step);
+
+    // Stellogen WASM library (wasm32-standalone target)
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+
+    const stellogen_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/stellogen/wasm_runtime.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+    });
+
+    const stellogen_wasm = b.addExecutable(.{
+        .name = "stellogen-runtime",
+        .root_module = stellogen_wasm_mod,
+    });
+    stellogen_wasm.entry = .disabled; // Library, not executable
+    stellogen_wasm.rdynamic = true; // Export symbols
+    b.installArtifact(stellogen_wasm);
+
+    // ========================================
+    // Terminal Pipeline (terminal:// protocol)
+    // ========================================
+
+    // Terminal module (native, for library use)
+    const terminal_mod = b.addModule("terminal", .{
+        .root_source_file = b.path("src/terminal.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = terminal_mod;
+
+    // Terminal tests (native)
+    const terminal_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/terminal.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const terminal_tests = b.addTest(.{ .root_module = terminal_test_mod });
+    const run_terminal_tests = b.addRunArtifact(terminal_tests);
+    test_step.dependOn(&run_terminal_tests.step);
+
+    // Terminal WASM library (wasm32-freestanding target)
+    const terminal_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/terminal_wasm.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+    });
+
+    const terminal_wasm = b.addExecutable(.{
+        .name = "terminal-runtime",
+        .root_module = terminal_wasm_mod,
+    });
+    terminal_wasm.entry = .disabled; // Library, not executable
+    terminal_wasm.rdynamic = true; // Export symbols
+    b.installArtifact(terminal_wasm);
+
 }
