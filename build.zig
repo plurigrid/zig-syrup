@@ -598,6 +598,26 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Tileable Shader module (pixel-perfect embarrassingly parallel tiles)
+    const tileable_shader_mod = b.addModule("tileable_shader", .{
+        .root_source_file = b.path("src/tileable_shader.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tileable_shader_mod.addImport("lux_color", lux_color_mod);
+    tileable_shader_mod.addImport("cell_dispatch", cell_dispatch_mod);
+
+    // Tileable Shader module tests
+    const tileable_shader_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/tileable_shader.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tileable_shader_test_mod.addImport("lux_color", lux_color_mod);
+    tileable_shader_test_mod.addImport("cell_dispatch", cell_dispatch_mod);
+    const tileable_shader_tests = b.addTest(.{ .root_module = tileable_shader_test_mod });
+    const run_tileable_shader_tests = b.addRunArtifact(tileable_shader_tests);
+
     // ========================================
     // Worlds Module (A/B Testing, Multiplayer, OpenBCI Integration)
     // ========================================
@@ -987,6 +1007,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_rainbow_tests.step);
     test_step.dependOn(&run_damage_tests.step);
     test_step.dependOn(&run_cell_dispatch_tests.step);
+    test_step.dependOn(&run_tileable_shader_tests.step);
     test_step.dependOn(&run_homotopy_tests.step);
     test_step.dependOn(&run_linalg_tests.step);
     test_step.dependOn(&run_ripser_tests.step);
@@ -1660,5 +1681,39 @@ pub fn build(b: *std.Build) void {
     terminal_wasm.entry = .disabled; // Library, not executable
     terminal_wasm.rdynamic = true; // Export symbols
     b.installArtifact(terminal_wasm);
+
+    // Zoad Executable (Zig Toad) - TUI ACP Client
+    const zoad_mod = b.createModule(.{
+        .root_source_file = b.path("src/zoad.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zoad_mod.addImport("retty", retty_mod);
+    zoad_mod.addImport("acp", acp_mod);
+    zoad_mod.addImport("syrup", syrup_mod);
+    zoad_mod.addImport("terminal", terminal_mod);
+    
+    // Notcurses backend module
+    const nc_backend_mod = b.createModule(.{
+        .root_source_file = b.path("src/notcurses_backend.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    nc_backend_mod.addImport("retty", retty_mod);
+    zoad_mod.addImport("notcurses_backend", nc_backend_mod);
+
+    const zoad_exe = b.addExecutable(.{
+        .name = "zoad",
+        .root_module = zoad_mod,
+    });
+    zoad_exe.linkLibC();
+    zoad_exe.linkSystemLibrary("notcurses");
+    zoad_exe.linkSystemLibrary("notcurses-core");
+    
+    b.installArtifact(zoad_exe);
+
+    const run_zoad = b.addRunArtifact(zoad_exe);
+    const run_zoad_step = b.step("run-zoad", "Run ZOAD TUI");
+    run_zoad_step.dependOn(&run_zoad.step);
 
 }
