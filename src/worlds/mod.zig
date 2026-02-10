@@ -57,6 +57,10 @@ pub const Neurofeedback = bci_aptos.Neurofeedback;
 // Colored Parentheses World
 pub const colored_parens = @import("colored_parens.zig");
 pub const ColoredParensWorld = colored_parens.ColoredParensWorld;
+
+// Zeta World (Spectral Analysis)
+pub const zeta = @import("zeta.zig");
+pub const ZetaWorld = zeta.ZetaWorld;
 pub const Expr = colored_parens.Expr;
 
 // World Enumeration Engine (326 worlds via combinatorial cheatcodes)

@@ -27,8 +27,92 @@
 // ============================================================================
 
 const builtin = @import("builtin");
+const std = @import("std");
+const gf3 = @import("gf3_palette.zig");
+
 const is_wasm = builtin.cpu.arch == .wasm32 or builtin.cpu.arch == .wasm64;
 const is_freestanding = builtin.os.tag == .freestanding;
+
+// ============================================================================
+// COLOR SYSTEM (Referentially Transparent / GF(3))
+// ============================================================================
+
+/// Universal Color Type (32-bit)
+/// Preserves semantic intent better than raw RGB.
+///
+/// Layout (MSB -> LSB):
+///   [8 bits: type] [24 bits: payload]
+///
+/// Types:
+///   0x00: sRGB (Legacy)       -> payload = 0xRRGGBB
+///   0x01: GF(3) TritWord      -> payload = index (0..242)
+///   0x02: System Palette      -> payload = index (0..255) (e.g. ANSI)
+///   0xFF: Default/Transparent
+pub const Color = packed struct(u32) {
+    payload: u24,
+    tag: Tag,
+
+    pub const Tag = enum(u8) {
+        srgb = 0x00,
+        gf3 = 0x01,
+        palette = 0x02,
+        default = 0xFF,
+    };
+
+    pub const DEFAULT = Color{ .tag = .default, .payload = 0 };
+    pub const BLACK = Color{ .tag = .srgb, .payload = 0x000000 };
+    pub const RED = Color{ .tag = .srgb, .payload = 0xFF0000 };
+    pub const GREEN = Color{ .tag = .srgb, .payload = 0x00FF00 };
+    pub const YELLOW = Color{ .tag = .srgb, .payload = 0xFFFF00 };
+    pub const BLUE = Color{ .tag = .srgb, .payload = 0x0000FF };
+    pub const MAGENTA = Color{ .tag = .srgb, .payload = 0xFF00FF };
+    pub const CYAN = Color{ .tag = .srgb, .payload = 0x00FFFF };
+    pub const WHITE = Color{ .tag = .srgb, .payload = 0xFFFFFF };
+    pub const GRAY = Color{ .tag = .srgb, .payload = 0x808080 };
+    pub const DARK_GRAY = Color{ .tag = .srgb, .payload = 0x404040 };
+
+    // Lowercase aliases for compatibility with retty
+    pub const white = WHITE;
+    pub const black = BLACK;
+    pub const red = RED;
+    pub const green = GREEN;
+    pub const blue = BLUE;
+    pub const yellow = YELLOW;
+    pub const magenta = MAGENTA;
+    pub const cyan = CYAN;
+    pub const gray = GRAY;
+    pub const dark_gray = DARK_GRAY;
+
+    /// Construct sRGB color
+    pub fn rgb(r: u8, g: u8, b: u8) Color {
+        const val = (@as(u24, r) << 16) | (@as(u24, g) << 8) | @as(u24, b);
+        return .{ .tag = .srgb, .payload = val };
+    }
+
+    /// Construct from GF(3) TritWord
+    pub fn fromTrit(word: gf3.TritWord) Color {
+        return .{ .tag = .gf3, .payload = word.toIndex() };
+    }
+
+    /// Convert to 24-bit sRGB (lossy for wide gamut/semantic)
+    pub fn toRgb24(self: Color) u24 {
+        switch (self.tag) {
+            .srgb => return self.payload,
+            .gf3 => {
+                // Lookup in GF(3) palette
+                const word = gf3.TritWord.fromIndex(@intCast(self.payload));
+                const c = gf3.PALETTE.lookup(word);
+                return (@as(u24, c.r) << 16) | (@as(u24, c.g) << 8) | @as(u24, c.b);
+            },
+            .palette => {
+                // TODO: Implement ANSI palette lookup if needed
+                // For now, map simple indices or fallback
+                return 0xFFFFFF;
+            },
+            .default => return 0x000000, // or handling context dependent
+        }
+    }
+};
 
 // ============================================================================
 // CORE TYPES (zero OS deps)
@@ -49,13 +133,14 @@ pub const CellAttrs = packed struct(u8) {
 /// A single terminal cell: codepoint + fg/bg color + attributes
 pub const Cell = struct {
     codepoint: u21 = ' ',
-    fg: u24 = 0xFFFFFF,
-    bg: u24 = 0x000000,
+    fg: Color = Color.DEFAULT,
+    bg: Color = Color.DEFAULT,
     attrs: CellAttrs = .{},
 
     pub fn eql(a: Cell, b: Cell) bool {
         return a.codepoint == b.codepoint and
-            a.fg == b.fg and a.bg == b.bg and
+            @as(u32, @bitCast(a.fg)) == @as(u32, @bitCast(b.fg)) and
+            @as(u32, @bitCast(a.bg)) == @as(u32, @bitCast(b.bg)) and
             @as(u8, @bitCast(a.attrs)) == @as(u8, @bitCast(b.attrs));
     }
 
@@ -170,7 +255,7 @@ pub const Grid = struct {
     }
 
     /// Write a codepoint with explicit colors
-    pub fn put(self: *Grid, x: u16, y: u16, cp: u21, fg: u24, bg: u24, attrs: CellAttrs) void {
+    pub fn put(self: *Grid, x: u16, y: u16, cp: u21, fg: Color, bg: Color, attrs: CellAttrs) void {
         self.writeCell(x, y, .{
             .codepoint = cp,
             .fg = fg,
@@ -180,7 +265,7 @@ pub const Grid = struct {
     }
 
     /// Write a string at cursor position, advancing cursor
-    pub fn writeString(self: *Grid, str: []const u8, fg: u24, bg: u24) void {
+    pub fn writeString(self: *Grid, str: []const u8, fg: Color, bg: Color) void {
         for (str) |byte| {
             if (byte == '\n') {
                 self.cursor_x = 0;
@@ -271,13 +356,15 @@ fn packCell(x: u16, y: u16, cell: Cell, out: *[CELL_PACKED_SIZE]u8) void {
     out[5] = @intCast((cp >> 8) & 0xFF);
     out[6] = @intCast(cp & 0xFF);
     // fg: big-endian u24
-    out[7] = @intCast((cell.fg >> 16) & 0xFF);
-    out[8] = @intCast((cell.fg >> 8) & 0xFF);
-    out[9] = @intCast(cell.fg & 0xFF);
+    const fg = cell.fg.toRgb24();
+    out[7] = @intCast((fg >> 16) & 0xFF);
+    out[8] = @intCast((fg >> 8) & 0xFF);
+    out[9] = @intCast(fg & 0xFF);
     // bg: big-endian u24
-    out[10] = @intCast((cell.bg >> 16) & 0xFF);
-    out[11] = @intCast((cell.bg >> 8) & 0xFF);
-    out[12] = @intCast(cell.bg & 0xFF);
+    const bg = cell.bg.toRgb24();
+    out[10] = @intCast((bg >> 16) & 0xFF);
+    out[11] = @intCast((bg >> 8) & 0xFF);
+    out[12] = @intCast(bg & 0xFF);
     // attrs: u8
     out[13] = @bitCast(cell.attrs);
 }
@@ -289,8 +376,8 @@ fn unpackCell(data: *const [CELL_PACKED_SIZE]u8) struct { x: u16, y: u16, cell: 
         .y = @as(u16, data[2]) << 8 | data[3],
         .cell = .{
             .codepoint = @intCast(@as(u24, data[4]) << 16 | @as(u24, data[5]) << 8 | data[6]),
-            .fg = @as(u24, data[7]) << 16 | @as(u24, data[8]) << 8 | data[9],
-            .bg = @as(u24, data[10]) << 16 | @as(u24, data[11]) << 8 | data[12],
+            .fg = Color.rgb(data[7], data[8], data[9]),
+            .bg = Color.rgb(data[10], data[11], data[12]),
             .attrs = @bitCast(data[13]),
         },
     };
@@ -703,7 +790,7 @@ pub fn dispatch(grid: *Grid, uri: []const u8, out: []u8) !OpResult {
                 const x = parsed.param_x orelse 0;
                 const y = parsed.param_y orelse 0;
                 const cell = grid.readCell(x, y);
-                return .{ .trit = Trit.fromRgb24(cell.fg), .cell = cell, .generation = grid.generation };
+                return .{ .trit = Trit.fromRgb24(cell.fg.toRgb24()), .cell = cell, .generation = grid.generation };
             }
         },
         .grid => {

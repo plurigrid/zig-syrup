@@ -61,8 +61,8 @@ pub const NotcursesBackend = struct {
                 _ = c.nccell_load(self.plane, &ncc, @ptrCast(&buf[0]));
 
                 // Set colors
-                const fg = cell.fg;
-                const bg = cell.bg;
+                const fg = cell.fg.toRgb24();
+                const bg = cell.bg.toRgb24();
                 
                 _ = c.ncchannels_set_fg_rgb(&ncc.channels, fg);
                 _ = c.ncchannels_set_bg_rgb(&ncc.channels, bg);

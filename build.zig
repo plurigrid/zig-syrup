@@ -512,7 +512,7 @@ pub fn build(b: *std.Build) void {
     const run_prigogine_tests = b.addRunArtifact(prigogine_tests);
 
     // Spectral Tensor module (thalamocortical integration)
-    _ = b.addModule("spectral_tensor", .{
+    const spectral_tensor_mod = b.addModule("spectral_tensor", .{
         .root_source_file = b.path("src/spectral_tensor.zig"),
         .target = target,
         .optimize = optimize,
@@ -634,6 +634,7 @@ pub fn build(b: *std.Build) void {
     worlds_mod.addImport("continuation", continuation_mod);
     worlds_mod.addImport("homotopy", homotopy_mod);
     worlds_mod.addImport("lux_color", lux_color_mod);
+    worlds_mod.addImport("spectral_tensor", spectral_tensor_mod);
 
     // Persistent data structures (persistent.zig - Immer/Ewig-style)
     const persistent_test_mod = b.createModule(.{
@@ -1700,6 +1701,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     nc_backend_mod.addImport("retty", retty_mod);
+    nc_backend_mod.addIncludePath(.{ .cwd_relative = "/nix/store/vp4mqyfj800wyhc92d888g3glzl3dzn7-notcurses-3.0.17-dev/include" });
     
     // Simple TCP module
     const simple_tcp_mod = b.createModule(.{
@@ -1715,6 +1717,7 @@ pub fn build(b: *std.Build) void {
         .name = "zoad",
         .root_module = zoad_mod,
     });
+    zoad_exe.addLibraryPath(.{ .cwd_relative = "/nix/store/2fv3qgr6wnsxkxanhl31sry78rn1vk74-notcurses-3.0.17/lib" });
     zoad_exe.linkLibC();
     zoad_exe.linkSystemLibrary("notcurses");
     zoad_exe.linkSystemLibrary("notcurses-core");
@@ -1722,7 +1725,45 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(zoad_exe);
 
     const run_zoad = b.addRunArtifact(zoad_exe);
-    const run_zoad_step = b.step("run-zoad", "Run ZOAD TUI");
+    const run_zoad_step = b.step("zoad", "Run ZOAD TUI");
     run_zoad_step.dependOn(&run_zoad.step);
+
+    worlds_mod.addImport("retty", retty_mod);
+
+    // Zeta CLI Executable
+    const zeta_cli_mod = b.createModule(.{
+        .root_source_file = b.path("src/zeta_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zeta_cli_mod.addImport("retty", retty_mod);
+    zeta_cli_mod.addImport("worlds", worlds_mod);
+
+    const zeta_exe = b.addExecutable(.{
+        .name = "zeta-cli",
+        .root_module = zeta_cli_mod,
+    });
+    b.installArtifact(zeta_exe);
+
+    const run_zeta = b.addRunArtifact(zeta_exe);
+    const run_zeta_step = b.step("run-zeta", "Run Zeta World CLI");
+    run_zeta_step.dependOn(&run_zeta.step);
+
+    // Zeta World tests (Test as World)
+    const zeta_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/worlds/zeta/zeta_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zeta_test_mod.addImport("spectral_tensor", spectral_tensor_mod);
+    zeta_test_mod.addImport("retty", retty_mod);
+    zeta_test_mod.addImport("lux_color", lux_color_mod);
+    
+    const zeta_tests = b.addTest(.{ .root_module = zeta_test_mod });
+    const run_zeta_tests = b.addRunArtifact(zeta_tests);
+    test_step.dependOn(&run_zeta_tests.step);
+    
+    const test_zeta_step = b.step("test-zeta", "Run Zeta World tests");
+    test_zeta_step.dependOn(&run_zeta_tests.step);
 
 }

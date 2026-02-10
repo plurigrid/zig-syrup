@@ -237,25 +237,11 @@ fn solveLayout(area: Rect, direction: Direction, constraints: []const Constraint
 // Style — fg/bg/attrs combination
 // ============================================================================
 
-pub const Color = union(enum) {
-    reset: void,
-    rgb: u24,
-
-    pub const white: Color = .{ .rgb = 0xFFFFFF };
-    pub const black: Color = .{ .rgb = 0x000000 };
-    pub const red: Color = .{ .rgb = 0xFF0000 };
-    pub const green: Color = .{ .rgb = 0x00FF00 };
-    pub const blue: Color = .{ .rgb = 0x0000FF };
-    pub const yellow: Color = .{ .rgb = 0xFFFF00 };
-    pub const cyan: Color = .{ .rgb = 0x00FFFF };
-    pub const magenta: Color = .{ .rgb = 0xFF00FF };
-    pub const gray: Color = .{ .rgb = 0x808080 };
-    pub const dark_gray: Color = .{ .rgb = 0x404040 };
-};
+pub const Color = terminal.Color;
 
 pub const Style = struct {
-    fg_color: Color = .{ .reset = {} },
-    bg_color: Color = .{ .reset = {} },
+    fg_color: Color = Color.DEFAULT,
+    bg_color: Color = Color.DEFAULT,
     attrs: CellAttrs = .{},
 
     pub const default: Style = .{};
@@ -310,12 +296,10 @@ pub const Style = struct {
         return s;
     }
 
-    /// Resolve color to u24, defaulting to fallback if reset.
-    fn resolveColor(color: Color, fallback: u24) u24 {
-        return switch (color) {
-            .reset => fallback,
-            .rgb => |v| v,
-        };
+    /// Resolve color, defaulting to fallback if default.
+    fn resolveColor(color: Color, fallback: Color) Color {
+        if (color.tag == .default) return fallback;
+        return color;
     }
 
     /// Apply style to a Cell, returning a new Cell with the style's colors/attrs.
@@ -935,10 +919,7 @@ pub const Gauge = struct {
         }
 
         // Draw empty portion
-        const bg_style = Style.bg(switch (self.gauge_style.bg_color) {
-            .reset => Color.dark_gray,
-            .rgb => |v| Color{ .rgb = v },
-        });
+        const bg_style = Style.bg(if (self.gauge_style.bg_color.tag == .default) Color.dark_gray else self.gauge_style.bg_color);
         while (x < gauge_area.right()) : (x += 1) {
             buf.set(x, gauge_area.top(), bg_style.applyToCell(.{
                 .codepoint = ' ',
@@ -1150,23 +1131,25 @@ pub const AnsiBackend = struct {
         if (attrs.strikethrough) self.writeStr(";9");
 
         // fg: 24-bit color
-        if (cell.fg != 0xFFFFFF) {
+        if (cell.fg.tag == .srgb) {
+            const rgb = cell.fg.payload;
             self.writeStr(";38;2;");
-            self.writeDecimal(@intCast((cell.fg >> 16) & 0xFF));
+            self.writeDecimal(@intCast((rgb >> 16) & 0xFF));
             self.writeByte(';');
-            self.writeDecimal(@intCast((cell.fg >> 8) & 0xFF));
+            self.writeDecimal(@intCast((rgb >> 8) & 0xFF));
             self.writeByte(';');
-            self.writeDecimal(@intCast(cell.fg & 0xFF));
+            self.writeDecimal(@intCast(rgb & 0xFF));
         }
 
         // bg: 24-bit color
-        if (cell.bg != 0x000000) {
+        if (cell.bg.tag == .srgb) {
+            const rgb = cell.bg.payload;
             self.writeStr(";48;2;");
-            self.writeDecimal(@intCast((cell.bg >> 16) & 0xFF));
+            self.writeDecimal(@intCast((rgb >> 16) & 0xFF));
             self.writeByte(';');
-            self.writeDecimal(@intCast((cell.bg >> 8) & 0xFF));
+            self.writeDecimal(@intCast((rgb >> 8) & 0xFF));
             self.writeByte(';');
-            self.writeDecimal(@intCast(cell.bg & 0xFF));
+            self.writeDecimal(@intCast(rgb & 0xFF));
         }
 
         self.writeByte('m');
@@ -1319,17 +1302,17 @@ test "Layout ratio" {
 test "Style builder" {
     const s = Style.fg(Color.red).bold().withBg(Color.blue);
     try testing.expectEqual(true, s.attrs.bold);
-    try testing.expectEqual(@as(u24, 0xFF0000), s.fg_color.rgb);
-    try testing.expectEqual(@as(u24, 0x0000FF), s.bg_color.rgb);
+    try testing.expectEqual(@as(u24, 0xFF0000), s.fg_color.toRgb24());
+    try testing.expectEqual(@as(u24, 0x0000FF), s.bg_color.toRgb24());
 }
 
 test "Buffer set and get" {
     var buf = Buffer.init(.{ .x = 0, .y = 0, .width = 80, .height = 24 });
-    buf.set(5, 3, .{ .codepoint = 'A', .fg = 0xFF0000, .bg = 0x000000 });
+    buf.set(5, 3, .{ .codepoint = 'A', .fg = Color.red, .bg = Color.black });
 
     const cell = buf.get(5, 3);
     try testing.expectEqual(@as(u21, 'A'), cell.codepoint);
-    try testing.expectEqual(@as(u24, 0xFF0000), cell.fg);
+    try testing.expectEqual(@as(u24, 0xFF0000), cell.fg.toRgb24());
 }
 
 test "Buffer setString" {
@@ -1414,8 +1397,8 @@ test "Gauge render" {
 
 test "AnsiBackend renders" {
     var buf = Buffer.init(.{ .x = 0, .y = 0, .width = 10, .height = 3 });
-    buf.set(0, 0, .{ .codepoint = 'A', .fg = 0xFF0000, .bg = 0x000000 });
-    buf.set(1, 0, .{ .codepoint = 'B', .fg = 0x00FF00, .bg = 0x000000 });
+    buf.set(0, 0, .{ .codepoint = 'A', .fg = Color.red, .bg = Color.black });
+    buf.set(1, 0, .{ .codepoint = 'B', .fg = Color.green, .bg = Color.black });
 
     var backend = AnsiBackend.init(10, 3);
     backend.draw(&buf);
@@ -1433,16 +1416,16 @@ test "AnsiBackend diff only changed cells" {
     var prev = Buffer.init(.{ .x = 0, .y = 0, .width = 10, .height = 3 });
     var i: u16 = 0;
     while (i < 10) : (i += 1) {
-        prev.set(i, 0, .{ .codepoint = 'A' +| @as(u21, i), .fg = 0xFF0000, .bg = 0x000000 });
+        prev.set(i, 0, .{ .codepoint = 'A' +| @as(u21, i), .fg = Color.red, .bg = Color.black });
     }
 
     // curr is same except one cell changed
     var curr = Buffer.init(.{ .x = 0, .y = 0, .width = 10, .height = 3 });
     i = 0;
     while (i < 10) : (i += 1) {
-        curr.set(i, 0, .{ .codepoint = 'A' +| @as(u21, i), .fg = 0xFF0000, .bg = 0x000000 });
+        curr.set(i, 0, .{ .codepoint = 'A' +| @as(u21, i), .fg = Color.red, .bg = Color.black });
     }
-    curr.set(5, 0, .{ .codepoint = 'Z', .fg = 0x00FF00, .bg = 0x000000 }); // one change
+    curr.set(5, 0, .{ .codepoint = 'Z', .fg = Color.green, .bg = Color.black }); // one change
 
     var backend = AnsiBackend.init(10, 3);
 

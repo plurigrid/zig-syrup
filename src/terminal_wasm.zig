@@ -50,7 +50,14 @@ export fn terminal_init(cols: u16, rows: u16) void {
 
 /// Write a cell at (x, y)
 export fn terminal_put(x: u16, y: u16, cp: u32, fg: u32, bg: u32, attrs: u8) void {
-    grid.put(x, y, @intCast(cp & 0x1FFFFF), @intCast(fg & 0xFFFFFF), @intCast(bg & 0xFFFFFF), @bitCast(attrs));
+    const fg_u24: u24 = @intCast(fg & 0xFFFFFF);
+    const bg_u24: u24 = @intCast(bg & 0xFFFFFF);
+    grid.put(x, y, 
+        @intCast(cp & 0x1FFFFF), 
+        terminal.Color.rgb(@intCast((fg_u24 >> 16) & 0xFF), @intCast((fg_u24 >> 8) & 0xFF), @intCast(fg_u24 & 0xFF)), 
+        terminal.Color.rgb(@intCast((bg_u24 >> 16) & 0xFF), @intCast((bg_u24 >> 8) & 0xFF), @intCast(bg_u24 & 0xFF)), 
+        @bitCast(attrs)
+    );
 }
 
 /// Read cell codepoint at (x, y)
@@ -60,12 +67,12 @@ export fn terminal_read(x: u16, y: u16) u32 {
 
 /// Read cell foreground color at (x, y)
 export fn terminal_read_fg(x: u16, y: u16) u32 {
-    return grid.readCell(x, y).fg;
+    return grid.readCell(x, y).fg.toRgb24();
 }
 
 /// Read cell background color at (x, y)
 export fn terminal_read_bg(x: u16, y: u16) u32 {
-    return grid.readCell(x, y).bg;
+    return grid.readCell(x, y).bg.toRgb24();
 }
 
 /// Read cell attributes at (x, y)
@@ -76,7 +83,12 @@ export fn terminal_read_attrs(x: u16, y: u16) u8 {
 /// Write a string at cursor position (reads from WASM linear memory)
 export fn terminal_write_str(ptr: u32, len: u32, fg: u32, bg: u32) void {
     const str: [*]const u8 = @ptrFromInt(ptr);
-    grid.writeString(str[0..len], @intCast(fg & 0xFFFFFF), @intCast(bg & 0xFFFFFF));
+    const fg_u24: u24 = @intCast(fg & 0xFFFFFF);
+    const bg_u24: u24 = @intCast(bg & 0xFFFFFF);
+    grid.writeString(str[0..len], 
+        terminal.Color.rgb(@intCast((fg_u24 >> 16) & 0xFF), @intCast((fg_u24 >> 8) & 0xFF), @intCast(fg_u24 & 0xFF)),
+        terminal.Color.rgb(@intCast((bg_u24 >> 16) & 0xFF), @intCast((bg_u24 >> 8) & 0xFF), @intCast(bg_u24 & 0xFF))
+    );
 }
 
 /// Resize the grid
@@ -117,7 +129,7 @@ export fn terminal_apply(ptr: u32, len: u32) u32 {
 /// Returns -1 (MINUS), 0 (ERGODIC), or 1 (PLUS)
 export fn terminal_trit(x: u16, y: u16) i8 {
     const cell = grid.readCell(x, y);
-    return @intFromEnum(terminal.Trit.fromRgb24(cell.fg));
+    return @intFromEnum(terminal.Trit.fromRgb24(cell.fg.toRgb24()));
 }
 
 /// Get current generation counter
