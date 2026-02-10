@@ -1700,7 +1700,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     nc_backend_mod.addImport("retty", retty_mod);
+    
+    // Simple TCP module
+    const simple_tcp_mod = b.createModule(.{
+        .root_source_file = b.path("src/simple_tcp.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     zoad_mod.addImport("notcurses_backend", nc_backend_mod);
+    zoad_mod.addImport("simple_tcp", simple_tcp_mod);
 
     const zoad_exe = b.addExecutable(.{
         .name = "zoad",

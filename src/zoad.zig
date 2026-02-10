@@ -3,6 +3,8 @@ const retty = @import("retty");
 const terminal = @import("terminal"); 
 const acp = @import("acp");
 const nc_backend = @import("notcurses_backend");
+const simple_tcp = @import("simple_tcp");
+const syrup = @import("syrup");
 
 const posix = std.posix;
 
@@ -12,6 +14,11 @@ const AppState = struct {
     messages: std.ArrayListUnmanaged([]const u8),
     input_buffer: std.ArrayListUnmanaged(u8),
     allocator: std.mem.Allocator,
+    conn: ?simple_tcp.Connection = null,
+    
+    // Hardcoded Agent Address for MVP
+    agent_host: []const u8 = "127.0.0.1",
+    agent_port: u16 = 5555,
 
     pub fn init(allocator: std.mem.Allocator) AppState {
         return .{
@@ -22,11 +29,35 @@ const AppState = struct {
     }
 
     pub fn deinit(self: *AppState) void {
+        if (self.conn) |*c| c.close();
         for (self.messages.items) |msg| {
             self.allocator.free(msg);
         }
         self.messages.deinit(self.allocator);
         self.input_buffer.deinit(self.allocator);
+    }
+
+    pub fn connectToAgent(self: *AppState) !void {
+        self.conn = try simple_tcp.Connection.connect(self.allocator, self.agent_host, self.agent_port);
+        try self.addMessage("Connected to agent at 127.0.0.1:5555");
+        
+        // Send Initialize
+        const init_msg = acp.Message{
+            .initialize = .{
+                .protocol_version = 1,
+                .client_capabilities = .{ .fs = null, .terminal = true },
+                .client_info = .{ .name = "zoad", .version = "0.1.0" },
+            },
+        };
+        const syrup_val = try init_msg.toSyrup(self.allocator);
+        var buf: [1024]u8 = undefined;
+        const encoded = try syrup_val.encodeBuf(&buf);
+        try self.conn.?.stream.writeAll(encoded);
+        try self.addMessage("Sent ACP Initialize");
+    }
+
+    pub fn addMessage(self: *AppState, msg: []const u8) !void {
+        try self.messages.append(self.allocator, try self.allocator.dupe(u8, msg));
     }
 };
 
@@ -42,11 +73,27 @@ pub fn main() !void {
     var app = AppState.init(allocator);
     defer app.deinit();
 
-    try app.messages.append(allocator, try allocator.dupe(u8, "Welcome to ZOAD (Zig Toad) - ACP Client"));
-    try app.messages.append(allocator, try allocator.dupe(u8, "Type 'exit' or Ctrl+C to quit."));
-    try app.messages.append(allocator, try allocator.dupe(u8, "Running on Notcurses Backend!"));
+    try app.addMessage("Welcome to ZOAD (Zig Toad) - ACP Client");
+    try app.addMessage("Type 'exit' or Ctrl+C to quit.");
+    try app.addMessage("Type 'connect' to connect to local agent.");
+    try app.addMessage("Running on Notcurses Backend!");
 
     while (!app.should_quit) {
+        // ... layout code ...
+        
+        // Input Handling Logic (Simulated for now, would be nc_input event loop)
+        // For MVP, if we typed 'connect', trigger connection
+        if (app.input_buffer.items.len > 0 and std.mem.eql(u8, app.input_buffer.items, "connect")) {
+             app.connectToAgent() catch |err| {
+                 var buf: [64]u8 = undefined;
+                 const err_msg = try std.fmt.bufPrint(&buf, "Connection failed: {}", .{err});
+                 try app.addMessage(err_msg);
+             };
+             app.input_buffer.clearRetainingCapacity();
+        }
+        
+        // ... render code ...
+
         // 1. Get terminal size from backend
         const width = backend.width;
         const height = backend.height;
