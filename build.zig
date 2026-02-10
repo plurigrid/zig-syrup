@@ -1710,8 +1710,19 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Tape recorder module
+    const tape_mod = b.createModule(.{
+        .root_source_file = b.path("src/tape_recorder.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tape_mod.addImport("syrup", syrup_mod);
+    tape_mod.addImport("damage", damage_mod);
+
     zoad_mod.addImport("notcurses_backend", nc_backend_mod);
     zoad_mod.addImport("simple_tcp", simple_tcp_mod);
+    zoad_mod.addImport("tape_recorder", tape_mod);
+    zoad_mod.addImport("damage", damage_mod);
 
     const zoad_exe = b.addExecutable(.{
         .name = "zoad",

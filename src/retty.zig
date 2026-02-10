@@ -95,6 +95,7 @@ pub const Constraint = union(enum) {
     max: u16,
     percentage: u16,
     ratio: [2]u16, // [num, den]
+    symmetric: [3]u16, // [numerator, denominator, bias] (-1, 0, 1) for GF(3) bias
     fill: void,
 };
 
@@ -163,6 +164,23 @@ fn solveLayout(area: Rect, direction: Direction, constraints: []const Constraint
                 const s: u16 = @intCast(@min(@as(u32, total) * r[0] / r[1], remaining));
                 remaining -|= s;
                 break :blk s;
+            },
+            .symmetric => |r| blk: {
+                if (r[1] == 0) break :blk 0;
+                // [num, den, bias] where bias: 0=floor (minus), 1=round (ergodic), 2=ceil (plus)
+                const num = @as(u32, total) * r[0];
+                const den = r[1];
+                var s: u16 = 0;
+                if (r[2] == 0) { // Minus (Floor)
+                    s = @intCast(num / den);
+                } else if (r[2] == 1) { // Ergodic (Round)
+                    s = @intCast((num + (den / 2)) / den);
+                } else { // Plus (Ceil)
+                    s = @intCast((num + den - 1) / den);
+                }
+                const clamped = @min(s, remaining);
+                remaining -|= clamped;
+                break :blk clamped;
             },
             .min => |v| blk: {
                 const s = @min(v, remaining);
@@ -1297,6 +1315,35 @@ test "Layout ratio" {
 
     try testing.expectEqual(@as(u16, 10), chunks[0].height);
     try testing.expectEqual(@as(u16, 20), chunks[1].height);
+}
+
+test "Layout symmetric" {
+    const area = Rect{ .x = 0, .y = 0, .width = 10, .height = 10 };
+    // Total 10. Split 1/3.
+    // 10 * 1 / 3 = 3.333
+    // Minus (0) -> 3
+    // Ergodic (1) -> 3 (3.33 rounds to 3)
+    // Plus (2) -> 4
+    
+    // Case 1: Minus (Floor)
+    const c_minus = [_]Constraint{ .{ .symmetric = .{ 1, 3, 0 } } };
+    var out_minus: [1]Rect = undefined;
+    area.splitVertical(&c_minus, &out_minus);
+    try testing.expectEqual(@as(u16, 3), out_minus[0].height);
+
+    // Case 2: Ergodic (Round)
+    // 10 * 1 / 2 = 5.
+    // 10 * 2 / 3 = 6.66 -> 7
+    const c_ergodic = [_]Constraint{ .{ .symmetric = .{ 2, 3, 1 } } };
+    var out_ergodic: [1]Rect = undefined;
+    area.splitVertical(&c_ergodic, &out_ergodic);
+    try testing.expectEqual(@as(u16, 7), out_ergodic[0].height);
+
+    // Case 3: Plus (Ceil)
+    const c_plus = [_]Constraint{ .{ .symmetric = .{ 1, 3, 2 } } };
+    var out_plus: [1]Rect = undefined;
+    area.splitVertical(&c_plus, &out_plus);
+    try testing.expectEqual(@as(u16, 4), out_plus[0].height);
 }
 
 test "Style builder" {

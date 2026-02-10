@@ -1,0 +1,20 @@
+default_agents = ["claude", "codex", "amp", "cursor"]
+
+[mcp]
+enabled = true
+merge_strategy = "merge"
+
+[bisimulation]
+enabled = true
+polarity_rotation = true
+
+[bisimulation.agents]
+claude = "PLUS"      # +1
+codex = "ERGODIC"    # 0
+amp = "MINUS"        # -1
+# Sum = 0 mod 3 ✓
+
+[trifurcation]
+enabled = true
+enforcer = ".ruler/trifurcation-enforcer.cljs"
+runtime = "nbb"

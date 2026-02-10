@@ -12,7 +12,7 @@
 //! No demos. Worlds only.
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
+const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 
 /// World identifier (Grove sphere index)
