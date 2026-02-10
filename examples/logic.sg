@@ -1,0 +1,45 @@
+' Propositional logic in Stellogen
+' Interaction nets for logical connectives
+
+' Truth values
+(def true (+true))
+(def false (+false))
+
+' Negation: not(true) = false, not(false) = true
+(def not {
+  [(-not +true) +false]
+  [(-not +false) +true]
+})
+
+' Conjunction: and(X, Y, Z) means X ∧ Y = Z
+(def and {
+  [(+and +true +true +true)]
+  [(+and +true +false +false)]
+  [(+and +false +true +false)]
+  [(+and +false +false +false)]
+})
+
+' Disjunction: or(X, Y, Z) means X ∨ Y = Z
+(def or {
+  [(+or +true +true +true)]
+  [(+or +true +false +true)]
+  [(+or +false +true +true)]
+  [(+or +false +false +false)]
+})
+
+' Implication via de Morgan: A → B ≡ ¬A ∨ B
+(def implies {
+  [(-implies A B R)
+   (-not A NotA)
+   (-or NotA B R)]
+})
+
+' Type checking as interactive test
+(macro (:: Tested Type)
+  (== @(exec @#Tested #Type) ok))
+
+' Test: true is a truth value
+(:: true {[(+true) ok] [(+false) ok]})
+
+' Query: compute not(true)
+(show (exec #not @[(-not +true) R]))

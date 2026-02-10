@@ -3,203 +3,266 @@
 [![CI](https://github.com/plurigrid/zig-syrup/actions/workflows/ci.yml/badge.svg)](https://github.com/plurigrid/zig-syrup/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-High-performance Zig implementation of the OCapN Syrup data format with CapTP-focused optimizations, terminal visualization, and computational topology foundations.
+OCapN Syrup serialization + capability-secure transport + identity + BCI + terminal visualization in Zig. Zero dependencies, zero allocation in hot paths, wasm32-freestanding compatible.
 
-## Features
+## Architecture
 
-- Fast encode/decode for Syrup values (canonical binary serialization, 11 value types)
-- CapTP descriptor helpers and arena sizing utilities
-- OCapN model coverage: undefined, null, tagged, error
-- Benchmarks for encode/decode/CID and CapTP-specific paths
-- Terminal visualization: ANSI 24-bit color shaders, damage tracking, homoiconic colored S-expressions
-- Homotopy continuation for polynomial systems with GF(3) trit classification
-- Agent Client Protocol (ACP) for multi-agent coordination over Syrup
-- Bristol Fashion MPC circuit parsing and serialization
+```
+                        ┌─────────────────────────────────────────────┐
+                        │            Applications                      │
+                        │                                              │
+                        │  passport.zig     ghostty_ix.zig   eeg.zig  │
+                        │  (identity)       (terminal IX)    (BCI)    │
+                        └──────┬──────────────┬──────────────┬────────┘
+                               │              │              │
+                        ┌──────▼──────────────▼──────────────▼────────┐
+                        │          Domain Modules                      │
+                        │                                              │
+                        │  propagator    spatial_propagator    acp     │
+                        │  homotopy      continuation          bim     │
+                        │  ripser        spectral_tensor       fem     │
+                        │  worlds/*      color_simd       prigogine   │
+                        └──────┬──────────────┬──────────────┬────────┘
+                               │              │              │
+                        ┌──────▼──────────────▼──────────────▼────────┐
+                        │            Transport Layer                   │
+                        │                                              │
+                        │  tcp_transport    websocket_framing          │
+                        │  message_frame    websocket_compression      │
+                        │  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
+                        │  fountain.zig     qrtp_frame.zig    (NEXT)  │
+                        │  qrtp_transport.zig                 (NEXT)  │
+                        └──────┬──────────────┬──────────────┬────────┘
+                               │              │              │
+                        ┌──────▼──────────────▼──────────────▼────────┐
+                        │          Core Serialization                  │
+                        │                                              │
+                        │  syrup.zig  — 11 value types, zero-copy     │
+                        │  CapTP descriptors, CID, canonical encode    │
+                        └─────────────────────────────────────────────┘
+```
 
-## Modules
+## Modules (52)
+
+### Core Serialization
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `syrup.zig` | 102K | OCapN Syrup canonical binary serialization. 11 value types, zero-copy decode, BigInt, SIMD-ready parsing, CapTP descriptor helpers, CID computation |
+| `message_frame.zig` | 232 | Length-prefix framing `[u32 BE length][payload]`. FrameAccumulator ring buffer for partial frame reassembly. 4MB DoS limit |
+| `tcp_transport.zig` | 205 | TCP transport for OCapN CapTP. Connection send/recv with framed I/O, TcpTransport listen/accept/connect |
+
+### Terminal & Visualization
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `terminal.zig` | 33K | Native terminal renderer. ANSI sequences, damage-aware repainting |
+| `terminal_wasm.zig` | 6K | WASM terminal target for browser embedding |
+| `rainbow.zig` | 32K | Golden/plastic/silver angle color spirals, CRT phosphor, colored S-expression parsing |
+| `damage.zig` | 37K | Dirty-cell tracking, AABB coalescing, bitset masks, ring buffer |
+| `cell_dispatch.zig` | 52K | Transducer-based parallel cell dispatch. GPU-friendly 16-byte cells, thread pool, cache-aligned batches |
+| `cell_sync.zig` | 35K | Distributed terminal cell synchronization |
+| `quantize.zig` | 10K | xterm-256 color quantization via O(1) LUT |
+| `color_simd.zig` | 13K | SIMD-vectorized color space conversions (RGB↔HSL↔Okhsl) |
+| `qasm.zig` | 6K | Quantum circuit ASCII art renderer (OpenQASM) |
+
+### Ghostty Integration
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `ghostty_ix.zig` | 13K | Ghostty IX protocol: interaction extensions for terminal multiplexing |
+| `ghostty_ix_bim.zig` | 11K | BIM bytecode VM (20 opcodes) for Ghostty |
+| `ghostty_ix_continuation.zig` | 13K | OCapN continuations for Ghostty session state |
+| `ghostty_ix_http.zig` | 16K | HTTP transport for Ghostty IX |
+| `ghostty_ix_shell.zig` | 8K | Shell integration for Ghostty IX |
+| `ghostty_ix_spatial.zig` | 9K | Cross-window spatial navigation for Ghostty |
+| `ghostty_web_server.zig` | 16K | WebSocket :7070 server for browser-based Ghostty |
+
+### WebSocket Stack
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `websocket_framing.zig` | 14K | RFC 6455 frame parsing, masking, fragmentation |
+| `websocket_compression.zig` | 10K | Per-message deflate (RFC 7692) |
+| `websocket_backpressure.zig` | 12K | Flow control with write buffering |
+| `websocket_metrics.zig` | 10K | Connection statistics and health monitoring |
+
+### Identity & Proof-of-Brain
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `passport.zig` | 39K | **passport.gay** proof-of-brain identity protocol. EEG → FFT bands → Shannon entropy → GF(3) trit trajectory → session commitment → `did:gay` binding. Challenge-response verification, homotopy continuity, liveness detection. wasm32-freestanding compatible |
+
+### BCI & Neuroscience
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `cyton_parser.zig` | 9K | OpenBCI Cyton 8-channel EEG packet parser |
+| `fft_bands.zig` | 10K | FFT → 5 frequency bands (δ/θ/α/β/γ) |
+| `eeg.zig` | 11K | EEG processing pipeline (Cyton → FFT → bands) |
+| `bci_homotopy.zig` | 7K | BCI phenomenal state as homotopy path |
+| `spectral_tensor.zig` | 50K | Thalamocortical spectral integration |
+| `ur_robot_adapter.zig` | 16K | UR5 robot Modbus TCP driver, 8D↔6D EEG→robot mapping |
+
+### Propagators (Radul-Sussman + Orion Reed)
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `propagator.zig` | 13K | Partial information lattice `Nothing < Value < Contradiction`. Bidirectional constraint propagation. BCI neurofeedback gate, adjacency gate, focus brightness |
+| `spatial_propagator.zig` | 28K | SplitTree topology → propagator network. Golden-spiral node coloring, focus state propagation, C ABI export |
+
+### Topology & Algebra
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `homotopy.zig` | 44K | Polynomial homotopy continuation, ACSet export, GF(3) path classification |
+| `continuation.zig` | 20K | AGM belief revision, GF(3) trit arithmetic, resumable pipelines |
+| `ripser.zig` | 32K | Vietoris-Rips persistent homology barcodes (Zig port of Ripser) |
+| `linalg.zig` | 8K | Matrix operations for topology computations |
+| `prigogine.zig` | 32K | Dissipative structures, non-equilibrium thermodynamics |
+| `fem.zig` | 37K | Finite element method solver |
+| `scs_wrapper.zig` | 21K | Splitting Conic Solver wrapper (convex optimization) |
+| `spectrum.zig` | 39K | GF(3) triadic color bridge |
+
+### Protocol & Agent
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `acp.zig` | 33K | Agent Client Protocol over Syrup (replaces JSON-RPC) |
+| `acp_mnxfi.zig` | 22K | ACP extensions for mnx.fi market coordination |
+| `jsonrpc_bridge.zig` | 35K | Bidirectional JSON-RPC 2.0 ↔ Syrup translation |
+| `liveness.zig` | 14K | Terminal/ACP health probes |
+| `bim.zig` | 12K | BIM bytecode interpreter (Stellogen) |
+
+### Geographic & Location
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `geo.zig` | 42K | Open Location Code (Plus Codes) with Syrup serialization |
+| `czernowitz.zig` | 36K | Extended location codes |
+
+### Utility
+
+| Module | LOC | Description |
+|--------|-----|-------------|
+| `bristol.zig` | 7K | Bristol Fashion MPC circuit parser (AND, XOR, INV, EQ) |
+| `csv_simd.zig` | 9K | SIMD-accelerated CSV parser (Bridge 9 optimization) |
+| `xev_io.zig` | 10K | Completion-based async I/O for Syrup (libxev) |
+
+### Worlds Subsystem (`src/worlds/`)
 
 | Module | Description |
 |--------|-------------|
-| `syrup.zig` | Core serialization: all 11 Syrup value types, zero-copy decode, canonical encode |
-| `acp.zig` | Agent Client Protocol using Syrup instead of JSON-RPC |
-| `bristol.zig` | Bristol Fashion MPC circuit parser (AND, XOR, INV, EQ, EQW, MAND) |
-| `geo.zig` | Open Location Code (Plus Codes) with Syrup serialization |
-| `xev_io.zig` | Completion-based async I/O for Syrup values (libxev) |
-| `jsonrpc_bridge.zig` | Bidirectional JSON-RPC 2.0 to Syrup translation |
-| `liveness.zig` | Terminal/ACP health probes |
-| `rainbow.zig` | Golden/plastic/silver angle color spirals, CRT phosphor, colored S-expression parsing |
-| `damage.zig` | Dirty-cell tracking for terminal multiplexers, AABB coalescing |
-| `cell_dispatch.zig` | Transducer-based parallel cell dispatch for distributed terminal rendering |
-| `homotopy.zig` | Polynomial homotopy continuation, ACSet export, GF(3) path status |
-| `continuation.zig` | Belief revision (AGM), GF(3) trit arithmetic, resumable pipelines |
+| `world.zig` | Core world state container |
+| `ab_test.zig` | A/B testing framework |
+| `syrup_adapter.zig` | World ↔ Syrup serialization bridge |
+| `persistent.zig` | Immer/ewig-style persistent data structures |
+| `circuit_world.zig` | Bristol circuit integration for ZK |
+| `openbci_bridge.zig` | OpenBCI neurofeedback bridge |
+| `bci_aptos.zig` | BCI → Aptos on-chain commitment |
+| `benchmark_adapter.zig` | Performance benchmarking |
+
+## QRTP: Air-Gapped Transport (Next)
+
+Inspired by [Orion Reed's QR Transfer Protocols](https://www.orionreed.com/posts/qrtp/) — three new modules extend the transport layer with fountain-coded QR streaming for air-gapped identity verification:
+
+```
+Existing:  syrup.zig → message_frame.zig → tcp_transport.zig   (network)
+Next:      syrup.zig → qrtp_frame.zig   → qrtp_transport.zig  (screen↔camera)
+                              ↑
+                        fountain.zig  (Luby Transform rateless erasure codes)
+```
+
+| Module | Purpose |
+|--------|---------|
+| `fountain.zig` | Luby Transform encoder/decoder. Zero-allocation, SplitMix64 PRNG, SIMD XOR block combining. Any ~1.1K of infinite encoded blocks reconstruct K source blocks |
+| `qrtp_frame.zig` | QRTP framing as Syrup records. Session seed, block index, degree, source indices, payload. Same message format over TCP or QR |
+| `qrtp_transport.zig` | Screen↔camera transport via C ABI callbacks. Platform renders QR, platform scans camera. Zig handles fountain coding + Syrup framing |
+
+**Key insight**: Every Syrup message that travels over TCP today can travel over fountain-coded QR tomorrow with zero application changes.
+
+**passport.gay integration**: Proof-of-brain identity proofs (~2KB) fountain-encoded into ~20 QR frames. Air-gapped verification — no internet required, no centralized Orb hardware (unlike WorldID).
+
+**Propagator connection**: Fountain decoder state maps to `propagator.zig`'s `CellValue` lattice — each source block is a cell, each encoded block is a propagator. Contradiction = transmission error. This is [scoped propagators](https://www.orionreed.com/posts/scoped-propagators/) applied to erasure decoding.
+
+## DeepWiki vs Reality
+
+[DeepWiki](https://deepwiki.com/plurigrid/zig-syrup) indexes the GitHub-pushed state. The repo has evolved significantly beyond what DeepWiki currently reflects:
+
+| Aspect | DeepWiki View (12 modules) | Current Reality (52 modules) |
+|--------|---------------------------|------------------------------|
+| **Serialization** | syrup.zig core + CapTP optimizations | Same, plus message_frame + tcp_transport |
+| **Transport** | xev_io async I/O only | TCP, WebSocket (4 modules), NATS, QRTP (planned) |
+| **Terminal** | rainbow.zig + damage.zig | + terminal, terminal_wasm, cell_dispatch, cell_sync, quantize, qasm |
+| **Ghostty** | Not indexed | 6 modules: ix, bim, continuation, http, shell, spatial |
+| **Identity** | Not indexed | passport.zig (39K LOC proof-of-brain protocol) |
+| **BCI/EEG** | Not indexed | cyton_parser, fft_bands, eeg, bci_homotopy, spectral_tensor, ur_robot_adapter |
+| **Propagators** | Not indexed | propagator.zig (Radul-Sussman lattice), spatial_propagator.zig |
+| **Topology** | homotopy.zig mentioned | + ripser, linalg, prigogine, fem, scs_wrapper, spectrum |
+| **Markets** | Not indexed | acp_mnxfi.zig (mnx.fi market coordination) |
+| **Worlds** | Not indexed | 8 modules: world, A/B test, persistent, circuit, OpenBCI, BCI-Aptos |
+| **QRTP** | Not indexed | Planned: fountain, qrtp_frame, qrtp_transport |
+
+DeepWiki's wiki structure shows 12 pages covering: Overview, Core Syrup Library (5 subsections), Build System, Async I/O, Geographic Integration, JSON-RPC Bridge, Bristol Circuit, Rainbow, Testing (4 subsections), Rust Reference, External Integrations, Development Guide. This reflects the pre-expansion codebase (~12 modules, ~600 tests). The current codebase has 52 modules with 1000+ tests across 7 architectural layers.
 
 ## Build
 
 ```bash
 zig build              # default build
-zig build test         # 379 tests across 12 modules
+zig build test         # all module tests
 zig build bench        # ReleaseFast benchmarks
+zig build bench-cell-sync  # cell sync flamegraph benchmarks
 zig build shader       # terminal fragment shader visualization
 zig build test-viz     # visual test runner (ANSI 24-bit color)
 zig build vibesnipe    # vibesnipe generator
 zig build bristol      # Bristol circuit converter
+zig build world-demo   # world A/B testing demo
+zig build bci-demo     # BCI-Aptos bridge demo
 ```
 
-## Visualization Tools
+### Executables
 
-**`zig build shader`** renders 5 terminal fragment shaders:
-- Golden Spiral — Fibonacci spiral via golden angle hue rotation
-- Homotopy Path — polynomial root positions on complex plane
-- Damage Heat Map — dirty/clean region coloring
-- GF(3) Trit Field — balanced ternary (-1/0/+1) as purple/gray/green
-- CRT Phosphor — scanlines + bloom on color gradient
+| Binary | Purpose |
+|--------|---------|
+| `syrup-verify` | CID verification tool |
+| `syrup` | JSON ↔ Syrup CLI converter |
+| `eeg` | EEG processing pipeline (Cyton → FFT → bands) |
+| `bench-zig` | Core serialization benchmarks |
+| `bench-cell-sync` | Cell sync + flamegraph benchmarks |
+| `bristol-syrup` | Bristol MPC circuit converter |
+| `vibesnipe` | Vibesnipe generator |
+| `world-demo` | World A/B testing demo |
+| `bci-demo` | BCI → Aptos bridge demo |
 
-**`zig build test-viz`** exercises all visualization modules with labeled ANSI output:
-rainbow palette strips, damage grids, homotopy root tracking, GF(3) trit balance, and Syrup encode verification.
+## GF(3) Conservation
 
-## Distributed Terminal Rendering Architecture
+Every layer maintains balanced ternary invariant `(-1) + (0) + (+1) ≡ 0 (mod 3)`:
 
-`cell_dispatch.zig` implements a **compute-shader-inspired** terminal cell renderer combining research from Zutty, Mosh, and Erlang's actor model:
-
-### Key Components
-
-| Component | Design |
-|-----------|--------|
-| **Cell** | 16-byte GPU-friendly struct (codepoint, ARGB fg/bg, attrs) - matches Zutty's SSBO layout |
-| **CellBatch** | Aligned cell arrays processed in parallel chunks (cache-line friendly) |
-| **Damage Tracking** | Integration with `damage.zig` - only dirty cells dispatched |
-| **Transducers** | Composable Cell→Cell transformations (filter dirty, map colors, etc.) |
-| **Thread Pool** | Parallel dispatch across CPU cores; ACP integration for remote nodes |
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Terminal Grid (80x24 = 1,920 cells)                        │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │ Damage Tracker (dirty cell coordinates)               │  │
-│  └──────────────────┬────────────────────────────────────┘  │
-│                     │ coalesce()                            │
-│  ┌──────────────────▼────────────────────────────────────┐  │
-│  │ CellBatches (64x64 cells, cache-aligned)              │  │
-│  │ ┌─────────┐ ┌─────────┐ ┌─────────┐                   │  │
-│  │ │Batch 0  │ │Batch 1  │ │Batch N  │  → Thread Pool     │  │
-│  │ │(dirty)  │ │(clean)  │ │(dirty)  │     ↓              │  │
-│  │ └────┬────┘ └────┬────┘ └────┬────┘  Transducers       │  │
-│  │      │           │ (skip)    │      filter_dirty()     │  │
-│  │      └───────────┴───────────┘      map_colors()       │  │
-│  │                  │                      ↓               │  │
-│  │            GPU/Terminal              ACP (optional)     │  │
-│  │            Rendering              Remote nodes          │  │
-│  └─────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Comparison with Existing Systems
-
-| Feature | tmux | Zutty | Mosh | zig-syrup cell_dispatch |
-|---------|------|-------|------|-------------------------|
-| State location | Server (escape sequences) | GPU SSBO | Client+Server snapshots | Configurable (local/remote) |
-| Parallelism | None (single-threaded) | GPU compute shaders | None | Thread pool + SIMD |
-| Damage tracking | Per-pane regions | Per-cell dirty flags | Screen diffing | Both + coalescing |
-| Network protocol | Byte stream (SSH) | Local only | UDP + SSP | ACP over Syrup |
-| Cell dispatch | Sequential | Parallel (GPU) | Differential | Transducer pipelines |
-
-### Example Usage
-
-```zig
-var engine = try DispatchEngine.init(allocator, .{ .thread_count = 4 });
-var batch = try CellBatch.init(allocator, origin, 64, 64);
-
-// Only dirty cells processed
-const filter = cell_dispatch.filterDirty();
-try engine.dispatchBatch(&batch, filter, renderCallback);
-```
-
-See `examples/distributed_terminal.zig` for a complete demo.
-
-## Roadmap: Persistent Homology & Topological Data Analysis
-
-There is currently **no Zig implementation** of persistent homology or Vietoris-Rips persistence barcodes anywhere in the ecosystem. zig-syrup aims to be the first, building on the existing homotopy and GF(3) infrastructure.
-
-### Target: Ripser in Zig
-
-[Ripser](https://github.com/Ripser/ripser) by Ulrich Bauer is the state-of-the-art for computing Vietoris-Rips persistence barcodes — outperforming Dionysus, DIPHA, GUDHI, Perseus, and PHAT by 40x in time and 15x in memory. The [`simple` branch](https://github.com/Ripser/ripser/tree/simple) is ~1200 lines of C++11, MIT-licensed, zero dependencies.
-
-Core algorithm components and their Zig mappings:
-
-| Ripser concept | Zig equivalent |
-|----------------|----------------|
-| Combinatorial number system (implicit simplex indexing) | `comptime` binomial coefficient tables |
-| Compressed sparse coboundary columns | Explicit allocator control, cache-friendly layout |
-| Column reduction with clearing optimization | `std.ArrayListUnmanaged` for pivot columns |
-| Apparent pairs shortcut | Branch-free trit classification (existing GF(3) module) |
-| Distance matrix | SIMD-accelerated pairwise distances (`@Vector`) |
-| Hash map for persistence pairs | `std.HashMap` with explicit allocator |
-| Barcode output | Syrup-encoded persistence diagrams with CID |
-
-### Planned modules
-
-```
-src/
-  ripser.zig          — Vietoris-Rips persistence barcodes (port of Ripser simple branch)
-  simplicial.zig      — Simplicial complex data structures, filtrations, boundary matrices
-  persistence.zig     — Persistence diagram types, bottleneck/Wasserstein distances
-```
-
-### Integration with existing modules
-
-- **homotopy.zig** already tracks polynomial roots along paths — persistence diagrams will capture birth/death of topological features along these paths
-- **continuation.zig** GF(3) trit arithmetic maps to PathStatus (success/tracking/failed → plus/zero/minus), providing a balanced ternary classification layer over persistence pairs
-- **rainbow.zig** color spirals will visualize persistence diagrams in the terminal using golden angle hue assignment per homology dimension
-- **damage.zig** frame tracking enables incremental persistence computation display — only recompute visualization for changed regions
-- **Syrup serialization** of persistence barcodes enables content-addressed storage (CID) and CapTP distribution of TDA results across agents
-
-### Zig ecosystem dependencies to evaluate
-
-Libraries that provide foundational support for TDA in Zig:
-
-| Library | What it provides | Relevance |
-|---------|-----------------|-----------|
-| [yamafaktory/hypergraphz](https://github.com/yamafaktory/hypergraphz) | Hypergraph data structure | Simplicial complex representation via hyperedges |
-| [Traxar/SPaDE](https://github.com/Traxar/SPaDE) | Sparse + dense tensor ops | Boundary matrix storage |
-| [gitabaz/zigblas](https://github.com/gitabaz/zigblas) | BLAS bindings | Matrix reduction acceleration |
-| [tatjam/zgsl](https://github.com/tatjam/zgsl) | GNU Scientific Library wrapper | Linear algebra, eigenvalue computation |
-| [srmadrid/zml](https://zigistry.dev/packages/github/srmadrid/zml/) | Numerical math with LAPACK | Matrix decomposition (LU, Cholesky, QR) |
-| [GhostKellz/zmath](https://github.com/GhostKellz/zmath) | Scientific computing library | BLAS/LAPACK/GSL replacement |
-| [hmusgrave/sparsemat](https://github.com/hmusgrave/sparsemat) | Sparse matrix scheme | Compressed sparse representations |
-| [pierrekraemer/zgp](https://github.com/pierrekraemer/zgp) | Geometry processing | Mesh-based filtrations |
-
-### Reference implementations (other languages)
-
-| Language | Project | Notes |
-|----------|---------|-------|
-| C++ | [Ripser/ripser](https://github.com/Ripser/ripser) | Original, ~1200 LOC simple branch, MIT |
-| C++/CUDA | [Ripser++](https://github.com/simonzhang00/ripser-plusplus) | GPU-accelerated |
-| Python | [scikit-tda/ripser.py](https://github.com/scikit-tda/ripser.py) | C++ engine with Python bindings |
-| Python | [giotto-ai/giotto-ph](https://github.com/giotto-ai/giotto-ph) | Parallel lock-free Ripser |
-| Julia | [Ripserer.jl](https://mtsch.github.io/Ripserer.jl/dev/) | Pure Julia reimplementation |
-| R | [tdaverse/ripserr](https://github.com/tdaverse/ripserr) | Rcpp wrapper |
-| C++ | [GUDHI](https://gudhi.inria.fr/) | Full TDA library (simplicial, cubical, alpha) |
-| C++ | [PHAT](https://github.com/blazs/phat) | Persistent Homology Algorithm Toolbox |
-| C++ | [CompTop/BATS](https://github.com/CompTop/BATS) | Matrix factorization approach to persistence |
+| Layer | MINUS (-1) | ERGODIC (0) | PLUS (+1) |
+|-------|-----------|-------------|-----------|
+| **Serialization** | decode (verify) | syrup (bridge) | encode (generate) |
+| **Transport** | tcp_transport (verify delivery) | message_frame (coordinate) | fountain (generate blocks) |
+| **Propagator** | contradiction (detect) | lattice merge (coordinate) | value propagation (generate) |
+| **Identity** | liveness check (-1) | homotopy continuity (0) | proof generation (+1) |
+| **BCI** | spectral analysis (-1) | phenomenal state (0) | trit classification (+1) |
 
 ## Docs
 
-- `BENCHMARK-RESULTS.md` — encode/decode/CID performance numbers
-- `CAPTP-OPTIMIZATIONS.md` — CapTP-specific optimizations
+- `BENCHMARK-RESULTS.md` — encode/decode/CID performance
+- `CAPTP-OPTIMIZATIONS.md` — CapTP descriptor fast paths
 - `ZIG-SYRUP-FULL-PARITY.md` — spec alignment with reference implementations
-- `INTERCHANGE-COMPARISON.md` — format comparison analysis
+- `INTERCHANGE-COMPARISON.md` — format comparison (CBOR, MessagePack, Protobuf)
 - `CATEGORY_THEORY_TILES.md` — category theory tile patterns
 
-## Related OCapN/Syrup Repos
+## Related
 
-- [ocapn/syrup](https://github.com/ocapn/syrup) — specification
-- [ocapn/ocapn](https://github.com/ocapn/ocapn) — protocol specification
-- [ocapn/ocapn-test-suite](https://github.com/ocapn/ocapn-test-suite) — conformance tests
-- [cmars/ocapn-syrup](https://github.com/cmars/ocapn-syrup) — Go implementation
-- [costa-group/syrup-python](https://github.com/costa-group/syrup-python) — Python implementation
+- [ocapn/syrup](https://github.com/ocapn/syrup) — Syrup specification
+- [ocapn/ocapn](https://github.com/ocapn/ocapn) — OCapN protocol specification
+- [Orion Reed — QR Transfer Protocols](https://www.orionreed.com/posts/qrtp/) — Fountain-coded QR streaming
+- [Orion Reed — Scoped Propagators](https://www.orionreed.com/posts/scoped-propagators/) — Edge-scoped computation model
+- [folkjs](https://folkjs.org) — Malleable computing experiments
+- [passport.gay](https://passport.gay) — Proof-of-brain identity (uses passport.zig)
 
 ## Status
 
-Active development. 379 tests passing across 12 modules. Visualization tools operational. Persistent homology port on the roadmap.
+Active development. 52 modules, 1000+ tests, 7 architectural layers. Visualization tools operational. Persistent homology implemented. QRTP fountain transport next.

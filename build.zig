@@ -741,8 +741,9 @@ pub fn build(b: *std.Build) void {
         .name = "world-demo",
         .root_module = world_demo_mod,
     });
-    b.installArtifact(world_demo_exe);
-    
+    // Not part of default build (aspirational API demo)
+    // b.installArtifact(world_demo_exe);
+
     const world_demo_cmd = b.addRunArtifact(world_demo_exe);
     const world_demo_step = b.step("world-demo", "Run world A/B testing demo");
     world_demo_step.dependOn(&world_demo_cmd.step);
@@ -770,7 +771,8 @@ pub fn build(b: *std.Build) void {
     });
     // bci_demo_exe.root_module.link_libc = true;
 
-    b.installArtifact(bci_demo_exe);
+    // Not part of default build (aspirational API demo)
+    // b.installArtifact(bci_demo_exe);
 
     const bci_demo_cmd = b.addRunArtifact(bci_demo_exe);
     const bci_demo_step = b.step("bci-demo", "Run BCI-Aptos bridge demo");
@@ -1181,6 +1183,21 @@ pub fn build(b: *std.Build) void {
     const run_fountain_tests = b.addRunArtifact(fountain_tests);
     test_step.dependOn(&run_fountain_tests.step);
 
+    // SplitMixTrit module (Triadic PRNG: ChaCha × SplitMix64 × Rybka)
+    _ = b.addModule("splitmix_trit", .{
+        .root_source_file = b.path("src/splitmix_trit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const splitmix_trit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/splitmix_trit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const splitmix_trit_tests = b.addTest(.{ .root_module = splitmix_trit_test_mod });
+    const run_splitmix_trit_tests = b.addRunArtifact(splitmix_trit_tests);
+    test_step.dependOn(&run_splitmix_trit_tests.step);
+
     // QRTP Frame module (QR Transfer Protocol framing as Syrup records)
     const qrtp_frame_mod = b.addModule("qrtp_frame", .{
         .root_source_file = b.path("src/qrtp_frame.zig"),
@@ -1429,11 +1446,131 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(stellogen_wasm);
 
     // ========================================
+    // Entangled Terminal (CNOT₃ quantum control circuit)
+    // ========================================
+
+    // Entangle module (GF(3) qutrit gate for terminal cells)
+    _ = b.addModule("entangle", .{
+        .root_source_file = b.path("src/entangle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Entangle module tests
+    const entangle_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/entangle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const entangle_tests = b.addTest(.{ .root_module = entangle_test_mod });
+    const run_entangle_tests = b.addRunArtifact(entangle_tests);
+    test_step.dependOn(&run_entangle_tests.step);
+
+    // GF(3)⁵ Palette module (243-color successor to xterm-256)
+    _ = b.addModule("gf3_palette", .{
+        .root_source_file = b.path("src/gf3_palette.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // GF(3)⁵ Palette tests
+    const gf3_palette_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/gf3_palette.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const gf3_palette_tests = b.addTest(.{ .root_module = gf3_palette_test_mod });
+    const run_gf3_palette_tests = b.addRunArtifact(gf3_palette_tests);
+    test_step.dependOn(&run_gf3_palette_tests.step);
+
+    // Supermap module (Cyberphysical affordances × RF phase space × quantum supermaps)
+    _ = b.addModule("supermap", .{
+        .root_source_file = b.path("src/supermap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Supermap tests
+    const supermap_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/supermap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const supermap_tests = b.addTest(.{ .root_module = supermap_test_mod });
+    const run_supermap_tests = b.addRunArtifact(supermap_tests);
+    test_step.dependOn(&run_supermap_tests.step);
+
+    // Disclosure module (REGRET/GAY insurance protocol over internet phase space)
+    _ = b.addModule("disclosure", .{
+        .root_source_file = b.path("src/disclosure.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Disclosure tests
+    const disclosure_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/disclosure.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const disclosure_tests = b.addTest(.{ .root_module = disclosure_test_mod });
+    const run_disclosure_tests = b.addRunArtifact(disclosure_tests);
+    test_step.dependOn(&run_disclosure_tests.step);
+
+    // ========================================
+    // Tapo P15 Energy Monitor (L14: Physical Energy Layer)
+    // ========================================
+
+    const tapo_energy_mod = b.addModule("tapo_energy", .{
+        .root_source_file = b.path("src/tapo_energy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tapo_energy_mod.addImport("syrup", syrup_mod);
+
+    const tapo_energy_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/tapo_energy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tapo_energy_test_mod.addImport("syrup", syrup_mod);
+    const tapo_energy_tests = b.addTest(.{ .root_module = tapo_energy_test_mod });
+    const run_tapo_energy_tests = b.addRunArtifact(tapo_energy_tests);
+    test_step.dependOn(&run_tapo_energy_tests.step);
+
+    const test_tapo_step = b.step("test-tapo", "Run Tapo P15 energy monitor tests");
+    test_tapo_step.dependOn(&run_tapo_energy_tests.step);
+
+    // ========================================
+    // Universal BCI Receiver (nRF5340)
+    // ========================================
+
+    const bci_receiver_mod = b.addModule("bci_receiver", .{
+        .root_source_file = b.path("src/bci_receiver.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bci_receiver_mod.addImport("syrup", syrup_mod);
+
+    const bci_receiver_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/bci_receiver.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bci_receiver_test_mod.addImport("syrup", syrup_mod);
+    const bci_receiver_tests = b.addTest(.{ .root_module = bci_receiver_test_mod });
+    const run_bci_receiver_tests = b.addRunArtifact(bci_receiver_tests);
+    test_step.dependOn(&run_bci_receiver_tests.step);
+
+    const test_bci_step = b.step("test-bci", "Run universal BCI receiver tests");
+    test_bci_step.dependOn(&run_bci_receiver_tests.step);
+
+    // ========================================
     // Terminal Pipeline (terminal:// protocol)
     // ========================================
 
     // Terminal module (native, for library use)
-    _ = b.addModule("terminal", .{
+    const terminal_mod = b.addModule("terminal", .{
         .root_source_file = b.path("src/terminal.zig"),
         .target = target,
         .optimize = optimize,
@@ -1448,6 +1585,66 @@ pub fn build(b: *std.Build) void {
     const terminal_tests = b.addTest(.{ .root_module = terminal_test_mod });
     const run_terminal_tests = b.addRunArtifact(terminal_tests);
     test_step.dependOn(&run_terminal_tests.step);
+
+    // Retty module (ratatui-like widget/layout engine)
+    const retty_mod = b.addModule("retty", .{
+        .root_source_file = b.path("src/retty.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    retty_mod.addImport("terminal", terminal_mod);
+
+    // Retty tests
+    const retty_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/retty.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    retty_test_mod.addImport("terminal", terminal_mod);
+    const retty_tests = b.addTest(.{ .root_module = retty_test_mod });
+    const run_retty_tests = b.addRunArtifact(retty_tests);
+    test_step.dependOn(&run_retty_tests.step);
+
+    // Retty-specific test step
+    const test_retty_step = b.step("test-retty", "Run retty widget engine tests");
+    test_retty_step.dependOn(&run_retty_tests.step);
+
+    // Transient module (Emacs transient.el popup menus as retty widgets)
+    _ = b.addModule("transient", .{
+        .root_source_file = b.path("src/transient.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const transient_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/transient.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    transient_test_mod.addImport("retty", retty_mod);
+    const transient_tests = b.addTest(.{ .root_module = transient_test_mod });
+    const run_transient_tests = b.addRunArtifact(transient_tests);
+    test_step.dependOn(&run_transient_tests.step);
+
+    const test_transient_step = b.step("test-transient", "Run transient widget tests");
+    test_transient_step.dependOn(&run_transient_tests.step);
+
+    // GoI module (Geometry of Interaction — proof nets, token machine, cut elimination)
+    _ = b.addModule("goi", .{
+        .root_source_file = b.path("src/goi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const goi_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/goi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const goi_tests = b.addTest(.{ .root_module = goi_test_mod });
+    const run_goi_tests = b.addRunArtifact(goi_tests);
+    test_step.dependOn(&run_goi_tests.step);
+
+    const test_goi_step = b.step("test-goi", "Run Geometry of Interaction tests");
+    test_goi_step.dependOn(&run_goi_tests.step);
 
     // Terminal WASM library (wasm32-freestanding target)
     const terminal_wasm_mod = b.createModule(.{

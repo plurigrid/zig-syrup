@@ -54,6 +54,16 @@ pub const BciAptosBridge = bci_aptos.BciAptosBridge;
 pub const BrainAction = bci_aptos.BrainAction;
 pub const Neurofeedback = bci_aptos.Neurofeedback;
 
+// Colored Parentheses World
+pub const colored_parens = @import("colored_parens.zig");
+pub const ColoredParensWorld = colored_parens.ColoredParensWorld;
+pub const Expr = colored_parens.Expr;
+
+// World Enumeration Engine (326 worlds via combinatorial cheatcodes)
+pub const world_enum = @import("world_enum.zig");
+pub const WorldEnumerator = world_enum.WorldEnumerator;
+pub const WorldConfig = world_enum.WorldConfig;
+
 /// Module version
 pub const version = "0.1.0";
 

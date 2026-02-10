@@ -372,6 +372,26 @@ pub const SpatialNetwork = struct {
     pub const Error = error{
         InvalidFormat,
     } || syrup.Parser.ParseError || Allocator.Error;
+
+    /// Assign luminosity to each node based on its GF(3) qutrit classification.
+    /// The trit of each node's fg_color controls its brightness:
+    ///   minus (-1): dim 0.30,  zero (0): neutral 0.55,  plus (+1): bright 0.80
+    /// With optional entanglement gate_order shifting the levels via CNOT₃.
+    pub fn assignLuminosityFromTrit(self: *SpatialNetwork, gate_order: u2) void {
+        self.lock.lock();
+        defer self.lock.unlock();
+
+        const entangle = @import("entangle.zig");
+        const order: entangle.GateOrder = @enumFromInt(gate_order);
+
+        for (self.nodes.items) |*node| {
+            const trit = entangle.classifyColor(node.fg_color);
+            const lum = entangle.entangledLuminosity(trit, order);
+            node.fg_color = entangle.applyLuminosity(node.fg_color, lum);
+            // Background: apply at 25% intensity (keep it dark)
+            node.bg_color = entangle.applyLuminosity(node.bg_color, lum * 0.25);
+        }
+    }
 };
 
 // =============================================================================
@@ -532,6 +552,17 @@ export fn propagator_assign_colors_bci(
 ) callconv(.c) void {
     const h = handle orelse return;
     h.network.assignColorsFromBCI(phi, valence, fisher, trit) catch {};
+}
+
+/// Assign luminosity to all nodes based on GF(3) qutrit classification.
+/// gate_order: 0 = separable (direct), 1 = entangled (CNOT₃), 2 = conjugate (CNOT₃†).
+/// Dim/neutral/bright levels rotate with gate_order via σ on the L register.
+export fn propagator_assign_luminosity_trit(
+    handle: ?*PropagatorHandle,
+    gate_order: u8,
+) callconv(.c) void {
+    const h = handle orelse return;
+    h.network.assignLuminosityFromTrit(@intCast(gate_order % 3));
 }
 
 /// Cleanup.
@@ -726,4 +757,36 @@ test "BCI entropy color assignment" {
     try network3.assignColorsFromBCI(25.0, -8.0, 1.5, 0); // low valence (many vortices)
 
     try std.testing.expect(network.nodes.items[0].fg_color != network3.nodes.items[0].fg_color);
+}
+
+test "luminosity from qutrit classification" {
+    const allocator = std.testing.allocator;
+    var network = SpatialNetwork.init(allocator);
+    defer network.deinit();
+
+    // Red-dominant node → trit minus → dim
+    _ = try network.addNode(.{ .window_id = 1 });
+    network.nodes.items[0].fg_color = 0xFF_FF_20_20; // red dominant
+
+    // Green-dominant node → trit plus → bright
+    _ = try network.addNode(.{ .window_id = 2 });
+    network.nodes.items[1].fg_color = 0xFF_20_FF_20; // green dominant
+
+    // Balanced node → trit zero → neutral
+    _ = try network.addNode(.{ .window_id = 3 });
+    network.nodes.items[2].fg_color = 0xFF_80_80_80; // gray
+
+    // Apply luminosity with separable (no entanglement shift)
+    network.assignLuminosityFromTrit(0);
+
+    // Red node should be dimmer (R channel reduced from 0xFF)
+    const red_r = (network.nodes.items[0].fg_color >> 16) & 0xFF;
+    try std.testing.expect(red_r < 0xFF);
+
+    // Green node should be brighter (G channel boosted toward 0xFF)
+    const green_g = (network.nodes.items[1].fg_color >> 8) & 0xFF;
+    try std.testing.expect(green_g > 0x20);
+
+    // Red should be dimmer than green overall
+    try std.testing.expect(red_r < green_g);
 }

@@ -1,0 +1,59 @@
+' Lambda calculus in Stellogen
+' Church encoding via interaction nets
+
+' Variables
+(def var {
+  [(+var X) (var X)]
+})
+
+' Lambda abstraction: lam(V, Body)
+(def lam {
+  [(+lam V B) (lam V B)]
+})
+
+' Application: app(F, A)
+(def app {
+  [(+app F A) (app F A)]
+})
+
+' Beta reduction: app(lam(V, B), A) → subst(V, A, B)
+(def beta {
+  [(-app (+lam V B) A) (+subst V A B)]
+})
+
+' Substitution rules
+(def subst {
+  ' Variable match: subst(X, A, var(X)) → A
+  [(-subst X A (+var X)) A]
+
+  ' Variable no match: subst(X, A, var(Y)) → var(Y) when X ≠ Y
+  [(-subst X A (+var Y)) (+var Y) || (!= X Y)]
+
+  ' Lambda: subst into body (capture-avoiding needed)
+  [(-subst X A (+lam V B)) (+lam V SubstB)
+   (-subst X A B SubstB) || (!= X V)]
+
+  ' Application: subst into both parts
+  [(-subst X A (+app F G)) (+app SubstF SubstG)
+   (-subst X A F SubstF)
+   (-subst X A G SubstG)]
+})
+
+' Church numerals
+' 0 = λf.λx.x
+(def zero (+lam f (+lam x (+var x))))
+
+' 1 = λf.λx.f(x)
+(def one (+lam f (+lam x (+app (+var f) (+var x)))))
+
+' 2 = λf.λx.f(f(x))
+(def two (+lam f (+lam x (+app (+var f) (+app (+var f) (+var x))))))
+
+' Successor: succ = λn.λf.λx.f(n f x)
+(def succ
+  (+lam n (+lam f (+lam x
+    (+app (+var f)
+      (+app (+app (+var n) (+var f)) (+var x)))))))
+
+' Test: apply succ to zero
+(show (exec {#beta #subst} @[(-app #succ #zero R) R]))

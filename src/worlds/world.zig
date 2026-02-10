@@ -112,7 +112,7 @@ pub const WorldState = struct {
     allocator: std.mem.Allocator,
     data: StringHashMap(Value),
     hash: [32]u8,
-    parent: ?*const WorldState,
+    parent: ?*WorldState,
     ref_count: usize,
     
     const Value = union(enum) {
@@ -141,6 +141,7 @@ pub const WorldState = struct {
     pub fn deinit(self: *WorldState) void {
         self.ref_count -= 1;
         if (self.ref_count == 0) {
+            if (self.parent) |p| p.deinit();
             var it = self.data.valueIterator();
             while (it.next()) |v| self.freeValue(v.*);
             self.data.deinit();

@@ -1,0 +1,24 @@
+' Natural number specification in Stellogen
+' Based on Girard's transcendental syntax
+
+' Define natural numbers: z (zero), s (successor)
+(def nat {
+  [(+nat z)]                      ' z is a nat
+  [(-nat X) (+nat (s X))]         ' if X is nat, s(X) is nat
+})
+
+' Addition: add(X, Y, Z) means X + Y = Z
+(def add {
+  [(+add z Y Y)]                  ' 0 + Y = Y
+  [(-add X Y Z) (+add (s X) Y (s Z))]  ' s(X) + Y = s(Z) if X + Y = Z
+})
+
+' Query: 2 + 2 = ?
+' We represent 2 as s(s(z))
+(def two (s (s z)))
+
+' State: ask for the result of 2 + 2
+(def query @[(-add (s (s z)) (s (s z)) R) R])
+
+' Execute the computation
+(show (exec #add #query))

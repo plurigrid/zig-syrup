@@ -1,8 +1,58 @@
+# Zig build
 .zig-cache/
+zig-cache/
 zig-out/
-.flox/
+
+# OS
 .DS_Store
 
-# local tooling
+# Nix/Flox
+.flox/
+
+# Local tooling
 *.log
-zig-cache/\nzig-out/\n.DS_Store
+*.o
+*.dylib
+
+# Test artifacts
+test_stdout
+test_stdout2
+test_output.txt
+
+# Agent/IDE config directories (not project-specific)
+.adal/
+.agent/
+.agents/
+.augment/
+.cline/
+.codebuddy/
+.codex/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.gemini/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.opencode/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+
+# Python
+__pycache__/
+*.pyc
