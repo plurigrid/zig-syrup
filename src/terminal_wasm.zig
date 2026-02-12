@@ -109,7 +109,7 @@ export fn terminal_commit() u32 {
 }
 
 /// Get pointer to the last committed frame (in WASM linear memory)
-export fn terminal_frame_ptr() u32 {
+export fn terminal_frame_ptr() usize {
     return @intFromPtr(&frame_buf);
 }
 
