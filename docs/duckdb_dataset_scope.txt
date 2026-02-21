@@ -1,0 +1,533 @@
+================================================================================
+  DUCKDB DATASET SCOPE REPORT — 15 Databases Sampled
+  Generated: 2026-02-20
+================================================================================
+
+SUMMARY
+  Total databases:   15
+  Total disk size:   ~1.55 GB
+  Total tables:      ~180
+  Largest by rows:   claude-all-sessions.duckdb (165,374 rows in raw_messages)
+  Largest by file:   claude-all-sessions.duckdb (706 MB)
+  Most tables:       i.duckdb (46 tables), belief_revision.duckdb (41 tables),
+                     basin-replay.duckdb (39 tables)
+
+================================================================================
+1. claude-all-sessions.duckdb  [706 MB]
+   Path: /Users/bob/i/session-artifacts/duckdb/claude-all-sessions.duckdb
+--------------------------------------------------------------------------------
+   Tables (1):
+     raw_messages                165,374 rows
+
+   Schema — raw_messages:
+     type                        VARCHAR
+     summary                     VARCHAR
+     leafUuid                    UUID
+     operation                   VARCHAR
+     timestamp                   VARCHAR
+     sessionId                   UUID
+     parentUuid                  UUID
+     isSidechain                 BOOLEAN
+     userType                    VARCHAR
+     cwd                         VARCHAR
+     version                     VARCHAR
+     gitBranch                   VARCHAR
+     message                     STRUCT (role, content, model, id, type,
+                                   stop_reason, usage, context_management...)
+     uuid                        UUID
+     requestId                   VARCHAR
+     toolUseResult               JSON
+     todos                       STRUCT[] (content, status, activeForm)
+     slug                        VARCHAR
+     content                     VARCHAR
+     data                        STRUCT (type, hookEvent, hookName, command,
+                                   message, normalizedMessages, prompt...)
+     filename                    VARCHAR
+     + 20 more columns (see DESCRIBE for full list)
+
+================================================================================
+2. i.duckdb  [236 MB]
+   Path: /Users/bob/i/i.duckdb
+--------------------------------------------------------------------------------
+   Tables (46):
+     accessibility_relations          21
+     agent_ontologies                  7
+     agent_payoff_matrix               1
+     barton_69                        69
+     barton_analysis                  69
+     barton_vers_theme_details         7
+     barton_vers_themes                1
+     beeper_chat_sources               1
+     claude_history                 2,596
+     concept_edges                    17
+     concept_network                  19
+     daily_activity                   14
+     demo_vectors                      5
+     duck_repl_game                    1
+     episode_cards                    10
+     game_dashboard                    1
+     high_volume_contacts             20
+     history_saw_bridge             2,581
+     kscale_contributors              45
+     kscale_repos                     16
+     markov_blanket_equivalence        9
+     mathematical_correspondences     11
+     nash_negotiation                  0
+     nashator                          1
+     ontology_dimensions               8
+     ontology_edges                   21
+     photonics_math_bridges           12
+     photonics_west_2026               7
+     possible_worlds                   7
+     project_activity                 11
+     prompt_stats                   2,581
+     prompt_vocabulary              3,812
+     self_avoiding_walks              60
+     session_flow                    190
+     session_homology                  1
+     session_leaderboard             189
+     skill_dispersal                   0
+     skill_interaction_entropy        11
+     skill_quad_candidates            10
+     skill_walk_history               51
+     sustainability_log                5
+     topics                           20
+     transcript_topics               116
+     transcripts                     346
+     trifurcation_points              --
+     vers_threads                      9
+
+   Schema — accessibility_relations:
+     from_world                  VARCHAR
+     to_world                    VARCHAR
+     distance                    DOUBLE
+     relationship_type           VARCHAR
+     accessibility_type          VARCHAR
+     modal_operator              VARCHAR
+
+   Schema — agent_ontologies:
+     agent_id                    VARCHAR (PK)
+     contributor                 VARCHAR
+     framework                   VARCHAR
+     ontology_type               VARCHAR (NOT NULL)
+     intent_category             VARCHAR
+     features                    INTEGER[8]
+     created_at                  TIMESTAMP (default: now())
+
+   Schema — claude_history:
+     prompt                      VARCHAR
+     ts                          TIMESTAMP
+     project                     VARCHAR
+     session_id                  UUID
+
+================================================================================
+3. playlist_transcripts.duckdb  [205 MB]
+   Path: /Users/bob/i/playlist_transcripts.duckdb
+--------------------------------------------------------------------------------
+   Tables (1):
+     transcripts                    343 rows
+
+   Schema — transcripts:
+     id                          VARCHAR (PK)
+     title                       VARCHAR
+     duration                    INTEGER
+     transcript                  VARCHAR
+     source                      VARCHAR
+     created_at                  TIMESTAMP (default: now())
+     url                         VARCHAR
+     description                 VARCHAR
+     channel                     VARCHAR
+     upload_date                 DATE
+     views                       BIGINT
+     likes                       BIGINT
+     topics                      VARCHAR[]
+     embedding                   FLOAT[]
+     cluster_id                  INTEGER
+
+================================================================================
+4. belief_revision.duckdb  [154 MB]
+   Path: /Users/bob/i/boxxy/belief_revision.duckdb
+--------------------------------------------------------------------------------
+   Tables (41):
+     ACSetVersion                      1
+     AGMPostulate                      8
+     Author                           43
+     BeliefRevisionWalk               27
+     BeliefSet                         4
+     BeliefSetMember                   0
+     BeliefStateTimeline              85
+     BeliefWalkSimulation             27
+     ChoiceFunctionAnalysis            6
+     Commit                          400
+     CommitAsRevision                400
+     CommitBeliefBridge              400
+     ContractionOp                     3
+     EntrenchmentRel                   9
+     EpistemicEntrenchment             2
+     Fallback                          4
+     FallbackOrder                     9
+     File                              0
+     GroveSphereSystem                 4
+     HarperIdentity                    3
+     IndetContains                     3
+     IndetResult                       3
+     IndetRevisionOp                   1
+     IndeterministicCommitClusters    20
+     IteratedRevision                  5
+     LeviIdentity                      3
+     OpSatisfiesPostulate             24
+     RemainderSet                      0
+     Repo                              4
+     RepoTopic                         0
+     RevisionOp                        3
+     SelectionFunction                 0
+     Sentence                          6
+     Topic                             0
+     acset_at_version                  1
+     gay_colors                       30
+     gh_snapshots                     27
+     ies_batches                      10
+     ies_regime_transitions            3
+     randwalk_steps                 1,027
+     raw_commits                     400
+
+   Schema — AGMPostulate:
+     postulate_id                INTEGER (PK)
+     name                        VARCHAR
+     symbol                      VARCHAR
+     description                 VARCHAR
+     gay_color                   VARCHAR
+     trit                        INTEGER
+
+   Schema — Commit:
+     commit_id                   INTEGER (PK)
+     oid                         VARCHAR (NOT NULL)
+     message                     VARCHAR
+     additions                   INTEGER
+     deletions                   INTEGER
+     committed_at                TIMESTAMP
+     gay_color                   VARCHAR
+     trit                        INTEGER
+     repo_id                     INTEGER
+     author_id                   INTEGER
+
+   Schema — BeliefRevisionWalk:
+     step                        INTEGER
+     object                      VARCHAR
+     entity                      VARCHAR
+     color                       VARCHAR
+     trit                        INTEGER
+
+================================================================================
+5. twitter.duckdb  [97 MB]
+   Path: /Users/bob/i/twitter.duckdb
+--------------------------------------------------------------------------------
+   Tables (9):
+     current_likes                    -- (view)
+     current_tweets                   -- (view)
+     like_urls                    64,829
+     likes                        64,829
+     tweet_hashtags                1,394
+     tweet_mentions               16,661
+     tweet_urls                    4,753
+     tweets                       13,767
+     version_log                       1
+
+   Schema — likes:
+     liked_tweet_id              BIGINT
+     full_text                   VARCHAR
+     expanded_url                VARCHAR
+     raw_json                    JSON
+     version_id                  INTEGER
+     valid_from                  TIMESTAMP
+     valid_to                    TIMESTAMP
+
+   Schema — tweets:
+     tweet_id                    BIGINT
+     id_str                      VARCHAR
+     created_at                  TIMESTAMP
+     full_text                   VARCHAR
+     lang                        VARCHAR
+     source                      VARCHAR
+     truncated                   BOOLEAN
+     retweet_count               INTEGER
+     favorite_count              INTEGER
+     retweeted                   BOOLEAN
+     favorited                   BOOLEAN
+     possibly_sensitive          BOOLEAN
+     in_reply_to_status_id       BIGINT
+     in_reply_to_user_id         BIGINT
+     in_reply_to_screen_name     VARCHAR
+     raw_json                    JSON
+     version_id                  INTEGER
+     valid_from                  TIMESTAMP
+     valid_to                    TIMESTAMP
+
+   Schema — tweet_urls:
+     tweet_id                    BIGINT
+     expanded_url                VARCHAR
+     domain                      VARCHAR
+     version_id                  INTEGER
+     valid_from                  TIMESTAMP
+     valid_to                    TIMESTAMP
+
+================================================================================
+6. worldslop.duckdb  [30 MB]
+   Path: /Users/bob/i/worldslop.duckdb
+--------------------------------------------------------------------------------
+   Tables (1):
+     frames                         115 rows
+
+================================================================================
+7. social_graph.duckdb  [26 MB]
+   Path: /Users/bob/i/social_graph.duckdb
+--------------------------------------------------------------------------------
+   Tables (4):
+     chat_summary                     95
+     messages                    125,365
+     own_participation_timeline       11
+     temporal_arc                    351
+
+================================================================================
+8. goose_reafference.duckdb  [25 MB]
+   Path: /Users/bob/i/goose_reafference.duckdb
+--------------------------------------------------------------------------------
+   Tables (10):
+     all_sessions_with_stats          -- (view)
+     claude_sessions                 226
+     messages                      6,215
+     reafference_metadata              6
+     reafference_origin                1
+     reafference_sessions            376
+     searchable_sessions           2,849
+     sessions                        376
+     sessions_by_date                   8
+     universe_schema                    3
+
+================================================================================
+9. copilot_history.duckdb  [25 MB]
+   Path: /Users/bob/i/copilot_history.duckdb
+--------------------------------------------------------------------------------
+   Tables (8):
+     claude_history                  896
+     codex_history                 2,317
+     color_usage                     169
+     command_history                  30
+     dafny_files                   2,976
+     session_events                4,684
+     sessions                          9
+     toad_usage                       37
+
+================================================================================
+10. basin-replay.duckdb  [21 MB]
+    Path: /Users/bob/i/duck/basin-replay.duckdb
+--------------------------------------------------------------------------------
+    Tables (39):
+      blake3_cid                   16,839
+      capability_sufficiency            2
+      capability_sufficiency_w_galois   3
+      cat6_warehouse_vivarium           7
+      catalan_doppler                  22
+      catalan_doppler_summary           3
+      catalan_doppler_unified           5
+      crate_stats                     102
+      ducklake_meta                    24
+      duplicate_files                  91
+      file_sizes                   16,841
+      file_snapshots                  387
+      file_touches                    848
+      flox_environments                 1
+      galois_capability_bridge         10
+      gap_analysis                      7
+      gf3_conservation_proof            3
+      group_skills                     49
+      largest_files                16,839
+      merkle_tree                     102
+      messages                      5,205
+      portland_partners                 3
+      proximity_groups                  6
+      replay_checkpoints                5
+      replay_with_cids              5,205
+      session_catalan_bridge            5
+      session_replay                5,205
+      session_summary                   5
+      sessions                          5
+      size_by_ext                      97
+      snapshot_diffs                   387
+      subagents                       100
+      timeline                      7,309
+      tool_calls                    1,717
+      tool_frequency                   46
+      vivarium_connections             14
+      vivarium_triad                    7
+      vivarium_warehouse_bridge         7
+      vivariums                         7
+      warehouse_layers                  7
+
+================================================================================
+11. aptos_time_travel.duckdb  [16 MB]
+    Path: /Users/bob/i/aptos_time_travel.duckdb
+--------------------------------------------------------------------------------
+    Tables (15):
+      aptos_goal_hypotheses           72
+      aptos_mentions                  72
+      beeper_mcp_mentions              5
+      beeper_mcp_ranked                5
+      claude_events                 4,240
+      claude_raw                    4,243
+      codex_events                    895
+      codex_raw                       895
+      events                        5,135
+      events_with_snapshot          5,134
+      global_mentions                  13
+      global_observables               13
+      snapshots                     5,135
+      wev_goal_hypotheses               5
+      wev_mentions                      5
+
+================================================================================
+12. interaction_hypergraph.duckdb  [13 MB]
+    Path: /Users/bob/i/interaction_hypergraph.duckdb
+--------------------------------------------------------------------------------
+    Tables (20):
+      abandoned_naming_stubs           1
+      abandoned_system_layers          7
+      amp_history                  1,000
+      beeper_skill_walk               15
+      bmorphism_ecosystem_census      17
+      cadcad_network                  36
+      claude_history                  330
+      codex_history                 1,630
+      current_thread_terms            33
+      gh_commits                      20
+      gh_issues                        7
+      gh_pull_requests                10
+      gh_repo_snapshot                  1
+      goose_history                   10
+      hyperedges                      28
+      interaction_nodes             2,785
+      node_connectivity               804
+      opencode_history                 50
+      proximal_claude                  20
+      proximal_codex                  143
+
+================================================================================
+13. kimi_sessions.duckdb  [9.5 MB]
+    Path: /Users/bob/i/kimi_sessions.duckdb
+--------------------------------------------------------------------------------
+    Tables (15):
+      checkpoints                    261
+      daily_activity                   1
+      irreducibility_scores           10
+      message_analysis               254
+      messages                        254
+      salient_irreducible_sessions    10
+      session_summary                  10
+      session_timeline                515
+      sessions                         10
+      token_usage                     447
+      tool_calls                      370
+      tool_usage_stats                 14
+      wire_events                   1,335
+      workdir_stats                     2
+      workdirs                          2
+
+================================================================================
+14. interaction_entropy.duckdb  [6.3 MB]
+    Path: /Users/bob/i/asi/ies/music-topos/interaction_entropy.duckdb
+--------------------------------------------------------------------------------
+    Tables (18):
+      acset_color_parts                9
+      acset_interaction_parts          9
+      acset_interaction_to_color       9
+      acset_morphisms                  6
+      acset_objects                    5
+      discopy_boxes                    0
+      discopy_diagram_structure        0
+      discopy_wires                    0
+      gf3_epoch_conservation           0
+      interaction_triplets             3
+      interactions                     9
+      reafference_predictions        100
+      skill_invocations                0
+      skill_role_stats                 0
+      terminal_entropy               100
+      walk_path                        9
+      world_entropy                  100
+      world_entropy_summary           26
+
+================================================================================
+15. epstein.duckdb  [4.3 MB]
+    Path: /Users/bob/i/epstein-library/epstein.duckdb
+--------------------------------------------------------------------------------
+    Tables (29):
+      claim_relations                  0
+      claims                           0
+      dates                            0
+      doc_date_mentions                0
+      doc_location_mentions            0
+      doc_org_mentions                 0
+      doc_person_mentions              0
+      epstein_emails                  -- (view/error)
+      epstein_files_20k               -- (view/error)
+      epstein_files_nov_2025          -- (view/error)
+      event_participants               0
+      event_temporal_relations         0
+      events                           0
+      full_epstein_index              -- (view/error)
+      graph_documents                  0
+      locations                       10
+      org_aliases                      0
+      org_versions                     0
+      organizations                    0
+      person_aliases                   0
+      person_comentions                0
+      person_hop_distances             1
+      person_location_cooccurrence     0
+      person_temporal_proximity        0
+      person_versions                  0
+      persons                         28
+      provenance_chain                 0
+      rdf_triples                      0
+      sources                         17
+
+================================================================================
+TOP TABLES BY ROW COUNT (across all databases)
+================================================================================
+  1. raw_messages (claude-all-sessions)       165,374
+  2. messages (social_graph)                  125,365
+  3. likes (twitter)                           64,829
+  4. like_urls (twitter)                       64,829
+  5. blake3_cid (basin-replay)                 16,839
+  6. file_sizes (basin-replay)                 16,841
+  7. largest_files (basin-replay)              16,839
+  8. tweet_mentions (twitter)                  16,661
+  9. tweets (twitter)                          13,767
+ 10. timeline (basin-replay)                    7,309
+
+================================================================================
+NOTABLE DATASET CHARACTERISTICS
+================================================================================
+• claude-all-sessions: Deeply nested STRUCT types for message content,
+  tool use, and agent data. Single denormalized table design.
+  
+• i.duckdb: Most diverse — 46 tables spanning agent ontologies, game theory,
+  session analytics, SAW (self-avoiding walks), photonics, and transcripts.
+
+• twitter.duckdb: SCD2 (slowly changing dimensions) pattern with version_id,
+  valid_from, valid_to for temporal versioning.
+
+• belief_revision.duckdb: ACSet-inspired schema modeling AGM belief revision
+  postulates, epistemic entrenchment, and Grove sphere systems.
+
+• basin-replay.duckdb: Session replay infrastructure with Blake3 CIDs,
+  Merkle trees, Catalan-Doppler analysis, and vivarium/warehouse topology.
+
+• social_graph.duckdb: 125K messages — largest message corpus by volume.
+
+• playlist_transcripts.duckdb: 343 transcripts with embeddings (FLOAT[])
+  and cluster assignments — ready for vector search.
+
+• epstein.duckdb: Knowledge graph schema (persons, organizations, locations,
+  events, claims, RDF triples) — mostly unpopulated scaffolding.
+================================================================================

@@ -53,6 +53,9 @@ test_output.txt
 .windsurf/
 .zencoder/
 
+# DuckDB generated catalogs
+*.duckdb
+
 # Python
 __pycache__/
 *.pyc
