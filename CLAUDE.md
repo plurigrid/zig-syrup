@@ -29,6 +29,12 @@ Run: `zig build mcp-server`
 | tcp_transport | `src/tcp_transport.zig` | TCP netlayer for OCapN |
 | czernowitz | `src/czernowitz.zig` | Location codes + speculator metadata |
 | ghostty_ix_http | `src/ghostty_ix_http.zig` | HTTP :7071 monitoring (CORS: localhost only) |
+| dsi24_parser | `src/dsi24_parser.zig` | Wearable Sensing DSI-24 24ch dry EEG packet parsing |
+| fnirs_processor | `src/fnirs_processor.zig` | Modified Beer-Lambert Law: raw optical → HbO/HbR/HbT |
+| lsl_inlet | `src/lsl_inlet.zig` | Lab Streaming Layer temporal sync for multi-modal BCI |
+| bci_receiver | `src/bci_receiver.zig` | Universal multi-modality receiver (EEG/fNIRS/EMG/eye/accel) |
+| cyton_parser | `src/cyton_parser.zig` | OpenBCI Cyton 8ch EEG packet parsing |
+| fft_bands | `src/fft_bands.zig` | Comptime-memoized FFT, Welch PSD, EEG band extraction |
 
 ## GF(3) Conservation
 

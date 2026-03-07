@@ -689,6 +689,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    linalg_test_mod.addImport("syrup", syrup_mod);
+    linalg_test_mod.addImport("continuation", continuation_mod);
     const linalg_tests = b.addTest(.{ .root_module = linalg_test_mod });
     const run_linalg_tests = b.addRunArtifact(linalg_tests);
 
@@ -1094,16 +1096,16 @@ pub fn build(b: *std.Build) void {
     const puffer_ffi_tests = b.addTest(.{ .root_module = puffer_ffi_test_mod });
     const run_puffer_ffi_tests = b.addRunArtifact(puffer_ffi_tests);
 
-    // Worlds integration tests
-    const worlds_integration_test_mod = b.createModule(.{
-        .root_source_file = b.path("tests/worlds_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    worlds_integration_test_mod.addImport("syrup", syrup_mod);
-    worlds_integration_test_mod.addImport("worlds", worlds_mod);
-    const worlds_integration_tests = b.addTest(.{ .root_module = worlds_integration_test_mod });
-    const run_worlds_integration_tests = b.addRunArtifact(worlds_integration_tests);
+    // Worlds integration tests (aspirational: API not yet implemented)
+    // const worlds_integration_test_mod = b.createModule(.{
+    //     .root_source_file = b.path("tests/worlds_test.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // worlds_integration_test_mod.addImport("syrup", syrup_mod);
+    // worlds_integration_test_mod.addImport("worlds", worlds_mod);
+    // const worlds_integration_tests = b.addTest(.{ .root_module = worlds_integration_test_mod });
+    // const run_worlds_integration_tests = b.addRunArtifact(worlds_integration_tests);
 
     // World Demo executable
     const world_demo_mod = b.createModule(.{
@@ -1684,7 +1686,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_benchmark_adapter_tests.step);
     test_step.dependOn(&run_circuit_world_tests.step);
     test_step.dependOn(&run_openbci_bridge_tests.step);
-    test_step.dependOn(&run_worlds_integration_tests.step);
+    // test_step.dependOn(&run_worlds_integration_tests.step); // aspirational: API not yet implemented
     test_step.dependOn(&run_cyton_parser_tests.step);
     test_step.dependOn(&run_fft_bands_tests.step);
     test_step.dependOn(&run_csv_simd_tests.step);
@@ -1885,6 +1887,24 @@ pub fn build(b: *std.Build) void {
     const tcp_transport_tests = b.addTest(.{ .root_module = tcp_transport_test_mod });
     const run_tcp_transport_tests = b.addRunArtifact(tcp_transport_tests);
     test_step.dependOn(&run_tcp_transport_tests.step);
+
+    // Wire goblins_ffi module dependencies (must come after all deps are defined)
+    const passport_mod = b.addModule("passport", .{
+        .root_source_file = b.path("src/passport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ripser_mod = b.addModule("ripser", .{
+        .root_source_file = b.path("src/ripser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ripser_mod.addImport("syrup", syrup_mod);
+    goblins_ffi_mod.addImport("passport", passport_mod);
+    goblins_ffi_mod.addImport("ripser", ripser_mod);
+    goblins_ffi_mod.addImport("syrup", syrup_mod);
+    goblins_ffi_mod.addImport("message_frame", message_frame_mod);
+    goblins_ffi_mod.addImport("tcp_transport", tcp_transport_mod);
 
     // Fountain module (Luby Transform rateless erasure codes)
     const fountain_mod = b.addModule("fountain", .{
@@ -2326,6 +2346,187 @@ pub fn build(b: *std.Build) void {
     test_bci_step.dependOn(&run_bci_receiver_tests.step);
 
     // ========================================
+    // LSL Inlet (Lab Streaming Layer C FFI)
+    // ========================================
+
+    _ = b.addModule("lsl_inlet", .{
+        .root_source_file = b.path("src/lsl_inlet.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const lsl_inlet_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/lsl_inlet.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const lsl_inlet_tests = b.addTest(.{ .root_module = lsl_inlet_test_mod });
+    const run_lsl_inlet_tests = b.addRunArtifact(lsl_inlet_tests);
+    test_step.dependOn(&run_lsl_inlet_tests.step);
+
+    const test_lsl_step = b.step("test-lsl", "Run LSL inlet tests (no liblsl needed)");
+    test_lsl_step.dependOn(&run_lsl_inlet_tests.step);
+
+    // ========================================
+    // DSI-24 Parser (Wearable Sensing 24ch dry EEG)
+    // ========================================
+
+    _ = b.addModule("dsi24_parser", .{
+        .root_source_file = b.path("src/dsi24_parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const dsi24_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/dsi24_parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const dsi24_tests = b.addTest(.{ .root_module = dsi24_test_mod });
+    const run_dsi24_tests = b.addRunArtifact(dsi24_tests);
+    test_step.dependOn(&run_dsi24_tests.step);
+    test_bci_step.dependOn(&run_dsi24_tests.step);
+
+    // ========================================
+    // fNIRS Processor (Modified Beer-Lambert Law)
+    // ========================================
+
+    _ = b.addModule("fnirs_processor", .{
+        .root_source_file = b.path("src/fnirs_processor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const fnirs_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/fnirs_processor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const fnirs_tests = b.addTest(.{ .root_module = fnirs_test_mod });
+    const run_fnirs_tests = b.addRunArtifact(fnirs_tests);
+    test_step.dependOn(&run_fnirs_tests.step);
+    test_bci_step.dependOn(&run_fnirs_tests.step);
+
+    // ========================================
+    // Eye Tracking Processor (aSee EVS / IMX287)
+    // ========================================
+
+    _ = b.addModule("eyetracking", .{
+        .root_source_file = b.path("src/eyetracking.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const eyetracking_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/eyetracking.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const eyetracking_tests = b.addTest(.{ .root_module = eyetracking_test_mod });
+    const run_eyetracking_tests = b.addRunArtifact(eyetracking_tests);
+    test_step.dependOn(&run_eyetracking_tests.step);
+    test_bci_step.dependOn(&run_eyetracking_tests.step);
+
+
+    // ========================================
+    // Pose Bridge (Body Tracking via MediaPipe)
+    // ========================================
+
+    const pose_bridge_mod = b.addModule("pose_bridge", .{
+        .root_source_file = b.path("src/pose_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pose_bridge_mod.addImport("bci_receiver", bci_receiver_mod);
+
+    const pose_bridge_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/pose_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pose_bridge_test_mod.addImport("bci_receiver", bci_receiver_mod);
+    const pose_bridge_tests = b.addTest(.{ .root_module = pose_bridge_test_mod });
+    const run_pose_bridge_tests = b.addRunArtifact(pose_bridge_tests);
+    test_step.dependOn(&run_pose_bridge_tests.step);
+    test_bci_step.dependOn(&run_pose_bridge_tests.step);
+
+    // ========================================
+    // EDF Writer (European Data Format EDF+)
+    // ========================================
+
+    const edf_writer_mod = b.addModule("edf_writer", .{
+        .root_source_file = b.path("src/edf_writer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    edf_writer_mod.addImport("bci_receiver", bci_receiver_mod);
+
+    const edf_writer_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/edf_writer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    edf_writer_test_mod.addImport("bci_receiver", bci_receiver_mod);
+    const edf_writer_tests = b.addTest(.{ .root_module = edf_writer_test_mod });
+    const run_edf_writer_tests = b.addRunArtifact(edf_writer_tests);
+    test_step.dependOn(&run_edf_writer_tests.step);
+    test_bci_step.dependOn(&run_edf_writer_tests.step);
+
+    // EDF Reader module (parses EDF/EDF+ files)
+    _ = b.addModule("edf_reader", .{
+        .root_source_file = b.path("src/edf_reader.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const edf_reader_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/edf_reader.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    edf_reader_test_mod.addImport("edf_writer", edf_writer_mod);
+    const edf_reader_tests = b.addTest(.{ .root_module = edf_reader_test_mod });
+    const run_edf_reader_tests = b.addRunArtifact(edf_reader_tests);
+    test_step.dependOn(&run_edf_reader_tests.step);
+    test_bci_step.dependOn(&run_edf_reader_tests.step);
+
+    // PhysioNet EDF real-data test (skips if file not downloaded)
+    const physionet_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/edf_physionet_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    physionet_test_mod.addImport("edf_reader", edf_reader_test_mod);
+    const physionet_tests = b.addTest(.{ .root_module = physionet_test_mod });
+    const run_physionet_tests = b.addRunArtifact(physionet_tests);
+    test_bci_step.dependOn(&run_physionet_tests.step);
+
+    // BCI Integration Test (end-to-end multimodal pipeline)
+    const dsi24_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/dsi24_parser.zig"), .target = target, .optimize = optimize });
+    const fnirs_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/fnirs_processor.zig"), .target = target, .optimize = optimize });
+    const eye_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/eyetracking.zig"), .target = target, .optimize = optimize });
+    const lsl_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/lsl_inlet.zig"), .target = target, .optimize = optimize });
+    const bci_integ_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/bci_integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bci_integ_test_mod.addImport("dsi24_parser", dsi24_mod_for_integ);
+    bci_integ_test_mod.addImport("fnirs_processor", fnirs_mod_for_integ);
+    bci_integ_test_mod.addImport("eyetracking", eye_mod_for_integ);
+    bci_integ_test_mod.addImport("lsl_inlet", lsl_mod_for_integ);
+    const edf_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/edf_writer.zig"), .target = target, .optimize = optimize });
+    bci_integ_test_mod.addImport("edf_writer", edf_mod_for_integ);
+    bci_integ_test_mod.addImport("bci_receiver", bci_receiver_mod);
+    const edf_reader_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/edf_reader.zig"), .target = target, .optimize = optimize });
+    edf_reader_mod_for_integ.addImport("edf_writer", edf_mod_for_integ);
+    bci_integ_test_mod.addImport("edf_reader", edf_reader_mod_for_integ);
+    const bci_integ_tests = b.addTest(.{ .root_module = bci_integ_test_mod });
+    const run_bci_integ_tests = b.addRunArtifact(bci_integ_tests);
+    test_step.dependOn(&run_bci_integ_tests.step);
+    test_bci_step.dependOn(&run_bci_integ_tests.step);
+
+    // ========================================
     // Terminal Pipeline (terminal:// protocol)
     // ========================================
 
@@ -2387,9 +2588,9 @@ pub fn build(b: *std.Build) void {
     ghostty_vt_tileable_mod.addImport("virion", virion_mod);
     ghostty_vt_tileable_mod.addImport("tileable_gof", tileable_for_display);
 
-    // Link libghostty-vt dylib
-    ghostty_vt_tileable_mod.addLibraryPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
-    ghostty_vt_tileable_mod.addRPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
+    // Link libghostty-vt dylib (built from ghostty-org/ghostty zig-out)
+    ghostty_vt_tileable_mod.addLibraryPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
+    ghostty_vt_tileable_mod.addRPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
     ghostty_vt_tileable_mod.linkSystemLibrary("ghostty-vt", .{});
 
     const ghostty_vt_tileable_exe = b.addExecutable(.{
@@ -2419,8 +2620,8 @@ pub fn build(b: *std.Build) void {
     ghostty_vt_tileable_test_mod.addImport("terminal", terminal_mod);
     ghostty_vt_tileable_test_mod.addImport("virion", virion_mod);
     ghostty_vt_tileable_test_mod.addImport("tileable_gof", tileable_for_test);
-    ghostty_vt_tileable_test_mod.addLibraryPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
-    ghostty_vt_tileable_test_mod.addRPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
+    ghostty_vt_tileable_test_mod.addLibraryPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
+    ghostty_vt_tileable_test_mod.addRPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
     ghostty_vt_tileable_test_mod.linkSystemLibrary("ghostty-vt", .{});
     const ghostty_vt_tileable_tests = b.addTest(.{ .root_module = ghostty_vt_tileable_test_mod });
     const run_ghostty_vt_tests = b.addRunArtifact(ghostty_vt_tileable_tests);
