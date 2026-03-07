@@ -332,3 +332,41 @@ test "EDF writer-reader round trip" {
     try std.testing.expectEqual(@as(i16, 50), try parsed.getSample(0, 1, 0));
     try std.testing.expectEqual(@as(i16, -50), try parsed.getSample(0, 1, 1));
 }
+
+test "parse MNE subsecond_starttime.edf (4ch EDF+C)" {
+    const fixture = @embedFile("testdata/subsecond_starttime.edf");
+    const edf = try EDFFile.parse(fixture);
+
+    try std.testing.expectEqual(@as(u16, 4), edf.n_channels);
+    try std.testing.expectEqual(@as(u32, 5), edf.n_records);
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), edf.record_duration, 0.001);
+
+    // Channel labels: Fp1, F7, T3, EDF Annotations
+    try std.testing.expectEqualStrings("Fp1", edf.channels[0].labelStr());
+    try std.testing.expectEqualStrings("F7", edf.channels[1].labelStr());
+    try std.testing.expectEqualStrings("T3", edf.channels[2].labelStr());
+
+    // Header size: 256 + 4*256 = 1280
+    try std.testing.expectEqual(@as(u32, 1280), edf.header_bytes);
+
+    // Should be able to read samples without error
+    _ = try edf.getSample(0, 0, 0);
+    _ = try edf.getSample(4, 0, 0); // last record
+}
+
+test "parse MNE test_utf8_annotations.edf (12ch EDF+C)" {
+    const fixture = @embedFile("testdata/test_utf8_annotations.edf");
+    const edf = try EDFFile.parse(fixture);
+
+    try std.testing.expectEqual(@as(u16, 12), edf.n_channels);
+    try std.testing.expectEqual(@as(u32, 10), edf.n_records);
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), edf.record_duration, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f64, 10.0), edf.totalDuration(), 0.001);
+
+    // Header size: 256 + 12*256 = 3328
+    try std.testing.expectEqual(@as(u32, 3328), edf.header_bytes);
+
+    // Read a sample from the squarewave channel
+    const sample = try edf.getSample(0, 0, 0);
+    _ = sample; // value depends on the synthetic waveform
+}

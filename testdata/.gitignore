@@ -1,6 +1,9 @@
 # Large downloaded BCI datasets (not checked in)
 # Download with: curl -sL -o S001R01.edf "https://physionet.org/files/eegmmidb/1.0.0/S001/S001R01.edf"
 S001R01.edf
-*.snirf
-*.xdf
 *.nwb
+
+# Keep small test fixtures (tracked):
+# fixture_2ch.edf (800B), subsecond_starttime.edf (17KB),
+# test_utf8_annotations.edf (48KB), minimal.xdf (2KB),
+# minimum_example.snirf (14KB)
