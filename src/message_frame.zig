@@ -5,7 +5,7 @@
 //! Handles partial frames (waiting for more data from network).
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
+const syrup = @import("syrup");
 
 /// Maximum message size (4MB). Prevents DoS via huge length prefixes.
 pub const MAX_MESSAGE_SIZE: u32 = 4 * 1024 * 1024;

@@ -1,0 +1,289 @@
+/// Gain-of-Function World Interface
+///
+/// Unison ability: GainOfFunction
+///   structural ability GainOfFunction where
+///     recombine : Virion -> Virion -> {GainOfFunction} Virion
+///     mutate    : Virion -> {GainOfFunction} Virion
+///     spread    : Network -> {GainOfFunction} Census
+///     infect    : CellId -> Virion -> {GainOfFunction} Bool
+///     vaccinate : CellId -> {GainOfFunction} ()
+///     trit      : CellId -> {GainOfFunction} Trit
+///     color     : CellId -> {GainOfFunction} Rgb
+///
+/// GF(3) assignment: (+1, 0, -1) — role=PLUS, mode=ERGODIC, polarity=MINUS
+/// Color: #564516 (dark olive-bronze)
+/// HCL: hue=80.29° chroma=0.55 lightness=0.30
+///
+/// Balanced triad:
+///   gain-of-function (+1) × terminal:// (0) × tidar-verify (-1) = 0 ✓
+
+package plurigrid:gain-of-function@0.1.0;
+
+/// GF(3) balanced ternary trit
+enum trit {
+    minus,  // -1: validate / verify / constrain
+    zero,   //  0: coordinate / route / bridge
+    plus,   // +1: generate / spread / recombine
+}
+
+/// Capability domain (5-bit, matches virion.zig)
+enum capability-domain {
+    serialize,    // syrup encode/decode/CID
+    transport,    // message framing, TCP, WebSocket
+    color,        // rainbow, spectrum, quantize
+    propagate,    // constraint propagation
+    identity,     // passport, proof-of-brain
+    bci,          // EEG, FFT, spectral tensor
+    topology,     // homotopy, persistence, FEM
+    terminal,     // ghostty, cell dispatch, damage
+    world,        // persistent state, simulation
+    agent,        // ACP, agent registry
+    verify,       // formal verification, proof
+    generate,     // code generation, mutation
+    coordinate,   // CRDT, multiplayer sync
+    measure,      // entropy, information theory
+    transform,    // SIMD, FFT, numeric
+    bridge,       // cross-system integration
+}
+
+/// A single capability (domain + specificity)
+record capability {
+    domain: capability-domain,
+    specificity: u32,
+}
+
+/// Content-addressed virion identity
+type cid = list<u8>;  // SHA-256 (32 bytes)
+
+/// Virion: viral skill particle
+record virion {
+    cid: cid,
+    name: string,
+    role: trit,
+    mode: trit,
+    polarity: trit,
+    capabilities: list<capability>,
+    generation: u32,
+    mutations: u16,
+    tropism: u8,             // 3-bit mask: binds minus|zero|plus
+    lineage: list<cid>,
+    fitness: float32,
+}
+
+/// RGB color (sRGB gamut)
+record rgb {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+/// HCL color (perceptually uniform)
+record hcl {
+    hue: float64,       // degrees [0, 360)
+    chroma: float64,    // [0, ~1.3]
+    lightness: float64, // [0, 1]
+}
+
+/// Census of a viral network
+record census {
+    empty: u16,
+    infected: u16,
+    recombinant: u16,
+    immune: u16,
+    max-generation: u32,
+    max-caps: u8,
+    total-caps: u32,
+}
+
+/// Terminal cell (matches terminal.zig Cell)
+record terminal-cell {
+    codepoint: u32,
+    fg: u32,
+    bg: u32,
+    attrs: u8,
+}
+
+/// TiDAR control signal from generative model
+record tidar-signal {
+    /// Diffusion draft tokens (parallel phase, PLUS)
+    draft-tokens: list<u32>,
+    /// AR verification mask (sequential phase, MINUS)
+    verify-mask: list<bool>,
+    /// Accepted token indices after rejection sampling
+    accepted: list<u32>,
+    /// Current phase trit: diffusion(+1), mask(0), ar-verify(-1)
+    phase: trit,
+    /// Confidence score [0, 1]
+    confidence: float32,
+}
+
+/// Frame from terminal:// protocol
+record terminal-frame {
+    generation: u32,
+    cols: u16,
+    rows: u16,
+    /// Packed cell data (14 bytes per dirty cell)
+    cells: list<u8>,
+}
+
+/// VT parser action (from libghostty-vt)
+variant vt-action {
+    print(u32),           // Unicode codepoint
+    execute(u8),          // C0/C1 control
+    csi-dispatch(string), // CSI sequence
+    esc-dispatch(string), // ESC sequence
+    osc-dispatch(string), // OSC string
+}
+
+/// Retty widget layout constraint
+variant layout-constraint {
+    fixed(u16),
+    percentage(u16),
+    min(u16),
+    max(u16),
+    fill,
+}
+
+/// Retty rectangle
+record rect {
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+}
+
+// =========================================================================
+// INTERFACES
+// =========================================================================
+
+/// The gain-of-function ability: generates new capabilities via recombination.
+/// Corresponds to Unison ability GainOfFunction.
+interface gain-of-function {
+    use virion;
+    use census;
+    use trit;
+    use cid;
+    use capability;
+    use rgb;
+    use hcl;
+
+    /// Recombine two virions → child with union of capabilities (GAIN OF FUNCTION)
+    recombine: func(a: virion, b: virion) -> virion;
+
+    /// Mutate during replication (deterministic from parent CID)
+    mutate: func(parent: virion) -> virion;
+
+    /// Run one tick of epidemic spread, return new infection count
+    spread-tick: func() -> u32;
+
+    /// Spread to saturation (max generations), return generations elapsed
+    spread-to-saturation: func(max-gens: u32) -> u32;
+
+    /// Infect a specific cell with a virion
+    infect: func(cell: u8, v: virion) -> bool;
+
+    /// Vaccinate a cell (make immune)
+    vaccinate: func(cell: u8);
+
+    /// Get network census
+    census: func() -> census;
+
+    /// Get GF(3) trit balance of network
+    trit-balance: func() -> trit;
+
+    /// Get the triadic color for a trit triple
+    triadic-color: func(t1: trit, t2: trit, t3: trit) -> rgb;
+
+    /// Get the HCL color for a trit triple
+    triadic-hcl: func(t1: trit, t2: trit, t3: trit) -> hcl;
+}
+
+/// Terminal world interface — the terminal:// protocol as a wasmcloud capability.
+/// Inputs from libghostty-vt, retty, and ghostty.
+interface terminal-world {
+    use terminal-cell;
+    use terminal-frame;
+    use vt-action;
+    use rect;
+    use layout-constraint;
+    use trit;
+    use rgb;
+
+    /// Initialize terminal grid
+    init: func(cols: u16, rows: u16);
+
+    /// Write a cell
+    put: func(x: u16, y: u16, cell: terminal-cell);
+
+    /// Read a cell
+    get: func(x: u16, y: u16) -> terminal-cell;
+
+    /// Commit dirty cells to frame buffer
+    commit: func() -> terminal-frame;
+
+    /// Apply incoming frame
+    apply: func(frame: terminal-frame);
+
+    /// Get GF(3) trit of cell foreground color
+    cell-trit: func(x: u16, y: u16) -> trit;
+
+    /// Process VT action from libghostty-vt parser
+    process-vt: func(action: vt-action);
+
+    /// Layout split via retty constraint solver
+    split: func(area: rect, direction: u8, constraints: list<layout-constraint>) -> list<rect>;
+
+    /// Get terminal dimensions
+    cols: func() -> u16;
+    rows: func() -> u16;
+
+    /// Resize terminal
+    resize: func(cols: u16, rows: u16);
+
+    /// Clear grid
+    clear: func();
+}
+
+/// TiDAR generative model control — input from ASUS device.
+/// Think in Diffusion (+1), Talk in Autoregression (-1).
+interface tidar-control {
+    use tidar-signal;
+    use trit;
+
+    /// Receive TiDAR signal from generative model
+    receive-signal: func(signal: tidar-signal);
+
+    /// Get current TiDAR phase
+    current-phase: func() -> trit;
+
+    /// Get diffusion draft (parallel token generation)
+    draft: func(n-tokens: u32) -> list<u32>;
+
+    /// AR verify (sequential checking)
+    verify: func(tokens: list<u32>) -> list<bool>;
+
+    /// Rejection sampling: accept/reject based on K ⊣ P adjunction
+    rejection-sample: func(draft: list<u32>, mask: list<bool>) -> list<u32>;
+}
+
+// =========================================================================
+// WORLDS
+// =========================================================================
+
+/// The gain-of-function world: composes all interfaces.
+/// Virions spread through terminal:// cells, mutating at each hop.
+/// TiDAR model on ASUS device provides generative control signals.
+/// libghostty-vt + retty + ghostty provide terminal input.
+///
+/// Color: #564516 (dark olive-bronze)
+/// Trit: (+1, 0, -1) — generate × coordinate × validate
+world gain-of-function-world {
+    /// Terminal rendering + VT parsing (libghostty-vt, retty, ghostty)
+    import terminal-world;
+
+    /// TiDAR generative model control (ASUS device)
+    import tidar-control;
+
+    /// Gain-of-function ability (virion spread + recombination)
+    export gain-of-function;
+}

@@ -134,8 +134,8 @@ pub fn parseCytonPacket(data: [CYTON_PACKET_LEN]u8, timestamp: i64) ParseError!C
 pub fn parseStream(
     data: []const u8,
     allocator: std.mem.Allocator,
-) ParseError![]CytonSample {
-    var samples = std.ArrayList(CytonSample).init(allocator);
+) (ParseError || error{OutOfMemory})![]CytonSample {
+    var samples = std.ArrayListUnmanaged(CytonSample){};
     errdefer samples.deinit(allocator);
 
     var i: usize = 0;
@@ -166,7 +166,7 @@ pub fn parseStream(
         i += 1;
     }
 
-    return samples.toOwnedSlice();
+    return samples.toOwnedSlice(allocator);
 }
 
 // ============================================================================

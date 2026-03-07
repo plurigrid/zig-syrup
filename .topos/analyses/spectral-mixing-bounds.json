@@ -1,0 +1,23 @@
+{
+  "type": "analysis",
+  "name": "Spectral Mixing Bounds for Reel-Tiling Diffusion",
+  "analysisType": "model",
+  "analysisOf": {
+    "_id": "color-gf3-tiling",
+    "_version": null,
+    "_server": "local"
+  },
+  "notebook": {
+    "cellContents": {
+      "g0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "g0000001-0000-7000-8000-000000000001",
+        "content": "# Spectral Mixing Bounds\n\nQuantitative analysis of convergence rates for tree diffusion on Syrup-encoded reel states.\n\n## The Geometric Chain (Gromov -> Tao -> Kontorovich)\n\n### Level 1: Hyperbolic Content Trees (O(log m) mixing)\n- Gromov delta = 0 (trees are 0-hyperbolic)\n- Volume growth: |B(r)| ~ d^r (exponential for d-ary trees)\n- Cheeger constant: h(T) = (d-2)/d for d-regular tree (d >= 3)\n- Spectral gap: gamma = 1 - 2*sqrt(d-1)/d (Kesten bound)\n- Mixing time: O(log m) where m = tree size\n- Drift: l = (d-2)/d > 0 (positive speed to boundary)\n\n### Level 2: Cylindrical Tablet Order (O(n^2) mixing)\n- n tablets on S^1 (cycle graph)\n- Spectral gap: gamma = 1 - cos(2*pi/n) ~ 2*pi^2/n^2\n- Mixing time: O(n^2 * log n)\n- Cheeger constant: h = 2/n (bottleneck at antipodal cut)\n\n### Combined: Warped Product M = S^1 x_f T\n- Quasi-isometric to T (Gromov simplification)\n- Asymptotic mixing: O(log |M|) (dominated by tree factor)\n- The cylinder contributes at most additive O(n^2) correction\n\n## Potts Model Bounds (Tao's Analytic Framework)\n\n### GF(3) Coloring (q=3)\n- Dobrushin regime: q > 2*Delta requires Delta <= 1 (too restrictive)\n- Spectral independence (Chen-Liu-Vigoda): q >= 1.809*Delta for flip dynamics\n- For hexagonal tiling (Delta=3): need q >= 5.427 — 3-coloring NOT in rapid mixing regime on flat lattice\n- For tree content (Delta varies): spectral independence holds because tree uniqueness => graph uniqueness (Weitz SAW reduction)\n- **Key insight**: The tree structure of tablet content saves us from the hard regime of flat lattice 3-coloring\n\n### Apollonian Spectral Gap (Kontorovich)\n- Patterson-Sullivan dimension delta ~ 1.3058\n- Spectral gap: lambda_1 >= delta(2-delta) ~ 0.908 (maximal)\n- Bourgain-Gamburd: uniform gap for congruence towers\n- Mixing on Apollonian mod N: O(log N)\n\n## HDLM Schedule\n\n| Level | Noise Rate | Mixing | Justification |\n|-------|-----------|--------|---------------|\n| Byte | tau ~ 100 | O(1) per byte | Independent coin flips |\n| Tablet content | tau ~ O(log m) | Fast | Tree 0-hyperbolicity |\n| Reel structure | tau ~ O(n^2) | Slow | Flat cylinder |\n\n## Functional Inequalities\n\n- Modified log-Sobolev: alpha >= Omega(1/n) when spectral independence holds\n- Entropy factorization: Ent_mu[f] <= C * sum_v E[Ent_{mu_v}[f]]\n- Optimal Glauber mixing: O(n log n) for tree-structured content\n- Bonami-Beckner hypercontractivity constant for GF(3): alpha_0 = 2(1-cos(2pi/3))/(3*log 2) ~ 1.365"
+      }
+    },
+    "cellOrder": [
+      "g0000001-0000-7000-8000-000000000001"
+    ]
+  },
+  "version": "1"
+}

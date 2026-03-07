@@ -17,6 +17,16 @@ pub const BLOCK_SIZE = 4096;
 
 pub const Hash = [HASH_SIZE]u8;
 
+/// Hash context for using Hash as HashMap key
+pub const HashContext = struct {
+    pub fn hash(_: HashContext, key: Hash) u64 {
+        return std.hash.Wyhash.hash(0, &key);
+    }
+    pub fn eql(_: HashContext, a: Hash, b: Hash) bool {
+        return std.mem.eql(u8, &a, &b);
+    }
+};
+
 /// Event type enumeration
 pub const EventType = enum(u8) {
     // System events
@@ -282,20 +292,20 @@ pub const EventJson = struct {
 
 /// Export events to JSON array
 pub fn exportToJson(allocator: Allocator, events: []const EventJson) ![]u8 {
-    var list = std.ArrayList(u8).init(allocator);
-    defer list.deinit();
-    
-    try list.appendSlice("[\n");
-    
+    var list = std.ArrayListUnmanaged(u8){};
+    defer list.deinit(allocator);
+
+    try list.appendSlice(allocator, "[\n");
+
     for (events, 0..) |event, i| {
-        if (i > 0) try list.appendSlice(",\n");
-        
-        try std.json.stringify(event, .{}, list.writer());
+        if (i > 0) try list.appendSlice(allocator, ",\n");
+
+        try std.json.stringify(event, .{}, list.writer(allocator));
     }
-    
-    try list.appendSlice("\n]");
-    
-    return list.toOwnedSlice();
+
+    try list.appendSlice(allocator, "\n]");
+
+    return list.toOwnedSlice(allocator);
 }
 
 /// Import events from JSON

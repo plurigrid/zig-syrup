@@ -20,6 +20,36 @@ pub const ABTestConfig = ab_test.ABTestConfig;
 pub const SessionMetrics = ab_test.SessionMetrics;
 pub const TestResult = ab_test.TestResult;
 
+// Multi-armed bandits (A/B → Bandit → Thompson → RL)
+pub const bandit = @import("bandit.zig");
+pub const Bandit = bandit.Bandit;
+pub const BanditArm = bandit.Arm;
+pub const BanditStrategy = bandit.Strategy;
+pub const RLState = bandit.RLState;
+
+// AGM Belief Revision (Expansion/Revision/Contraction, Grove spheres)
+pub const agm_mod = @import("agm.zig");
+pub const BeliefSet = agm_mod.BeliefSet;
+pub const Belief = agm_mod.Belief;
+pub const Sphere = agm_mod.Sphere;
+pub const AGMOpKind = agm_mod.OpKind;
+
+// AGM-Ewig Bridge (immutable epistemic history)
+pub const agm_ewig = @import("agm_ewig.zig");
+pub const LoggedBeliefSet = agm_ewig.LoggedBeliefSet;
+pub const AGMPayload = agm_ewig.AGMPayload;
+pub const AGMReplayer = agm_ewig.AGMReplayer;
+
+// AGM-Isabelle2 Bridge (postcondition verification)
+pub const agm_isabelle = @import("agm_isabelle.zig");
+pub const AGMCheckResult = agm_isabelle.CheckResult;
+
+// PufferLib FFI (zero-copy C ABI bridge)
+pub const puffer = @import("puffer_ffi.zig");
+pub const PufferEnv = puffer.Env;
+pub const PufferLog = puffer.Log;
+pub const OBS_SIZE = puffer.OBS_SIZE;
+
 // Multiplayer
 // pub const multiplayer = @import("multiplayer.zig");
 // pub const Session3P = multiplayer.Session3P;
@@ -63,10 +93,26 @@ pub const zeta = @import("zeta.zig");
 pub const ZetaWorld = zeta.ZetaWorld;
 pub const Expr = colored_parens.Expr;
 
+// Monster Walk (71-shard routing, shared protentions, para-rigorous checks)
+pub const monster_walk = @import("monster_walk.zig");
+pub const ShardMessage = monster_walk.ShardMessage;
+pub const ShardRouter = monster_walk.ShardRouter;
+pub const Ecstasis = monster_walk.Ecstasis;
+pub const SharedProtention = monster_walk.SharedProtention;
+pub const AgentHorizon = monster_walk.AgentHorizon;
+pub const MonsterCheckResult = monster_walk.CheckResult;
+
 // World Enumeration Engine (326 worlds via combinatorial cheatcodes)
 pub const world_enum = @import("world_enum.zig");
 pub const WorldEnumerator = world_enum.WorldEnumerator;
 pub const WorldConfig = world_enum.WorldConfig;
+
+// World Morphism (69-variety World→World' arrows, 23/23/23 GF(3) buckets)
+pub const world_morphism = @import("world_morphism.zig");
+pub const MorphismVariety = world_morphism.Variety;
+pub const MorphismArrow = world_morphism.Arrow;
+pub const MorphismChain = world_morphism.Chain;
+pub const MorphismTrit = world_morphism.Trit;
 
 /// Module version
 pub const version = "0.1.0";

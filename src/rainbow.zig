@@ -13,10 +13,10 @@
 //! Reference: boxxy/internal/color/rainbow.go, Gay MCP golden_thread
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
-const homotopy = @import("homotopy.zig");
-const continuation = @import("continuation.zig");
-const quantize = @import("quantize.zig");
+const syrup = @import("syrup");
+const homotopy = @import("homotopy");
+const continuation = @import("continuation");
+const quantize = @import("quantize");
 const Allocator = std.mem.Allocator;
 
 // ============================================================================
@@ -108,6 +108,44 @@ pub const RGB = struct {
     }
 };
 
+/// Comptime-memoized sine table for 0..359 degrees
+const sin_table = blk: {
+    @setEvalBranchQuota(2000);
+    var table: [360]f64 = undefined;
+    for (0..360) |i| {
+        table[i] = @sin(@as(f64, @floatFromInt(i)) * std.math.pi / 180.0);
+    }
+    break :blk table;
+};
+
+/// Comptime-memoized cosine table for 0..359 degrees
+const cos_table = blk: {
+    @setEvalBranchQuota(2000);
+    var table: [360]f64 = undefined;
+    for (0..360) |i| {
+        table[i] = @cos(@as(f64, @floatFromInt(i)) * std.math.pi / 180.0);
+    }
+    break :blk table;
+};
+
+/// Fast sine lookup with degree input
+fn fastSin(degrees: f64) f64 {
+    const d = @mod(degrees, 360.0);
+    const idx = @as(usize, @intFromFloat(d));
+    const frac = d - @as(f64, @floatFromInt(idx));
+    const next_idx = (idx + 1) % 360;
+    return sin_table[idx] * (1.0 - frac) + sin_table[next_idx] * frac;
+}
+
+/// Fast cosine lookup with degree input
+fn fastCos(degrees: f64) f64 {
+    const d = @mod(degrees, 360.0);
+    const idx = @as(usize, @intFromFloat(d));
+    const frac = d - @as(f64, @floatFromInt(idx));
+    const next_idx = (idx + 1) % 360;
+    return cos_table[idx] * (1.0 - frac) + cos_table[next_idx] * frac;
+}
+
 /// HCL color (Hue-Chroma-Lightness, perceptually uniform)
 pub const HCL = struct {
     h: f64, // Hue in degrees [0, 360)
@@ -117,9 +155,9 @@ pub const HCL = struct {
     /// Convert to RGB via Lab intermediate
     pub fn toRGB(self: HCL) RGB {
         // HCL -> Lab
-        const h_rad = self.h * std.math.pi / 180.0;
-        const a = self.c * @cos(h_rad);
-        const b = self.c * @sin(h_rad);
+        // Optimization: Use memoized trig tables
+        const a = self.c * fastCos(self.h);
+        const b = self.c * fastSin(self.h);
         const l = self.l * 100.0;
 
         // Lab -> XYZ (D65 illuminant)
@@ -303,7 +341,7 @@ pub const ColoredSexp = struct {
             var hex_buf: [7]u8 = undefined;
             const hex = token.color.toHex(&hex_buf);
 
-            try std.fmt.format(writer, "<span style=\"color: {s}\">", .{hex});
+            try writer.print("<span style=\"color: {s}\">", .{hex});
 
             // Escape HTML entities
             for (token.text) |c| {

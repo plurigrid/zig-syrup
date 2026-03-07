@@ -198,6 +198,11 @@ pub const WebSocketConnection = struct {
 pub const ExecutionCallback = *const fn (*Server, InputMessage) anyerror!void;
 
 /// Ghostty Web Server
+const EventStats = struct {
+    key_events: u64 = 0,
+    mouse_events: u64 = 0,
+};
+
 pub const Server = struct {
     allocator: std.mem.Allocator,
     listener: std.net.Server,
@@ -206,6 +211,7 @@ pub const Server = struct {
     clients: std.ArrayListUnmanaged(WebSocketConnection),
     running: bool = true,
     execution_callback: ?ExecutionCallback = null,
+    stats: EventStats = .{},
 
     pub fn init(allocator: std.mem.Allocator, port: u16) !Server {
         const address = try std.net.Address.parseIp("127.0.0.1", port);
@@ -380,28 +386,12 @@ pub const Server = struct {
             return;
         }
 
-        // Fallback: debug print only
+        // Fallback: count events only (no content logging — P1 security fix)
         switch (input.event_type) {
-            .key => {
-                if (input.key_event) |key| {
-                    std.debug.print("Key input: U+{X} mods=0x{x}\n", .{ key.char_code, key.modifiers });
-                }
-            },
-            .mouse_move => {
-                if (input.mouse_event) |mouse| {
-                    std.debug.print("Mouse move: ({},{})\n", .{ mouse.x, mouse.y });
-                }
-            },
-            .mouse_button => {
-                if (input.mouse_event) |mouse| {
-                    std.debug.print("Mouse button: @({},{}) button={}\n", .{ mouse.x, mouse.y, mouse.button });
-                }
-            },
-            .mouse_wheel => {
-                if (input.mouse_event) |mouse| {
-                    std.debug.print("Mouse wheel: button={}\n", .{mouse.button});
-                }
-            },
+            .key => self.stats.key_events += 1,
+            .mouse_move => self.stats.mouse_events += 1,
+            .mouse_button => self.stats.mouse_events += 1,
+            .mouse_wheel => self.stats.mouse_events += 1,
         }
     }
 };

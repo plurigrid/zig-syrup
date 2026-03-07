@@ -14,10 +14,10 @@
 //!   -1 (verification/cool) = qubit |0⟩
 
 const std = @import("std");
-const cell_sync = @import("cell_sync.zig");
+const cell_sync = @import("cell_sync");
 
 const CellSync = cell_sync.CellSync;
-const Cell = @import("damage.zig").Cell;
+const Cell = @import("damage").Cell;
 
 /// Gate symbols for ASCII rendering
 pub const WIRE: u21 = '─';
@@ -177,7 +177,7 @@ test "bell circuit syncs across nodes via packed binary" {
     // Syrup roundtrip with packed binary
     const syrup_val = try node_a.snapshotToSyrup(&snapshot, allocator);
     defer {
-        const syrup_mod = @import("syrup.zig");
+        const syrup_mod = @import("syrup");
         allocator.free(syrup_val.record.fields[6].bytes);
         allocator.free(syrup_val.record.fields);
         const label_slice: *[1]syrup_mod.Value = @ptrCast(@constCast(syrup_val.record.label));

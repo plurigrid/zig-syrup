@@ -1,0 +1,23 @@
+{
+  "type": "analysis",
+  "name": "GF(3) Conservation Law Verification (Span-Invariant)",
+  "analysisType": "model",
+  "analysisOf": {
+    "_id": "reel-diffusion-flow",
+    "_version": null,
+    "_server": "local"
+  },
+  "notebook": {
+    "cellContents": {
+      "h0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "h0000001-0000-7000-8000-000000000001",
+        "content": "# GF(3) Conservation Law Verification\n\nVerification that the trit balance is maintained across all spans of the framework.\n\nThe conservation law is span-invariant: every triad decomposes as (left projection, world, right projection) = (+1, 0, -1). The world is always the coordinator. Roles are symmetric.\n\n## Vat Span (model: vat-triad)\n- Left projection: +1 (Generator — initiator)\n- World: 0 (Coordinator — shared meeting place)\n- Right projection: -1 (Validator — responder)\n- Sum: (+1) + 0 + (-1) = 0 mod 3 ✓\n- **Instances**: Human→World←Human, GoblinsVat→CapTPSession←GoblinsVat, AgentVat→TaskList←AgentVat\n\n## OCapN Span (model: ocapn-topos)\n- delegate: +1 (Generator — projects authority into session)\n- CapTPSession: 0 (Coordinator — the shared world)\n- validate: -1 (Validator — accepts/checks authority from session)\n- Sum: (+1) + 0 + (-1) = 0 mod 3 ✓\n- **Third-party handoff**: Span composition via pullback preserves conservation\n\n## Reel Color Channels (model: reel-diffusion-flow)\n- focusedchan: +1 (Generator — active, high-resolution)\n- tabletchan: 0 (Coordinator — contextual, shared space)\n- borderchan: -1 (Validator — structural frame)\n- Sum: (+1) + 0 + (-1) = 0 mod 3 ✓\n\n## CatColab Document Types (model: syrup-tree-schema)\n- Diagram: +1 (Generator — produces instances)\n- Model: 0 (Coordinator — defines theory)\n- Analysis: -1 (Validator — verifies properties)\n- Sum: (+1) + 0 + (-1) = 0 mod 3 ✓\n\n## Diffusion Levels (model: color-gf3-tiling)\n- Intra-tablet (tree, hyperbolic): +1 — fast mixing, generative\n- Cylinder (reel, flat): 0 — slow mixing, coordinative\n- Border/frame (structural): -1 — static, validating\n- Sum: (+1) + 0 + (-1) = 0 mod 3 ✓\n\n## Rigor Levels (Tao)\n- Pre-rigorous: +1 (generate intuition, examples)\n- Rigorous: 0 (coordinate definitions, proofs)\n- Post-rigorous: -1 (validate, find deeper reasons)\n- Sum: (+1) + 0 + (-1) = 0 mod 3 ✓\n\n## 326 Worlds (model: vat-triad, world_enum.zig)\n- Each WorldConfig survives the conservation filter: trit[0..7] sums to 0 mod 3\n- 326 = the number of non-trivial, conserved, rotationally-reduced meeting points\n- Every world is a span vertex — a place where two agents CAN meet\n- The conservation law on worlds is the span-level version of the object-level law\n\n## Conservation Theorem (Span Form)\nFor any well-formed span (A → W ← B) in the framework:\n  trit(left_projection) + trit(world) + trit(right_projection) ≡ 0 (mod 3)\n\nThis is the GF(3) Noether charge. The conservation law holds at every level because every interaction has the same triadic structure: someone opens (+1), something mediates (0), someone responds (-1). The sum vanishes because the span is balanced — Mitsein is equiprimordial."
+      }
+    },
+    "cellOrder": [
+      "h0000001-0000-7000-8000-000000000001"
+    ]
+  },
+  "version": "1"
+}

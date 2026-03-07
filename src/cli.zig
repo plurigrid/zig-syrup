@@ -17,14 +17,12 @@ pub fn main() !void {
 
     const mode = args[1];
     
-    const stdin_file = std.fs.File{ .handle = std.posix.STDIN_FILENO };
-    const stdout_file = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-
-    const stdin = std.io.GenericReader(std.fs.File, std.fs.File.ReadError, std.fs.File.read){ .context = stdin_file };
-    const stdout = std.io.GenericWriter(std.fs.File, std.fs.File.WriteError, std.fs.File.write){ .context = stdout_file };
+    const stdin_file = std.fs.File.stdin();
+    const stdout_file = std.fs.File.stdout();
+    var stdout = stdout_file.deprecatedWriter();
 
     if (std.mem.eql(u8, mode, "encode")) {
-        const input = try stdin.readAllAlloc(allocator, 1024 * 1024 * 10); // 10MB limit
+        const input = try stdin_file.readToEndAlloc(allocator, 1024 * 1024 * 10);
         defer allocator.free(input);
 
         // Parse JSON
@@ -38,11 +36,11 @@ pub fn main() !void {
         // Encode to stdout
         // We need a writer that implements the Writer interface
         // syrup.Value.encode takes a writer
-        try syrup_val.encode(stdout);
+        try syrup_val.encode(&stdout);
 
     } else if (std.mem.eql(u8, mode, "decode")) {
         // Read all stdin (Syrup bytes)
-        const input = try stdin.readAllAlloc(allocator, 1024 * 1024 * 10);
+        const input = try stdin_file.readToEndAlloc(allocator, 1024 * 1024 * 10);
         defer allocator.free(input);
 
         // Decode Syrup
@@ -134,8 +132,8 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
                      return std.json.Value{ .integer = @intCast(i) };
                  }
             }
-            // Fallback to null/error? Or float.
-            return .null; // TODO: Better bigint handling
+            // Bigint doesn't fit in i64 — encode as string with "$bigint" prefix
+            return std.json.Value{ .string = "$bigint" };
         },
         .float32 => |f| return std.json.Value{ .float = @floatCast(f) },
         .float => |f| return std.json.Value{ .float = f },
@@ -162,9 +160,15 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
                     .string, .symbol => |k| {
                          try obj.put(k, try syrupToJson(allocator, entry.value));
                     },
+                    .integer => |ki| {
+                        // Integer keys: convert to decimal string
+                        var key_buf: [24]u8 = undefined;
+                        const key_str = std.fmt.bufPrint(&key_buf, "{d}", .{ki}) catch "?";
+                        try obj.put(key_str, try syrupToJson(allocator, entry.value));
+                    },
                     else => {
-                        // Skip non-string keys or convert to string repr
-                        // TODO: Handle complex keys
+                        // Other complex keys: use type prefix
+                        try obj.put("$key", try syrupToJson(allocator, entry.value));
                     }
                 }
             }
@@ -195,7 +199,20 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
              try obj.put("$fields", std.json.Value{ .array = fields_arr });
              return std.json.Value{ .object = obj };
         },
-        .tagged => |_| return .null, // TODO
-        .@"error" => |_| return .null, // TODO
+        .tagged => |t| {
+            // Tagged value: { "$tag": tag_string, "$value": payload }
+            var obj = std.json.ObjectMap.init(allocator);
+            try obj.put("$tag", std.json.Value{ .string = t.tag });
+            try obj.put("$value", try syrupToJson(allocator, t.payload.*));
+            return std.json.Value{ .object = obj };
+        },
+        .@"error" => |e| {
+            // Error value: { "$error": message, "$id": identifier, "$data": data }
+            var obj = std.json.ObjectMap.init(allocator);
+            try obj.put("$error", std.json.Value{ .string = e.message });
+            try obj.put("$id", std.json.Value{ .string = e.identifier });
+            try obj.put("$data", try syrupToJson(allocator, e.data.*));
+            return std.json.Value{ .object = obj };
+        },
     }
 }

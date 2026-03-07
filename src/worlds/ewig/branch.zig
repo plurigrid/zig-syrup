@@ -42,7 +42,7 @@ pub const Branch = struct {
             .world_uri = try allocator.dupe(u8, world_uri),
             .head = head,
             .base_hash = base_hash,
-            .created_at = std.time.nanoTimestamp(),
+            .created_at = @intCast(std.time.nanoTimestamp()),
             .metadata = metadata,
         };
     }
@@ -190,16 +190,16 @@ pub const BranchManager = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         
-        var names = std.ArrayList([]const u8).init(allocator);
-        errdefer names.deinit();
-        
+        var names = std.ArrayListUnmanaged([]const u8){};
+        errdefer names.deinit(allocator);
+
         var it = self.branches.keyIterator();
         while (it.next()) |key| {
             const copy = try allocator.dupe(u8, key.*);
-            try names.append(copy);
+            try names.append(allocator, copy);
         }
-        
-        return names.toOwnedSlice();
+
+        return names.toOwnedSlice(allocator);
     }
     
     /// Delete a branch
@@ -367,22 +367,22 @@ pub const MergeEngine = struct {
     
     /// Get chain of events from head to base
     fn getChain(self: Self, events: *log.EventLog, head: Hash) ![]Event {
-        var chain = std.ArrayList(Event).init(self.allocator);
-        errdefer chain.deinit();
-        
+        var chain = std.ArrayListUnmanaged(Event){};
+        errdefer chain.deinit(self.allocator);
+
         var current = head;
         const zero_hash = [_]u8{0} ** 32;
-        
+
         while (!std.mem.eql(u8, &current, &zero_hash)) {
             const event = events.getByHash(current) orelse break;
-            try chain.append(event);
+            try chain.append(self.allocator, event);
             current = event.parent;
         }
         
         // Reverse to get chronological order
         std.mem.reverse(Event, chain.items);
         
-        return chain.toOwnedSlice();
+        return chain.toOwnedSlice(self.allocator);
     }
     
     /// Perform 3-way merge
@@ -392,12 +392,12 @@ pub const MergeEngine = struct {
         ours: []Event,
         theirs: []Event,
     ) !MergeResult {
-        var conflicts = std.ArrayList(Conflict).init(self.allocator);
+        var conflicts = std.ArrayListUnmanaged(Conflict){};
         errdefer {
             for (conflicts.items) |*c| {
                 self.allocator.free(c.path);
             }
-            conflicts.deinit();
+            conflicts.deinit(self.allocator);
         }
         
         // Find diverged events
@@ -412,7 +412,7 @@ pub const MergeEngine = struct {
             for (their_changes) |their_change| {
                 if (std.mem.eql(u8, our_change.path, their_change.path)) {
                     if (!std.mem.eql(u8, our_change.value, their_change.value)) {
-                        try conflicts.append(.{
+                        try conflicts.append(self.allocator, .{
                             .path = try self.allocator.dupe(u8, our_change.path),
                             .base_value = our_change.base_value,
                             .our_value = our_change.value,
@@ -424,7 +424,7 @@ pub const MergeEngine = struct {
             }
         }
         
-        const conflict_slice = try conflicts.toOwnedSlice();
+        const conflict_slice = try conflicts.toOwnedSlice(self.allocator);
         
         return MergeResult{
             .success = conflict_slice.len == 0,
@@ -442,13 +442,13 @@ pub const MergeEngine = struct {
     
     /// Find changes between base and head
     fn findChanges(self: Self, base: []Event, head: []Event) ![]Change {
-        var changes = std.ArrayList(Change).init(self.allocator);
+        var changes = std.ArrayListUnmanaged(Change){};
         errdefer {
             for (changes.items) |c| {
                 self.allocator.free(c.path);
                 self.allocator.free(c.value);
             }
-            changes.deinit();
+            changes.deinit(self.allocator);
         }
         
         // Find common prefix length
@@ -466,14 +466,14 @@ pub const MergeEngine = struct {
             const path = try std.fmt.allocPrint(self.allocator, "event:{d}", .{event.seq});
             const value = try self.allocator.dupe(u8, event.payload);
             
-            try changes.append(.{
+            try changes.append(self.allocator, .{
                 .path = path,
                 .value = value,
                 .base_value = null,
             });
         }
-        
-        return changes.toOwnedSlice();
+
+        return changes.toOwnedSlice(self.allocator);
     }
     
     /// Recursive merge for complex histories
@@ -503,8 +503,8 @@ pub const MergeEngine = struct {
         conflicts: []const Conflict,
         strategy: enum { Ours, Theirs, Union },
     ) ![]Change {
-        var resolved = std.ArrayList(Change).init(self.allocator);
-        errdefer resolved.deinit();
+        var resolved = std.ArrayListUnmanaged(Change){};
+        errdefer resolved.deinit(self.allocator);
         
         for (conflicts) |conflict| {
             const value = switch (strategy) {
@@ -514,7 +514,7 @@ pub const MergeEngine = struct {
             };
             
             if (value) |v| {
-                try resolved.append(.{
+                try resolved.append(self.allocator, .{
                     .path = try self.allocator.dupe(u8, conflict.path),
                     .value = try self.allocator.dupe(u8, v),
                     .base_value = conflict.base_value,
@@ -522,7 +522,7 @@ pub const MergeEngine = struct {
             }
         }
         
-        return resolved.toOwnedSlice();
+        return resolved.toOwnedSlice(self.allocator);
     }
     
     /// Union merge - combine both versions
@@ -557,15 +557,15 @@ pub const BranchVisualizer = struct {
         branches: *BranchManager,
         events: *log.EventLog,
     ) ![]u8 {
-        var output = std.ArrayList(u8).init(self.allocator);
-        errdefer output.deinit();
-        
-        const writer = output.writer();
+        var output = std.ArrayListUnmanaged(u8){};
+        errdefer output.deinit(self.allocator);
+
+        const writer = output.writer(self.allocator);
         
         try writer.writeAll("\nBranch History:\n");
         try writer.writeAll("===============\n\n");
         
-        var branch_list = try branches.listBranches(self.allocator);
+        const branch_list = try branches.listBranches(self.allocator);
         defer {
             for (branch_list) |name| {
                 self.allocator.free(name);
@@ -603,7 +603,7 @@ pub const BranchVisualizer = struct {
             try writer.writeAll("\n\n");
         }
         
-        return output.toOwnedSlice();
+        return output.toOwnedSlice(self.allocator);
     }
     
     /// Generate Graphviz DOT format
@@ -612,20 +612,20 @@ pub const BranchVisualizer = struct {
         branches: *BranchManager,
         events: *log.EventLog,
     ) ![]u8 {
-        var output = std.ArrayList(u8).init(self.allocator);
-        errdefer output.deinit();
-        
-        const writer = output.writer();
+        var output = std.ArrayListUnmanaged(u8){};
+        errdefer output.deinit(self.allocator);
+
+        const writer = output.writer(self.allocator);
         
         try writer.writeAll("digraph History {\n");
         try writer.writeAll("  rankdir=TB;\n");
         try writer.writeAll("  node [shape=box];\n\n");
         
         // Collect all events
-        var all_events = std.ArrayList(Event).init(self.allocator);
-        defer all_events.deinit();
+        var all_events = std.ArrayListUnmanaged(Event){};
+        defer all_events.deinit(self.allocator);
         
-        var branch_list = try branches.listBranches(self.allocator);
+        const branch_list = try branches.listBranches(self.allocator);
         defer {
             for (branch_list) |name| {
                 self.allocator.free(name);
@@ -641,7 +641,7 @@ pub const BranchVisualizer = struct {
             
             while (!std.mem.eql(u8, &current, &zero_hash)) {
                 if (events.getByHash(current)) |event| {
-                    try all_events.append(event);
+                    try all_events.append(self.allocator, event);
                     current = event.parent;
                 } else {
                     break;
@@ -689,7 +689,7 @@ pub const BranchVisualizer = struct {
         
         try writer.writeAll("}\n");
         
-        return output.toOwnedSlice();
+        return output.toOwnedSlice(self.allocator);
     }
 };
 
@@ -727,7 +727,7 @@ test "merge engine fast-forward" {
     defer events.deinit();
     
     const e1 = try events.append(.WorldCreated, "a://world", "{}");
-    const e2 = try events.append(.StateChanged, "a://world", "{\"x\":1}");
+    _ = try events.append(.StateChanged, "a://world", "{\"x\":1}");
     const e3 = try events.append(.StateChanged, "a://world", "{\"x\":2}");
     
     const engine = MergeEngine.init(testing.allocator);

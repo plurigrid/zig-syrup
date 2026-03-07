@@ -93,14 +93,14 @@ pub const MerkleSync = struct {
         remote_root: Hash,
         remote_levels: []const []const Hash,
     ) ![]Hash {
-        var differences = std.ArrayList(Hash).init(self.allocator);
-        errdefer differences.deinit();
+        var differences = std.ArrayListUnmanaged(Hash){};
+        errdefer differences.deinit(self.allocator);
         
         // If roots match, no differences
         if (std.mem.eql(u8, &local_tree.root, &remote_root)) {
-            return differences.toOwnedSlice();
+            return differences.toOwnedSlice(self.allocator);
         }
-        
+
         // Compare level by level
         if (remote_levels.len > 0 and local_tree.levels.items.len > 0) {
             const local_leaves = local_tree.levels.items[0];
@@ -124,13 +124,13 @@ pub const MerkleSync = struct {
                     !std.mem.eql(u8, &local_hash.?, &remote_hash.?)) {
                     // Add the remote hash as one we need
                     if (remote_hash) |h| {
-                        try differences.append(h);
+                        try differences.append(self.allocator, h);
                     }
                 }
             }
         }
         
-        return differences.toOwnedSlice();
+        return differences.toOwnedSlice(self.allocator);
     }
     
     /// Serialize Merkle tree for network
@@ -169,8 +169,8 @@ pub const DeltaEncoder = struct {
         local_events: []const Event,
         remote_hashes: []const Hash,
     ) ![]const Event {
-        var delta = std.ArrayList(Event).init(self.allocator);
-        errdefer delta.deinit();
+        var delta = std.ArrayListUnmanaged(Event){};
+        errdefer delta.deinit(self.allocator);
         
         // Build set of remote hashes
         var remote_set = std.HashMap(Hash, void, format.HashContext, std.hash_map.default_max_load_percentage).init(self.allocator);
@@ -183,21 +183,21 @@ pub const DeltaEncoder = struct {
         // Find events not in remote set
         for (local_events) |event| {
             if (!remote_set.contains(event.hash)) {
-                try delta.append(event);
+                try delta.append(self.allocator, event);
             }
         }
-        
-        return delta.toOwnedSlice();
+
+        return delta.toOwnedSlice(self.allocator);
     }
     
     /// Decode and apply delta
     pub fn applyDelta(
         self: Self,
-        log: *EventLog,
+        event_log: *EventLog,
         delta: []const Event,
     ) !void {
         // Sort by sequence number to ensure correct order
-        var sorted = try self.allocator.alloc(Event, delta.len);
+        const sorted = try self.allocator.alloc(Event, delta.len);
         defer self.allocator.free(sorted);
         
         @memcpy(sorted, delta);
@@ -210,20 +210,20 @@ pub const DeltaEncoder = struct {
         // Apply each event
         for (sorted) |event| {
             // Check if already exists
-            if (log.getByHash(event.hash) == null) {
+            if (event_log.getByHash(event.hash) == null) {
                 // Add to log
                 // Note: In real implementation, we'd need to handle ordering constraints
-                _ = try log.append(event.type, event.world_uri, event.payload);
+                _ = try event_log.append(event.type, event.world_uri, event.payload);
             }
         }
     }
     
     /// Compress events using delta compression
     pub fn compressEvents(self: Self, events: []const Event, base: ?Event) ![]u8 {
-        var output = std.ArrayList(u8).init(self.allocator);
-        defer output.deinit();
-        
-        const writer = output.writer();
+        var output = std.ArrayListUnmanaged(u8){};
+        defer output.deinit(self.allocator);
+
+        const writer = output.writer(self.allocator);
         
         // Write count
         try writer.writeInt(u32, @intCast(events.len), .little);
@@ -272,7 +272,7 @@ pub const DeltaEncoder = struct {
             }
         }
         
-        return output.toOwnedSlice();
+        return output.toOwnedSlice(self.allocator);
     }
 };
 
@@ -306,12 +306,12 @@ pub const CRDTMerge = struct {
         }
         
         // Add remote events that don't exist locally
-        var to_add = std.ArrayList(Event).init(self.allocator);
-        defer to_add.deinit();
-        
+        var to_add = std.ArrayListUnmanaged(Event){};
+        defer to_add.deinit(self.allocator);
+
         for (remote_events) |event| {
             if (!local_set.contains(event.hash)) {
-                try to_add.append(event);
+                try to_add.append(self.allocator, event);
             }
         }
         
@@ -343,7 +343,7 @@ pub const CRDTMerge = struct {
         
         // Vector clock implementation would go here
         // For now, just sort by timestamp
-        var sorted = try std.heap.page_allocator.alloc(Event, events.len);
+        const sorted = try std.heap.page_allocator.alloc(Event, events.len);
         @memcpy(sorted, events);
         
         std.sort.insertion(Event, sorted, {}, struct {
@@ -478,15 +478,15 @@ pub const SyncEngine = struct {
     }
     
     fn getEventHashes(self: Self, event_log: *EventLog) ![]Hash {
-        var hashes = std.ArrayList(Hash).init(self.allocator);
-        errdefer hashes.deinit();
-        
+        var hashes = std.ArrayListUnmanaged(Hash){};
+        errdefer hashes.deinit(self.allocator);
+
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
-            try hashes.append(event.hash);
+            try hashes.append(self.allocator, event.hash);
         }
-        
-        return hashes.toOwnedSlice();
+
+        return hashes.toOwnedSlice(self.allocator);
     }
     
     fn eventsToHashes(self: Self, events: []const Event) ![]Hash {
@@ -559,8 +559,8 @@ const testing = std.testing;
 test "merkle sync" {
     const merkle = MerkleSync.init(testing.allocator);
     
-    var local_events = std.ArrayList(Event).init(testing.allocator);
-    defer local_events.deinit();
+    var local_events = std.ArrayListUnmanaged(Event){};
+    defer local_events.deinit(testing.allocator);
     
     // Create some events
     const e1 = Event{
@@ -572,7 +572,7 @@ test "merkle sync" {
         .type = .WorldCreated,
         .payload = "{}",
     };
-    try local_events.append(e1);
+    try local_events.append(testing.allocator, e1);
     
     // Build tree
     var tree = try merkle.buildTree(local_events.items);
@@ -584,10 +584,10 @@ test "merkle sync" {
 test "delta encoding" {
     const encoder = DeltaEncoder.init(testing.allocator);
     
-    var local = std.ArrayList(Event).init(testing.allocator);
-    defer local.deinit();
-    
-    try local.append(.{
+    var local = std.ArrayListUnmanaged(Event){};
+    defer local.deinit(testing.allocator);
+
+    try local.append(testing.allocator, .{
         .timestamp = 1000,
         .seq = 1,
         .hash = computeEventHash(1),
@@ -596,8 +596,8 @@ test "delta encoding" {
         .type = .WorldCreated,
         .payload = "{}",
     });
-    
-    try local.append(.{
+
+    try local.append(testing.allocator, .{
         .timestamp = 2000,
         .seq = 2,
         .hash = computeEventHash(2),
@@ -606,11 +606,11 @@ test "delta encoding" {
         .type = .StateChanged,
         .payload = "{\"x\":1}",
     });
-    
+
     // Remote has only first event
-    var remote_hashes = std.ArrayList(Hash).init(testing.allocator);
-    defer remote_hashes.deinit();
-    try remote_hashes.append(computeEventHash(1));
+    var remote_hashes = std.ArrayListUnmanaged(Hash){};
+    defer remote_hashes.deinit(testing.allocator);
+    try remote_hashes.append(testing.allocator, computeEventHash(1));
     
     const delta = try encoder.encodeDelta(local.items, remote_hashes.items);
     defer testing.allocator.free(delta);

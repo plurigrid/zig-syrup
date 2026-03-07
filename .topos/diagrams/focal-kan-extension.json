@@ -1,0 +1,87 @@
+{
+  "type": "diagram",
+  "name": "Focal Denoising as Left Kan Extension",
+  "diagramIn": {
+    "_id": "reel-diffusion-flow",
+    "_version": null,
+    "_server": "local",
+    "type": "diagram-in"
+  },
+  "notebook": {
+    "cellContents": {
+      "f1000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "f1000001-0000-7000-8000-000000000001",
+        "content": "# Focal Denoising as Left Kan Extension (Riehl)\n\nThe ncreel layout algorithm is a left Kan extension:\n\n```\nLan_focus(F|_focused) = Render\n```\n\n\"The rendered layout is the best approximation of the full reel state given that we start from the focused tablet.\"\n\nThis is exactly what the man page describes:\n> A redraw starts with the focused tablet... its callback is invoked with a plane as large as the reel... Tablets are successively lain out in these spaces until the reel is filled.\n\n## Categorical Structure\n- F: Cylinder -> Tree -> Syrup (the abstract reel state functor)\n- focus: {focused} -> Cylinder (inclusion of the focused tablet)\n- Render: Cylinder -> Plane (the layout rendering)\n- Lan_focus(F|_focused) = Render (the universal property)\n\nThe focused tablet gets the entire reel if it needs it (maximum capability). Remaining tablets share what's left (attenuated capability). This IS the Kan extension: the best extension of partial data to the full domain."
+      },
+      "f1000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "f1000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "FocusInclusion",
+          "id": "f1000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Object" },
+          "over": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "f1000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "f1000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "FullReelFunctor",
+          "id": "f1000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Object" },
+          "over": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "f1000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "f1000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "RenderedLayout",
+          "id": "f1000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Object" },
+          "over": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "f1000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "f1000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "left_kan_extension",
+          "id": "f1000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "over": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000030" },
+          "dom": { "tag": "Basic", "content": "f1000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "f1000001-0000-7000-8000-000000000012" }
+        }
+      },
+      "f1000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "f1000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "universal_property",
+          "id": "f1000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "over": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000031" },
+          "dom": { "tag": "Basic", "content": "f1000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "f1000001-0000-7000-8000-000000000011" }
+        }
+      }
+    },
+    "cellOrder": [
+      "f1000001-0000-7000-8000-000000000001",
+      "f1000001-0000-7000-8000-000000000010",
+      "f1000001-0000-7000-8000-000000000011",
+      "f1000001-0000-7000-8000-000000000012",
+      "f1000001-0000-7000-8000-000000000030",
+      "f1000001-0000-7000-8000-000000000031"
+    ]
+  },
+  "version": "1"
+}

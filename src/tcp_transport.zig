@@ -7,7 +7,7 @@
 const std = @import("std");
 const net = std.net;
 const posix = std.posix;
-const frame = @import("message_frame.zig");
+const frame = @import("message_frame");
 const Allocator = std.mem.Allocator;
 
 pub const TransportError = error{

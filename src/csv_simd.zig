@@ -75,7 +75,7 @@ fn parseQuotedField(field_str: []const u8) !f64 {
 /// Parse single CSV line into fields (hybrid fast/slow path)
 /// Chunked processing for SIMD efficiency
 pub fn parseCSVLine(
-    allocator: std.mem.Allocator,
+    _: std.mem.Allocator,
     line: []const u8,
     record: *CSVRecord,
 ) !void {
@@ -240,7 +240,7 @@ test "parse quoted field" {
 }
 
 test "parse CSV line with 8 fields" {
-    var gpa = std.testing.allocator;
+    const gpa = std.testing.allocator;
     var record: CSVRecord = undefined;
 
     const line = "1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0";
@@ -252,7 +252,7 @@ test "parse CSV line with 8 fields" {
 }
 
 test "parse CSV line with spaces" {
-    var gpa = std.testing.allocator;
+    const gpa = std.testing.allocator;
     var record: CSVRecord = undefined;
 
     const line = " 1.0 , 2.0 , 3.0 , 4.0 , 5.0 , 6.0 , 7.0 , 8.0 ";
@@ -263,7 +263,7 @@ test "parse CSV line with spaces" {
 }
 
 test "batch parsing" {
-    var gpa = std.testing.allocator;
+    const gpa = std.testing.allocator;
 
     const lines = [_][]const u8{
         "1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0",

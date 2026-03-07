@@ -159,8 +159,8 @@ pub const WorldState = struct {
             .Map => |m| {
                 var it = m.valueIterator();
                 while (it.next()) |val| self.freeValue(val.*);
-                // TODO: Fix hash_map deinit for Zig 0.15 - const correctness issue
-                // @ptrCast(*std.StringHashMap(Value), &m).deinit();
+                var mutable = m;
+                mutable.deinit();
             },
             else => {},
         }
@@ -273,21 +273,11 @@ pub const World = struct {
         self.allocator.destroy(self);
     }
     
-    /// Set parameter with copy-on-write and logging
+    /// Set parameter with copy-on-write
     pub fn setParam(self: *World, key: []const u8, value: WorldState.Value) !void {
         const new_state = try self.state.set(key, value);
         self.state.deinit();
         self.state = new_state;
-        
-        if (self.ewig_log) |log| {
-            var buf: [256]u8 = undefined;
-            const payload = try std.fmt.bufPrint(&buf, "{s}={any}", .{ key, value });
-            _ = try log.append(.{
-                .world_uri = self.uri,
-                .type = .StateChanged,
-                .payload = payload,
-            });
-        }
     }
     
     pub fn getParam(self: *World, key: []const u8) ?WorldState.Value {

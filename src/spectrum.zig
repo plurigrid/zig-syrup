@@ -29,7 +29,7 @@ const std = @import("std");
 const math = std.math;
 
 // Relative imports from the same source tree
-const rainbow = @import("rainbow.zig");
+const rainbow = @import("rainbow");
 const RGB = rainbow.RGB;
 const HCL = rainbow.HCL;
 
@@ -419,7 +419,7 @@ pub fn persistenceColor(birth: f64, death: f64, max_persistence: f64) TriadicCol
 // SYRUP SERIALIZATION
 // ============================================================================
 
-const syrup = @import("syrup.zig");
+const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 
 /// Serialize a TriadicColor to Syrup record

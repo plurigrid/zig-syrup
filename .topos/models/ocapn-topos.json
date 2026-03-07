@@ -1,0 +1,198 @@
+{
+  "type": "model",
+  "name": "OCapN: Spans of Selective Boundaries (Vat → Session ← Vat)",
+  "theory": "causal-loop",
+  "notebook": {
+    "cellContents": {
+      "e0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "e0000001-0000-7000-8000-000000000001",
+        "content": "# OCapN: Vat → Session ← Vat\n\nOCapN is NOT a protocol where vats send capabilities to each other. It is a universe of **spans**:\n\n```\nVat → CapTPSession ← Vat\n```\n\nNeither vat has direct access to the other. They meet IN the CapTP session. The session is the shared world — the mediating object where all interaction happens. A capability is not a thing; it is a **projection** — one vat's opening into the shared session.\n\n## Span Structure\n- `delegate`: Vat → CapTPSession (+, active projection of authority)\n- `validate`: Vat → CapTPSession (-, responsive acceptance of authority)\n- The session is always 0 (Coordinator). Neither vat owns it.\n\n## Span Composition (Third-Party Handoff)\n```\nA → Session₁ ← B → Session₂ ← C\n     composes via pullback at B:\nA → Session₁ ×_B Session₂ ← C\n```\n\nB doesn't relay capabilities from A to C. B co-constitutes the composed world. The pullback IS the introduction — a new shared context formed from the overlap at B. This is exactly how third-party handoffs work in CapTP: B doesn't forward a reference, B enables A and C to form a new direct session via the gift table / handoff protocol.\n\n## Promise Pipelining as Temporal Span\nA promise is a projection-in-time: the session doesn't exist yet, but the projection is already committed. `pipeline: Promise → CapTPSession` is a morphism that factors through time. The promise resolves when the session materializes.\n\n## Consent as Subobject Classifier\nEvery projection (Vat → Session) is a consent act. The capability IS the consent. Having a reference = having been consented to. The MarkovBlanket is the boundary that separates what's projected from what's withheld. POLA: the default is zero projection.\n\n## GF(3) of the Span\n- Left projection (delegate): +1 (Generator — the one who opens)\n- Session: 0 (Coordinator — the shared meeting place)\n- Right projection (validate): -1 (Validator — the one who accepts/checks)\n- Sum: (+1) + 0 + (-1) = 0 ✓\n\n## Instances (from zig-syrup)\n| Left | Session (World) | Right | Module |\n|------|-----------------|-------|--------|\n| Vat | CapTPSession (Bootstrap) | Vat | message_frame.zig |\n| Actor | Actormap (transactional heap) | Actor | worlds/world.zig |\n| Process | TCPTransport (framed pipe) | Process | tcp_transport.zig |\n| Tree | EditPath (TreeDiff) | Tree | syrup.zig |"
+      },
+      "e0000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "Vat",
+          "id": "e0000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "CapTPSession",
+          "id": "e0000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "Promise",
+          "id": "e0000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000013": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000013",
+        "content": {
+          "tag": "object",
+          "name": "MarkovBlanket",
+          "id": "e0000001-0000-7000-8000-000000000013",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000014": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000014",
+        "content": {
+          "tag": "object",
+          "name": "SturdyRef",
+          "id": "e0000001-0000-7000-8000-000000000014",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000015": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000015",
+        "content": {
+          "tag": "object",
+          "name": "ThirdPartyHandoff",
+          "id": "e0000001-0000-7000-8000-000000000015",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000016": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000016",
+        "content": {
+          "tag": "object",
+          "name": "Consent",
+          "id": "e0000001-0000-7000-8000-000000000016",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000020": {
+        "tag": "rich-text",
+        "id": "e0000001-0000-7000-8000-000000000020",
+        "content": "## Span Morphisms (all projections into shared sessions)\n\nEvery morphism is a projection into or between shared worlds. There are no direct Vat → Vat edges. The signed polarity encodes whether the projection is active (+, initiating/granting) or passive (-, receiving/validating)."
+      },
+      "e0000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "delegate",
+          "id": "e0000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "validate",
+          "id": "e0000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Basic", "content": "Negative" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000032": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000032",
+        "content": {
+          "tag": "morphism",
+          "name": "pipeline",
+          "id": "e0000001-0000-7000-8000-000000000032",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000033": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000033",
+        "content": {
+          "tag": "morphism",
+          "name": "enliven",
+          "id": "e0000001-0000-7000-8000-000000000033",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000014" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000034": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000034",
+        "content": {
+          "tag": "morphism",
+          "name": "compose_spans",
+          "id": "e0000001-0000-7000-8000-000000000034",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000015" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000035": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000035",
+        "content": {
+          "tag": "morphism",
+          "name": "confused_deputy",
+          "id": "e0000001-0000-7000-8000-000000000035",
+          "morType": { "tag": "Basic", "content": "Negative" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000011" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000013" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000036": {
+        "tag": "formal",
+        "id": "e0000001-0000-7000-8000-000000000036",
+        "content": {
+          "tag": "morphism",
+          "name": "consent_boundary",
+          "id": "e0000001-0000-7000-8000-000000000036",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000013" },
+          "cod": { "tag": "Basic", "content": "e0000001-0000-7000-8000-000000000016" }
+        }
+      },
+      "e0000001-0000-7000-8000-000000000040": {
+        "tag": "rich-text",
+        "id": "e0000001-0000-7000-8000-000000000040",
+        "content": "## Why Spans, Not Morphisms\n\nThe original OCapN design says \"send a capability reference to another vat.\" This sounds like a morphism Vat → Vat. But what actually happens:\n\n1. Two vats establish a CapTP session (the shared world)\n2. One vat projects (delegate) a reference INTO the session\n3. The other vat projects (validate) acceptance FROM the session\n4. Neither vat has access to the other's internals\n5. The session is the only meeting point\n\nThis is Mitsein: neither vat is ontologically prior. Both are projections into a shared context that neither owns.\n\n## Revocation as Span Dissolution\nRevocation is not \"taking back\" a capability. It is the LEFT projection withdrawing from the session. The shared world shrinks. If both projections withdraw, the session ceases to exist. The world only exists as long as at least one projection sustains it.\n\n## Confused Deputy as Boundary Violation\nThe confused deputy problem (Session → MarkovBlanket, negative) is what happens when a projection crosses the wrong boundary — the session leaks into a context it wasn't projected into. The MarkovBlanket IS the boundary that should have prevented this. The negative sign means this is a pathological flow (reducing authority rather than increasing it)."
+      }
+    },
+    "cellOrder": [
+      "e0000001-0000-7000-8000-000000000001",
+      "e0000001-0000-7000-8000-000000000010",
+      "e0000001-0000-7000-8000-000000000011",
+      "e0000001-0000-7000-8000-000000000012",
+      "e0000001-0000-7000-8000-000000000013",
+      "e0000001-0000-7000-8000-000000000014",
+      "e0000001-0000-7000-8000-000000000015",
+      "e0000001-0000-7000-8000-000000000016",
+      "e0000001-0000-7000-8000-000000000020",
+      "e0000001-0000-7000-8000-000000000030",
+      "e0000001-0000-7000-8000-000000000031",
+      "e0000001-0000-7000-8000-000000000032",
+      "e0000001-0000-7000-8000-000000000033",
+      "e0000001-0000-7000-8000-000000000034",
+      "e0000001-0000-7000-8000-000000000035",
+      "e0000001-0000-7000-8000-000000000036",
+      "e0000001-0000-7000-8000-000000000040"
+    ]
+  },
+  "version": "1"
+}

@@ -1,0 +1,219 @@
+{
+  "type": "model",
+  "name": "Color-GF(3)-Tiling: Hyperbolic Chromatic Diffusion",
+  "theory": "causal-loop",
+  "notebook": {
+    "cellContents": {
+      "c0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "c0000001-0000-7000-8000-000000000001",
+        "content": "# Color x GF(3) x Tiling x Hyperbolicity\n\nThe chromatic diffusion framework where:\n- Colors live in GF(3) = {-1, 0, +1} with conservation law sum -> 0\n- Tilings provide the graph structure (dual graph: tiles=nodes, shared edges=adjacency)\n- Hyperbolicity of the tiling graph controls mixing rate via Cheeger -> spectral gap -> O(log n)\n- The Potts model on the tiling gives the coloring distribution; Glauber dynamics gives the Markov chain\n\n## Rigor Levels (Tao framework)\n- **Pre-rigorous**: Run experiments on small tilings, show convergence plots\n- **Rigorous**: Prove spectral gap via Chen-Liu-Vigoda spectral independence\n- **Post-rigorous**: Understand WHY via Gromov quasi-isometry to tree factor\n\n## Key Bounds\n- q=3 colors, Delta=max degree of tiling graph\n- Dobrushin regime: q > 2*Delta (restrictive for q=3)\n- Spectral independence: q >= 1.809*Delta (flip dynamics)\n- Hyperbolic tilings: spectral gap >= const > 0 (Cheeger positive)\n- Tree content: O(log m) mixing (0-hyperbolic)"
+      },
+      "c0000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "GF3Trit",
+          "id": "c0000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "TilingGraph",
+          "id": "c0000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "HyperbolicGeometry",
+          "id": "c0000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000013": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000013",
+        "content": {
+          "tag": "object",
+          "name": "CheegerConstant",
+          "id": "c0000001-0000-7000-8000-000000000013",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000014": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000014",
+        "content": {
+          "tag": "object",
+          "name": "SpectralGap",
+          "id": "c0000001-0000-7000-8000-000000000014",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000015": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000015",
+        "content": {
+          "tag": "object",
+          "name": "MixingTime",
+          "id": "c0000001-0000-7000-8000-000000000015",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000016": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000016",
+        "content": {
+          "tag": "object",
+          "name": "PottsPartitionFn",
+          "id": "c0000001-0000-7000-8000-000000000016",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000017": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000017",
+        "content": {
+          "tag": "object",
+          "name": "GlauberDynamics",
+          "id": "c0000001-0000-7000-8000-000000000017",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000018": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000018",
+        "content": {
+          "tag": "object",
+          "name": "ApollonianPacking",
+          "id": "c0000001-0000-7000-8000-000000000018",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000019": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000019",
+        "content": {
+          "tag": "object",
+          "name": "GromovBoundary",
+          "id": "c0000001-0000-7000-8000-000000000019",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "negative_curvature",
+          "id": "c0000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000013" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "cheeger_to_gap",
+          "id": "c0000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000013" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000014" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000032": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000032",
+        "content": {
+          "tag": "morphism",
+          "name": "gap_to_mixing",
+          "id": "c0000001-0000-7000-8000-000000000032",
+          "morType": { "tag": "Basic", "content": "Negative" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000014" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000015" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000033": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000033",
+        "content": {
+          "tag": "morphism",
+          "name": "potts_to_glauber",
+          "id": "c0000001-0000-7000-8000-000000000033",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000016" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000017" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000034": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000034",
+        "content": {
+          "tag": "morphism",
+          "name": "tiling_coloring",
+          "id": "c0000001-0000-7000-8000-000000000034",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000011" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000035": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000035",
+        "content": {
+          "tag": "morphism",
+          "name": "bourgain_gamburd",
+          "id": "c0000001-0000-7000-8000-000000000035",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000018" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000014" }
+        }
+      },
+      "c0000001-0000-7000-8000-000000000036": {
+        "tag": "formal",
+        "id": "c0000001-0000-7000-8000-000000000036",
+        "content": {
+          "tag": "morphism",
+          "name": "boundary_convergence",
+          "id": "c0000001-0000-7000-8000-000000000036",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000017" },
+          "cod": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000019" }
+        }
+      }
+    },
+    "cellOrder": [
+      "c0000001-0000-7000-8000-000000000001",
+      "c0000001-0000-7000-8000-000000000010",
+      "c0000001-0000-7000-8000-000000000011",
+      "c0000001-0000-7000-8000-000000000012",
+      "c0000001-0000-7000-8000-000000000013",
+      "c0000001-0000-7000-8000-000000000014",
+      "c0000001-0000-7000-8000-000000000015",
+      "c0000001-0000-7000-8000-000000000016",
+      "c0000001-0000-7000-8000-000000000017",
+      "c0000001-0000-7000-8000-000000000018",
+      "c0000001-0000-7000-8000-000000000019",
+      "c0000001-0000-7000-8000-000000000030",
+      "c0000001-0000-7000-8000-000000000031",
+      "c0000001-0000-7000-8000-000000000032",
+      "c0000001-0000-7000-8000-000000000033",
+      "c0000001-0000-7000-8000-000000000034",
+      "c0000001-0000-7000-8000-000000000035",
+      "c0000001-0000-7000-8000-000000000036"
+    ]
+  },
+  "version": "1"
+}

@@ -1,0 +1,232 @@
+{
+  "type": "model",
+  "name": "Syrup Value Tree: Schema as Grammar-Constrained Diffusion Target",
+  "theory": "simple-schema",
+  "notebook": {
+    "cellContents": {
+      "d0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "d0000001-0000-7000-8000-000000000001",
+        "content": "# Syrup Value Type as Categorical Schema\n\nThe OCapN Syrup serialization format's recursive Value union, expressed as a schema (category with attributes). Objects are Syrup types; morphisms encode containment/reference relationships.\n\nThis schema is the **grammar** that constrains tree diffusion. Every intermediate state during denoising must be a valid instance of this schema. The five diffusion approaches (A-E) all operate on instances of this schema.\n\n## Connection to Tree Diffusion (Berkeley ICLR 2025)\n- Forward noise: grammar-constrained subtree replacement within Value tree\n- Reverse denoise: learned neural policy predicts (position, replacement) pairs\n- TreeDiff: O(|A|+|B|) edit paths between Value instances\n- CFG constraint: Syrup grammar ensures 100% syntactic validity at every step\n\n## Connection to ncreel\n- ReelState is an instance of this schema\n- Each tablet's content is a nested Value subtree\n- The encoding: <<'reel:state' focused_idx [tablets...] {layout...}>>"
+      },
+      "d0000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "Value",
+          "id": "d0000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "Atom",
+          "id": "d0000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "Container",
+          "id": "d0000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000013": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000013",
+        "content": {
+          "tag": "object",
+          "name": "List",
+          "id": "d0000001-0000-7000-8000-000000000013",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000014": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000014",
+        "content": {
+          "tag": "object",
+          "name": "Dictionary",
+          "id": "d0000001-0000-7000-8000-000000000014",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000015": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000015",
+        "content": {
+          "tag": "object",
+          "name": "Record",
+          "id": "d0000001-0000-7000-8000-000000000015",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000016": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000016",
+        "content": {
+          "tag": "object",
+          "name": "Set",
+          "id": "d0000001-0000-7000-8000-000000000016",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000017": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000017",
+        "content": {
+          "tag": "object",
+          "name": "ByteSequence",
+          "id": "d0000001-0000-7000-8000-000000000017",
+          "obType": { "tag": "Basic", "content": "AttrType" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000018": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000018",
+        "content": {
+          "tag": "object",
+          "name": "CanonicalOrder",
+          "id": "d0000001-0000-7000-8000-000000000018",
+          "obType": { "tag": "Basic", "content": "AttrType" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000019": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000019",
+        "content": {
+          "tag": "object",
+          "name": "DiffusionStep",
+          "id": "d0000001-0000-7000-8000-000000000019",
+          "obType": { "tag": "Basic", "content": "Entity" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "is_a",
+          "id": "d0000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Entity" } },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000011" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "is_a",
+          "id": "d0000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Entity" } },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000032": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000032",
+        "content": {
+          "tag": "morphism",
+          "name": "contains",
+          "id": "d0000001-0000-7000-8000-000000000032",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Entity" } },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000013" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000033": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000033",
+        "content": {
+          "tag": "morphism",
+          "name": "key_value",
+          "id": "d0000001-0000-7000-8000-000000000033",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Entity" } },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000014" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000034": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000034",
+        "content": {
+          "tag": "morphism",
+          "name": "label_fields",
+          "id": "d0000001-0000-7000-8000-000000000034",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Entity" } },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000015" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000035": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000035",
+        "content": {
+          "tag": "morphism",
+          "name": "wire_encoding",
+          "id": "d0000001-0000-7000-8000-000000000035",
+          "morType": { "tag": "Basic", "content": "Attr" },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000017" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000036": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000036",
+        "content": {
+          "tag": "morphism",
+          "name": "sort_order",
+          "id": "d0000001-0000-7000-8000-000000000036",
+          "morType": { "tag": "Basic", "content": "Attr" },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000014" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000018" }
+        }
+      },
+      "d0000001-0000-7000-8000-000000000037": {
+        "tag": "formal",
+        "id": "d0000001-0000-7000-8000-000000000037",
+        "content": {
+          "tag": "morphism",
+          "name": "mutate",
+          "id": "d0000001-0000-7000-8000-000000000037",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Entity" } },
+          "dom": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000019" },
+          "cod": { "tag": "Basic", "content": "d0000001-0000-7000-8000-000000000010" }
+        }
+      }
+    },
+    "cellOrder": [
+      "d0000001-0000-7000-8000-000000000001",
+      "d0000001-0000-7000-8000-000000000010",
+      "d0000001-0000-7000-8000-000000000011",
+      "d0000001-0000-7000-8000-000000000012",
+      "d0000001-0000-7000-8000-000000000013",
+      "d0000001-0000-7000-8000-000000000014",
+      "d0000001-0000-7000-8000-000000000015",
+      "d0000001-0000-7000-8000-000000000016",
+      "d0000001-0000-7000-8000-000000000017",
+      "d0000001-0000-7000-8000-000000000018",
+      "d0000001-0000-7000-8000-000000000019",
+      "d0000001-0000-7000-8000-000000000030",
+      "d0000001-0000-7000-8000-000000000031",
+      "d0000001-0000-7000-8000-000000000032",
+      "d0000001-0000-7000-8000-000000000033",
+      "d0000001-0000-7000-8000-000000000034",
+      "d0000001-0000-7000-8000-000000000035",
+      "d0000001-0000-7000-8000-000000000036",
+      "d0000001-0000-7000-8000-000000000037"
+    ]
+  },
+  "version": "1"
+}

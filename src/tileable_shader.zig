@@ -479,7 +479,7 @@ pub const TreeDecomposition = struct {
         for (0..bh) |by| {
             for (0..bw) |bx| {
                 const bag_idx = by * bw + bx;
-                var tile_indices = std.ArrayList(u32).init(allocator);
+                var tile_indices = std.ArrayListUnmanaged(u32){};
 
                 // Collect tiles in this 2x2 region
                 const x_start = @as(u32, @intCast(bx)) * 2;
@@ -489,7 +489,7 @@ pub const TreeDecomposition = struct {
 
                 for (y_start..y_end) |ty| {
                     for (x_start..x_end) |tx| {
-                        try tile_indices.append(@intCast(ty * grid.width + tx));
+                        try tile_indices.append(allocator, @intCast(ty * grid.width + tx));
                     }
                 }
 
@@ -499,15 +499,15 @@ pub const TreeDecomposition = struct {
                 const parent: ?u32 = if (bag_idx > 0) @intCast(bag_idx - 1) else null;
 
                 // Children (next bag in chain)
-                var children = std.ArrayList(u32).init(allocator);
+                var children = std.ArrayListUnmanaged(u32){};
                 if (bag_idx + 1 < n_bags) {
-                    try children.append(@intCast(bag_idx + 1));
+                    try children.append(allocator, @intCast(bag_idx + 1));
                 }
 
                 bags[bag_idx] = .{
-                    .tiles = try tile_indices.toOwnedSlice(),
+                    .tiles = try tile_indices.toOwnedSlice(allocator),
                     .parent = parent,
-                    .children = try children.toOwnedSlice(),
+                    .children = try children.toOwnedSlice(allocator),
                     .distilled = null,
                 };
             }

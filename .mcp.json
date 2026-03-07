@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "zig-syrup": {
+      "command": "./zig-out/bin/mcp-server",
+      "args": [],
+      "env": {},
+      "description": "Zig-Syrup MCP server: Syrup serialization, virion propagation, world configuration, CID identity, ACP bridge. Build first: zig build"
+    }
+  }
+}

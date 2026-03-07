@@ -263,22 +263,25 @@ pub const EventLog = struct {
         return event;
     }
     
-    /// Append a batch of events efficiently
+    /// Append a batch of events efficiently (batched disk writes)
     pub fn appendBatch(self: *Self, batch: EventBatch) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
-        // TODO: Optimize batch persistence
+
+        // Phase 1: Index all events in memory
         for (batch.events.items) |event| {
             const idx = self.events.items.len;
             try self.events.append(self.allocator, event);
             try self.hash_index.put(self.allocator, event.hash, idx);
             try self.seq_index.put(self.allocator, event.seq, idx);
-            
+
             self.last_hash = event.hash;
             self.next_seq = event.seq + 1;
-            
-            if (self.file) |_| {
+        }
+
+        // Phase 2: Batch disk persistence (single write pass)
+        if (self.file) |_| {
+            for (batch.events.items) |event| {
                 try self.appendToDisk(event);
             }
         }

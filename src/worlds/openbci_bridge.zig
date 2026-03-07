@@ -211,14 +211,9 @@ pub const OpenBCIBridge = struct {
     
     pub fn init(allocator: Allocator, world: World) !Self {
         const fft_size = 256;
-        var window = try allocator.alloc(f32, fft_size);
-        
-        // Hann window
-        for (0..fft_size) |i| {
-            const n = @as(f32, @floatFromInt(i));
-            const N = @as(f32, @floatFromInt(fft_size));
-            window[i] = 0.5 * (1.0 - @cos(2.0 * std.math.pi * n / (N - 1)));
-        }
+        const fft_bands = @import("../fft_bands.zig");
+        const window = try allocator.alloc(f32, fft_size);
+        @memcpy(window, &fft_bands.hanning_256);
         
         return Self{
             .allocator = allocator,
@@ -360,7 +355,7 @@ pub const OpenBCIBridge = struct {
         );
         defer self.allocator.free(param_name);
         
-        try self.connected_world.setParameter(param_name, value);
+        try self.connected_world.setParam(param_name, .{ .Float = value });
     }
     
     /// Get brain state for player
@@ -463,7 +458,7 @@ pub const OpenBCIBridge = struct {
         
         try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("world"),
-            .value = syrup.Value.fromString(self.connected_world.config.uri),
+            .value = syrup.Value.fromString(self.connected_world.uri.name),
         });
         
         try entries.append(allocator, .{
@@ -540,10 +535,7 @@ test "brain state serialization" {
     };
     
     const syrup_val = try state.toSyrup(allocator);
-    defer {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-    }
+    defer syrup_val.deinitContainers(allocator);
     
     try testing.expect(syrup_val == .dictionary);
 }
@@ -551,13 +543,10 @@ test "brain state serialization" {
 test "openbci bridge" {
     const allocator = testing.allocator;
     
-    var world = try World.init(allocator, .{
-        .uri = "test://world",
-        .max_players = 3,
-    });
-    defer world.deinit();
+    const world_ptr = try World.create(allocator, "a://test-world", null);
+    defer world_ptr.destroy();
     
-    var bridge = try OpenBCIBridge.init(allocator, world);
+    var bridge = try OpenBCIBridge.init(allocator, world_ptr.*);
     defer bridge.deinit();
     
     try testing.expectEqual(@as(usize, 0), bridge.player_mappings.count());
@@ -566,13 +555,10 @@ test "openbci bridge" {
 test "player mapping" {
     const allocator = testing.allocator;
     
-    var world = try World.init(allocator, .{
-        .uri = "test://world",
-        .max_players = 3,
-    });
-    defer world.deinit();
+    const world_ptr = try World.create(allocator, "a://test-world", null);
+    defer world_ptr.destroy();
     
-    var bridge = try OpenBCIBridge.init(allocator, world);
+    var bridge = try OpenBCIBridge.init(allocator, world_ptr.*);
     defer bridge.deinit();
     
     const channels = &[_]EEGChannel{ .ch1, .ch2, .ch3 };
@@ -587,13 +573,10 @@ test "player mapping" {
 test "simulated sample" {
     const allocator = testing.allocator;
     
-    var world = try World.init(allocator, .{
-        .uri = "test://world",
-        .max_players = 3,
-    });
-    defer world.deinit();
+    const world_ptr = try World.create(allocator, "a://test-world", null);
+    defer world_ptr.destroy();
     
-    var bridge = try OpenBCIBridge.init(allocator, world);
+    var bridge = try OpenBCIBridge.init(allocator, world_ptr.*);
     defer bridge.deinit();
     
     const sample = try bridge.createSimulatedSample(0.75);

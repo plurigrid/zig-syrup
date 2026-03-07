@@ -374,38 +374,38 @@ pub const Ewig = struct {
     
     /// Query events by type
     pub fn queryByType(self: *Self, event_type: EventType, limit: ?usize) ![]Event {
-        var results = std.ArrayList(Event).init(self.allocator);
-        errdefer results.deinit();
-        
+        var results = std.ArrayListUnmanaged(Event){};
+        errdefer results.deinit(self.allocator);
+
         var it = self.iterator(.Forward);
         while (it.next()) |event| {
             if (event.type == event_type) {
-                try results.append(event);
+                try results.append(self.allocator, event);
                 if (limit) |l| {
                     if (results.items.len >= l) break;
                 }
             }
         }
-        
-        return results.toOwnedSlice();
+
+        return results.toOwnedSlice(self.allocator);
     }
     
     /// Query events by world
     pub fn queryByWorld(self: *Self, world_uri: []const u8, limit: ?usize) ![]Event {
-        var results = std.ArrayList(Event).init(self.allocator);
-        errdefer results.deinit();
-        
+        var results = std.ArrayListUnmanaged(Event){};
+        errdefer results.deinit(self.allocator);
+
         var it = self.iterator(.Forward);
         while (it.next()) |event| {
             if (std.mem.eql(u8, event.world_uri, world_uri)) {
-                try results.append(event);
+                try results.append(self.allocator, event);
                 if (limit) |l| {
                     if (results.items.len >= l) break;
                 }
             }
         }
-        
-        return results.toOwnedSlice();
+
+        return results.toOwnedSlice(self.allocator);
     }
     
     // ========================================================================
@@ -464,15 +464,17 @@ pub const EventBuilder = struct {
     event_type: ?EventType,
     world_uri: ?[]const u8,
     payload: ?[]const u8,
-    
+    payload_owned: bool,
+
     const Self = @This();
-    
+
     pub fn init(ewig: *Ewig) Self {
         return .{
             .ewig = ewig,
             .event_type = null,
             .world_uri = null,
             .payload = null,
+            .payload_owned = false,
         };
     }
     
@@ -494,6 +496,7 @@ pub const EventBuilder = struct {
     pub fn withStruct(self: *Self, payload: anytype) !*Self {
         const json = try std.json.stringifyAlloc(self.ewig.allocator, payload, .{});
         self.payload = json;
+        self.payload_owned = true;
         return self;
     }
     
@@ -504,9 +507,9 @@ pub const EventBuilder = struct {
         
         const event = try self.ewig.append(et, uri, pl);
         
-        // Clean up if we allocated
-        if (self.payload) |p| {
-            if (p != "{}") {
+        // Clean up only if we allocated (withStruct)
+        if (self.payload_owned) {
+            if (self.payload) |p| {
                 self.ewig.allocator.free(p);
             }
         }

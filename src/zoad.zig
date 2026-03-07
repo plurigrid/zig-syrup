@@ -547,8 +547,25 @@ fn handleInput(app: *AppState, ev: nc_backend.NotcursesBackend.InputEvent) !void
                 };
             } else {
                 try app.addMessage(.user_input, text);
-                // TODO: send to ACP agent if connected
-                if (app.conn != null) {
+                // Send to ACP agent if connected
+                if (app.conn) |conn| {
+                    const content_block = acp.ContentBlock{ .text = .{ .text = text } };
+                    const prompt_blocks = try app.allocator.alloc(acp.ContentBlock, 1);
+                    prompt_blocks[0] = content_block;
+                    const prompt_msg = acp.Message{
+                        .session_prompt = .{
+                            .session_id = app.session_id,
+                            .prompt = prompt_blocks,
+                        },
+                    };
+                    const syrup_val = try prompt_msg.toSyrup(app.allocator);
+                    var encode_buf: [4096]u8 = undefined;
+                    const encoded = try syrup_val.encodeBuf(&encode_buf);
+                    conn.stream.writeAll(encoded) catch |err| {
+                        var err_buf: [128]u8 = undefined;
+                        const err_msg = std.fmt.bufPrint(&err_buf, "Send failed: {}", .{err}) catch "Send failed";
+                        try app.addMessage(.system, err_msg);
+                    };
                     app.throbber_busy = true;
                 }
             }

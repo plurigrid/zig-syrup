@@ -1,0 +1,87 @@
+{
+  "type": "diagram",
+  "name": "Gromov Simplification: S^1 x_f T ~QI T",
+  "diagramIn": {
+    "_id": "color-gf3-tiling",
+    "_version": null,
+    "_server": "local",
+    "type": "diagram-in"
+  },
+  "notebook": {
+    "cellContents": {
+      "f0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "f0000001-0000-7000-8000-000000000001",
+        "content": "# The Gromov Collapse\n\nThe punchline of the entire framework. The ncreel's virtual cylinder S^1 with tree-structured tablet contents creates a warped product M = S^1 x_f T. At large scales, M is quasi-isometric to T (the tree factor) because S^1 is compact.\n\nTherefore:\n- Gromov boundary of M = Gromov boundary of T\n- Cheeger constant of M ~ Cheeger constant of T > 0\n- Mixing time ~ O(log |M|)\n- The cylinder doesn't matter\n\n## The Chain\n```\nNegative curvature (delta-hyperbolic)\n  => Exponential volume growth\n  => Positive Cheeger constant h(G) > 0\n  => Cheeger inequality: gap >= h^2/(2d)\n  => Spectral gap: 1 - lambda_2 >= const > 0\n  => Mixing time: O(log n)\n```\n\nThis is what Gromov would say: everything reduces to the hyperbolicity of the content trees. The presentation layer (reel, cylinder, UI) is a bounded geometric nuisance."
+      },
+      "f0000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "f0000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "CylinderFactor",
+          "id": "f0000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Object" },
+          "over": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "f0000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "f0000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "TreeFactor",
+          "id": "f0000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Object" },
+          "over": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000012" }
+        }
+      },
+      "f0000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "f0000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "WarpedProduct",
+          "id": "f0000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Object" },
+          "over": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "f0000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "f0000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "quasi_isometry",
+          "id": "f0000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "over": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000030" },
+          "dom": { "tag": "Basic", "content": "f0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "f0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "f0000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "f0000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "bounded_perturbation",
+          "id": "f0000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "over": { "tag": "Basic", "content": "c0000001-0000-7000-8000-000000000031" },
+          "dom": { "tag": "Basic", "content": "f0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "f0000001-0000-7000-8000-000000000012" }
+        }
+      }
+    },
+    "cellOrder": [
+      "f0000001-0000-7000-8000-000000000001",
+      "f0000001-0000-7000-8000-000000000010",
+      "f0000001-0000-7000-8000-000000000011",
+      "f0000001-0000-7000-8000-000000000012",
+      "f0000001-0000-7000-8000-000000000030",
+      "f0000001-0000-7000-8000-000000000031"
+    ]
+  },
+  "version": "1"
+}

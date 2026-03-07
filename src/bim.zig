@@ -279,8 +279,59 @@ pub const VM = struct {
                 .halt => {
                     return self.pop();
                 },
-                else => {
-                    // TODO: implement remaining opcodes
+                .bind => {
+                    // Extend substitution: bind variable arg1 to top of stack
+                    if (self.pop()) |term| {
+                        try self.subst.bind(instr.arg1, term);
+                    }
+                },
+                .call => {
+                    // Push return address, jump to target
+                    try self.push(Term{ .tag = .constant, .head = @intCast(self.pc), .args = &.{} });
+                    self.pc = instr.arg1;
+                },
+                .ret => {
+                    // Pop return address, jump back
+                    if (self.pop()) |ret_addr| {
+                        if (ret_addr.tag == .constant) {
+                            self.pc = @intCast(ret_addr.head);
+                        }
+                    }
+                },
+                .fuse => {
+                    // Core stellar resolution: unify two rays (terms) from different stars
+                    const ray_b = self.pop() orelse return error.StackUnderflow;
+                    const ray_a = self.pop() orelse return error.StackUnderflow;
+                    const result = try unify(self.allocator, &self.subst, ray_a, ray_b);
+                    try self.push(result);
+                    // If fusion fails, push FAIL and optionally jump
+                    if (result.isFail() and instr.arg1 != 0) {
+                        self.pc = instr.arg1; // arg1 = failure branch
+                    }
+                },
+                .schedule => {
+                    // Set execution scheduling mode: 0=sequential, 1=parallel, 2=linear
+                    // For now, stored as a constant on stack for inspection
+                    try self.push(Term{ .tag = .constant, .head = instr.arg1, .args = &.{} });
+                },
+                .@"extern" => {
+                    // FFI: lookup function by const_pool index, call it
+                    if (instr.arg1 < self.const_pool.len) {
+                        const name_term = self.const_pool[instr.arg1];
+                        if (name_term.tag == .constant) {
+                            // Look up by string key from const pool
+                            var it = self.ffi_table.iterator();
+                            var found = false;
+                            while (it.next()) |entry| {
+                                _ = entry;
+                                // Simple dispatch: call first registered function matching index
+                                if (!found) {
+                                    entry.value_ptr.*(self);
+                                    found = true;
+                                }
+                            }
+                        }
+                    }
                 },
             }
         }

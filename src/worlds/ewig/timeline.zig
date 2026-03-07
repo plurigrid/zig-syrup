@@ -60,10 +60,15 @@ pub const SegmentTree = struct {
         
         // Build segment tree
         const n = entries.len;
-        var tree = try allocator.alloc([]const TimelineEntry, 4 * n);
+        const tree = try allocator.alloc([]const TimelineEntry, 4 * n);
         errdefer allocator.free(tree);
-        
-        // Initialize tree
+
+        // Initialize all entries to empty (buildTree only populates valid nodes)
+        for (tree) |*entry| {
+            entry.* = &.{};
+        }
+
+        // Build segment tree
         try buildTree(allocator, entries, tree, 0, 0, n - 1);
         
         return .{
@@ -75,9 +80,13 @@ pub const SegmentTree = struct {
     
     pub fn deinit(self: *Self) void {
         for (self.tree) |node| {
-            self.allocator.free(node);
+            if (node.len > 0) {
+                self.allocator.free(node);
+            }
         }
-        self.allocator.free(self.tree);
+        if (self.tree.len > 0) {
+            self.allocator.free(self.tree);
+        }
     }
     
     fn buildTree(
@@ -163,12 +172,12 @@ pub const SegmentTree = struct {
 pub const Timeline = struct {
     allocator: Allocator,
     world_uri: []const u8,
-    entries: std.ArrayList(TimelineEntry),
+    entries: std.ArrayListUnmanaged(TimelineEntry),
     index: ?SegmentTree,
     index_dirty: bool,
     
     // State cache for fast lookups
-    state_cache: std.HashMap(i64, Hash, std.hash_map.default_context, std.hash_map.default_max_load_percentage),
+    state_cache: std.AutoHashMap(i64, Hash),
     
     const Self = @This();
     
@@ -176,16 +185,16 @@ pub const Timeline = struct {
         return .{
             .allocator = allocator,
             .world_uri = try allocator.dupe(u8, world_uri),
-            .entries = std.ArrayList(TimelineEntry).init(allocator),
+            .entries = .{},
             .index = null,
             .index_dirty = true,
-            .state_cache = std.HashMap(i64, Hash, std.hash_map.default_context, std.hash_map.default_max_load_percentage).init(allocator),
+            .state_cache = std.AutoHashMap(i64, Hash).init(allocator),
         };
     }
     
     pub fn deinit(self: *Self) void {
         self.allocator.free(self.world_uri);
-        self.entries.deinit();
+        self.entries.deinit(self.allocator);
         if (self.index) |*idx| {
             idx.deinit();
         }
@@ -202,7 +211,7 @@ pub const Timeline = struct {
             }
         }
         
-        try self.entries.append(entry);
+        try self.entries.append(self.allocator, entry);
         self.index_dirty = true;
         
         // Update cache
@@ -255,19 +264,19 @@ pub const Timeline = struct {
         
         try self.buildIndex();
         
-        var results = std.ArrayList(TimelineEntry).init(self.allocator);
-        errdefer results.deinit();
-        
+        var results = std.ArrayListUnmanaged(TimelineEntry){};
+        errdefer results.deinit(self.allocator);
+
         // Binary search approach
         const start_idx = binarySearch(self.entries.items, start_time);
-        
+
         var i = start_idx;
         while (i < self.entries.items.len and self.entries.items[i].timestamp <= end_time) : (i += 1) {
-            try results.append(self.entries.items[i]);
+            try results.append(self.allocator, self.entries.items[i]);
         }
-        
+
         return RangeResult{
-            .entries = try results.toOwnedSlice(),
+            .entries = try results.toOwnedSlice(self.allocator),
             .allocator = self.allocator,
         };
     }

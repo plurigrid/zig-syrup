@@ -48,7 +48,9 @@ pub const HttpResponse = struct {
             "HTTP/1.1 {d} {s}\r\n" ++
             "Content-Type: {s}\r\n" ++
             "Content-Length: {d}\r\n" ++
-            "Access-Control-Allow-Origin: *\r\n" ++
+            "Access-Control-Allow-Origin: http://localhost\r\n" ++
+            "Access-Control-Allow-Methods: GET, POST\r\n" ++
+            "X-Content-Type-Options: nosniff\r\n" ++
             "Connection: close\r\n" ++
             "\r\n" ++
             "{s}",
@@ -63,6 +65,12 @@ pub const IxHttpServer = struct {
     port: u16 = 7071,
     dispatcher: *CommandDispatcher,
     running: bool = false,
+    auth_token: ?[]const u8 = null, // Set via IX_AUTH_TOKEN env; null = open (localhost-only)
+
+    // Rate limiting: max POST requests per window
+    post_count: u32 = 0,
+    post_window_start: i64 = 0,
+    max_posts_per_minute: u32 = 60,
 
     // Cached state for GET endpoints (updated by dispatcher)
     focus_node_id: u32 = 0,
@@ -85,6 +93,19 @@ pub const IxHttpServer = struct {
 
     /// Route HTTP request to appropriate handler
     pub fn route(self: *IxHttpServer, method: []const u8, path: []const u8, body: []const u8) !HttpResponse {
+        // Rate-limit POST requests
+        if (std.mem.eql(u8, method, "POST")) {
+            const now = std.time.timestamp();
+            if (now - self.post_window_start > 60) {
+                self.post_count = 0;
+                self.post_window_start = now;
+            }
+            self.post_count += 1;
+            if (self.post_count > self.max_posts_per_minute) {
+                return HttpResponse{ .status = 429, .content_type = "application/json", .body = "{\"error\":\"rate limit exceeded\"}" };
+            }
+        }
+
         if (std.mem.eql(u8, path, "/status")) {
             if (std.mem.eql(u8, method, "GET")) {
                 return self.statusHandler();
@@ -102,6 +123,13 @@ pub const IxHttpServer = struct {
             return HttpResponse{ .status = 405, .content_type = "application/json", .body = "{\"error\":\"method not allowed\"}" };
         } else if (std.mem.eql(u8, path, "/command")) {
             if (std.mem.eql(u8, method, "POST")) {
+                // Require IX_AUTH_TOKEN for command execution (P0 security fix)
+                if (self.auth_token) |expected| {
+                    const provided = extractJsonString(body, "token");
+                    if (provided == null or !std.mem.eql(u8, provided.?, expected)) {
+                        return HttpResponse{ .status = 403, .content_type = "application/json", .body = "{\"error\":\"invalid or missing token\"}" };
+                    }
+                }
                 return self.commandHandler(body);
             }
             return HttpResponse{ .status = 405, .content_type = "application/json", .body = "{\"error\":\"method not allowed\"}" };
@@ -144,7 +172,7 @@ pub const IxHttpServer = struct {
                 writer.writeAll(",") catch break;
             }
             // "node_id":"#RRGGBB"
-            std.fmt.format(writer, "\"{d}\":\"#{s}\"", .{ self.color_ids[idx], self.color_hexes[idx] }) catch break;
+            writer.print("\"{d}\":\"#{s}\"", .{ self.color_ids[idx], self.color_hexes[idx] }) catch break;
         }
 
         writer.writeAll("}}") catch return HttpResponse{ .status = 500, .content_type = "application/json", .body = "{\"error\":\"buffer overflow\"}" };
@@ -172,7 +200,7 @@ pub const IxHttpServer = struct {
             if (idx > 0) {
                 adj_writer.writeAll(",") catch break;
             }
-            std.fmt.format(adj_writer, "{d}", .{self.adjacent_ids[idx]}) catch break;
+            adj_writer.print("{d}", .{self.adjacent_ids[idx]}) catch break;
         }
         adj_writer.writeAll("]") catch {};
 
@@ -402,4 +430,39 @@ test "route method not allowed" {
     var server = IxHttpServer.init(allocator, &dispatcher);
     const response = try server.route("POST", "/status", "");
     try std.testing.expect(response.status == 405);
+}
+
+test "command rejects missing token when auth enabled" {
+    const allocator = std.testing.allocator;
+    var dispatcher = CommandDispatcher.init(allocator);
+    defer dispatcher.deinit();
+
+    var server = IxHttpServer.init(allocator, &dispatcher);
+    server.auth_token = "test-secret-42";
+    const response = try server.route("POST", "/command", "{\"action\": \"shell echo hi\"}");
+    try std.testing.expect(response.status == 403);
+}
+
+test "command rejects wrong token when auth enabled" {
+    const allocator = std.testing.allocator;
+    var dispatcher = CommandDispatcher.init(allocator);
+    defer dispatcher.deinit();
+
+    var server = IxHttpServer.init(allocator, &dispatcher);
+    server.auth_token = "test-secret-42";
+    const response = try server.route("POST", "/command", "{\"action\": \"shell echo hi\", \"token\": \"wrong\"}");
+    try std.testing.expect(response.status == 403);
+}
+
+test "command allows when no auth token set" {
+    const allocator = std.testing.allocator;
+    var dispatcher = CommandDispatcher.init(allocator);
+    defer dispatcher.deinit();
+
+    var server = IxHttpServer.init(allocator, &dispatcher);
+    // auth_token is null by default — open mode
+    var response = try server.route("POST", "/command", "{\"action\": \"noop\"}");
+    defer response.deinit();
+    // Should succeed (200 or 500 from dispatcher, but NOT 403)
+    try std.testing.expect(response.status != 403);
 }

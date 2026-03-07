@@ -538,10 +538,10 @@ pub const Error = struct {
                     for (b.magnitude) |byte| {
                         value = (value << 8) | byte;
                     }
-                    try std.fmt.format(writer, "{d}{c}", .{ value, if (b.negative) @as(u8, '-') else @as(u8, '+') });
+                    try writer.print("{d}{c}", .{ value, if (b.negative) @as(u8, '-') else @as(u8, '+') });
                 } else {
                     try writer.writeByte('B');
-                    try std.fmt.format(writer, "{d}:", .{b.magnitude.len + 1});
+                    try writer.print("{d}:", .{b.magnitude.len + 1});
                     try writer.writeByte(if (b.negative) '-' else '+');
                     try writer.writeAll(b.magnitude);
                 }
@@ -710,11 +710,11 @@ pub const Error = struct {
 fn encodeInteger(value: i64, writer: anytype) !void {
     const abs: u64 = if (value >= 0) @intCast(value) else @intCast(-value);
     const sign: u8 = if (value >= 0) '+' else '-';
-    try std.fmt.format(writer, "{d}{c}", .{ abs, sign });
+    try writer.print("{d}{c}", .{ abs, sign });
 }
 
 fn writeLengthPrefixed(writer: anytype, data: []const u8, marker: u8) !void {
-    try std.fmt.format(writer, "{d}{c}", .{ data.len, marker });
+    try writer.print("{d}{c}", .{ data.len, marker });
     try writer.writeAll(data);
 }
 
@@ -992,29 +992,32 @@ pub const Parser = struct {
             },
             ':' => {
                 const len = num;
-                if (self.pos + len > self.input.len) {
+                const usize_len: usize = @intCast(len);
+                if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
                 }
-                const data = self.input[self.pos .. self.pos + len];
-                self.pos += len;
+                const data = self.input[self.pos .. self.pos + usize_len];
+                self.pos += usize_len;
                 return Value{ .bytes = data };
             },
             '"' => {
                 const len = num;
-                if (self.pos + len > self.input.len) {
+                const usize_len: usize = @intCast(len);
+                if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
                 }
-                const data = self.input[self.pos .. self.pos + len];
-                self.pos += len;
+                const data = self.input[self.pos .. self.pos + usize_len];
+                self.pos += usize_len;
                 return Value{ .string = data };
             },
             '\'' => {
                 const len = num;
-                if (self.pos + len > self.input.len) {
+                const usize_len: usize = @intCast(len);
+                if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
                 }
-                const data = self.input[self.pos .. self.pos + len];
-                self.pos += len;
+                const data = self.input[self.pos .. self.pos + usize_len];
+                self.pos += usize_len;
                 return Value{ .symbol = data };
             },
             else => {
@@ -1047,8 +1050,9 @@ pub const Parser = struct {
         self.pos += 1;
         const negative = sign_byte == '-';
 
-        const magnitude = self.input[self.pos .. self.pos + len - 1];
-        self.pos += len - 1;
+        const usize_len: usize = @intCast(len);
+        const magnitude = self.input[self.pos .. self.pos + usize_len - 1];
+        self.pos += usize_len - 1;
 
         // Copy magnitude to owned memory
         const mag_copy = try self.allocator.alloc(u8, magnitude.len);

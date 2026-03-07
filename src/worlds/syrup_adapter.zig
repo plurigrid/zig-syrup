@@ -42,47 +42,39 @@ pub const WorldTile = struct {
     /// Serialize to syrup record
     pub fn toSyrup(self: WorldTile, allocator: Allocator) !syrup.Value {
         var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
-        defer entries.deinit(allocator);
+        errdefer entries.deinit(allocator);
         
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena.deinit();
-        const arena_allocator = arena.allocator();
-        try entries.append(arena_allocator, .{
+        try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("x"),
             .value = syrup.Value.fromInteger(self.x),
         });
-        try entries.append(arena_allocator, .{
+        try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("y"),
             .value = syrup.Value.fromInteger(self.y),
         });
-        try entries.append(arena_allocator, .{
+        try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("z"),
             .value = syrup.Value.fromInteger(self.z),
         });
-        try entries.append(arena_allocator, .{
+        try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("type"),
             .value = syrup.Value.fromSymbol(@tagName(self.metadata.tile_type)),
         });
-        try entries.append(arena_allocator, .{
+        try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("modified"),
             .value = syrup.Value.fromInteger(@intCast(self.metadata.modified_tick)),
         });
         
         if (self.metadata.owner) |owner| {
-            try entries.append(arena_allocator, .{
+            try entries.append(allocator, .{
                 .key = syrup.Value.fromSymbol("owner"),
                 .value = syrup.Value.fromInteger(owner),
             });
         }
         
-        const label = syrup.Value.fromSymbol("tile");
-        var fields = try allocator.alloc(syrup.Value, 2);
-        defer allocator.free(fields);
-        
-        fields[0] = syrup.Value.fromDictionary(try entries.toOwnedSlice(allocator));
-        fields[1] = self.content;
-        
-        return syrup.Value.fromRecord(&label, fields);
+        // Return as dictionary (avoiding record which needs stable label pointer)
+        const dict_entries = try entries.toOwnedSlice(allocator);
+        return syrup.Value.fromDictionary(dict_entries);
     }
 };
 
@@ -130,7 +122,7 @@ pub const SyrupAdapter = struct {
         pub fn hash(self: TileKey) u32 {
             var h: u32 = @bitCast(self.x);
             h = h *% 31 +% @as(u32, @bitCast(self.y));
-            h = h *% 31 +% @bitCast(self.z);
+            h = h *% 31 +% @as(u32, @bitCast(self.z));
             return h;
         }
         
@@ -227,7 +219,7 @@ pub const SyrupAdapter = struct {
     pub fn getTile(self: *Self, x: i32, y: i32, z: i32) !*WorldTile {
         const key = TileKey{ .x = x, .y = y, .z = z };
         
-        if (self.tile_cache.get(key)) |*tile| {
+        if (self.tile_cache.getPtr(key)) |tile| {
             return tile;
         }
         
@@ -244,7 +236,7 @@ pub const SyrupAdapter = struct {
         };
         
         try self.tile_cache.put(self.allocator, key, new_tile);
-        return @as(*WorldTile, self.tile_cache.getPtr(key).?);
+        return self.tile_cache.getPtr(key).?;
     }
     
     /// Update tile content
@@ -419,10 +411,7 @@ test "world tile serialization" {
     };
     
     const syrup_val = try tile.toSyrup(allocator);
-    defer {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-    }
+    defer syrup_val.deinitContainers(allocator);
     
-    try testing.expect(syrup_val == .record);
+    try testing.expect(syrup_val == .dictionary);
 }

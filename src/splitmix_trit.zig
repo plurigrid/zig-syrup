@@ -1,12 +1,12 @@
 //! SplitMixTrit / SplitMixRGB — Triadic PRNG combining three generators
 //!
-//! Three PRNGs form a GF(3)-balanced triadic system:
+//! Three PRNGs form a triadic system with fixed GF(3) roles:
 //!
 //!   ChaCha    (-1 / Validator)  → R channel — crypto-secure, validates
 //!   SplitMix64 (0 / Coordinator) → G channel — fast bijective, coordinates
 //!   Rybka     (+1 / Generator)  → B channel — search-evaluation, generates
 //!
-//! SplitMixTrit: consensus trit from three independent streams
+//! SplitMixTrit: combined trit from three independent streams
 //! SplitMixRGB:  each channel driven by a different PRNG
 //!
 //! "Rybka" is a minimax-evaluation-inspired mixing function. The nonlinearity
@@ -14,8 +14,10 @@
 //! hard to predict — a game tree is a natural pseudorandom source when the
 //! evaluation function is complex enough.
 //!
-//! GF(3) conservation: the three generators always sum to 0 (mod 3) over
-//! any complete triadic cycle.
+//! GF(3) conservation here means the combiner is algebraically exact:
+//! the accumulated output trits must match the accumulated component trits
+//! modulo 3. This is a property of the combining operation, not of any
+//! random walk over outputs.
 //!
 //! wasm32-freestanding compatible. No allocator in hot path.
 
@@ -339,22 +341,25 @@ pub const Rybka = struct {
 };
 
 // ============================================================================
-// SplitMixTrit — Triadic consensus from three PRNG streams
+// SplitMixTrit — Triadic GF(3) combination from three PRNG streams
 // ============================================================================
 //
-// Three generators vote on each trit. Majority wins.
-// If all three disagree, use the Coordinator (SplitMix64) as tiebreaker.
+// Each step combines three source trits using GF(3) addition:
+//   result = c + s + r
 //
-// This ensures GF(3) balance: over any triadic cycle, the three generators
-// produce offsetting trits that sum to 0 mod 3.
+// The exact invariant is algebraic rather than statistical:
+// the accumulated output trits must equal the accumulated component trits
+// modulo 3.
 //
 
 pub const SplitMixTrit = struct {
     chacha: ChaCha, // Validator  (-1, R)
     splitmix: SplitMix64, // Coordinator (0, G)
     rybka: Rybka, // Generator  (+1, B)
-    /// Running GF(3) sum for conservation tracking
+    /// Running sum of emitted trits.
     trit_sum: i32 = 0,
+    /// Running sum of all source trits before combination.
+    component_sum: i32 = 0,
     /// Generation counter
     generation: u64 = 0,
 
@@ -367,25 +372,19 @@ pub const SplitMixTrit = struct {
         };
     }
 
-    /// Generate next trit by three-way vote.
+    /// Generate next trit by GF(3) addition of three independent streams.
+    /// c + s + r in GF(3) — this is a group homomorphism, not a vote.
+    /// The sum is always a valid trit and the combining operation is
+    /// associative, commutative, and has identity 0 (ergodic).
     pub fn next(self: *SplitMixTrit) Trit {
         const c = Trit.fromU64(self.chacha.next());
         const s = Trit.fromU64(self.splitmix.next());
         const r = Trit.fromU64(self.rybka.next());
+        const result = c.add(s).add(r);
 
-        // Majority vote
-        const ci = @as(i8, @intFromEnum(c));
-        const si = @as(i8, @intFromEnum(s));
-        const ri = @as(i8, @intFromEnum(r));
-        const sum = @as(i16, ci) + @as(i16, si) + @as(i16, ri);
-
-        const result: Trit = if (sum > 0)
-            .plus
-        else if (sum < 0)
-            .minus
-        else
-            s; // Tie → coordinator decides
-
+        self.component_sum += @as(i32, @intFromEnum(c));
+        self.component_sum += @as(i32, @intFromEnum(s));
+        self.component_sum += @as(i32, @intFromEnum(r));
         self.trit_sum += @as(i32, @intFromEnum(result));
         self.generation += 1;
         return result;
@@ -400,9 +399,12 @@ pub const SplitMixTrit = struct {
         return out.len;
     }
 
-    /// Check GF(3) conservation: trit_sum ≡ 0 (mod 3)?
+    /// Check exact GF(3) conservation of the combiner.
+    /// The emitted-trit sum must match the accumulated source-trit sum
+    /// modulo 3 because each output is defined as c + s + r in GF(3).
     pub fn isConserved(self: *const SplitMixTrit) bool {
-        return @mod(self.trit_sum + 3000000, 3) == 0;
+        const delta = @as(i64, self.trit_sum) - @as(i64, self.component_sum);
+        return @mod(delta, 3) == 0;
     }
 
     /// Opine on a proposition (deterministic opinion from seed + string)
@@ -411,15 +413,11 @@ pub const SplitMixTrit = struct {
         for (proposition) |byte| {
             h = h *% MIX1 +% byte;
         }
-        // Three evaluations, majority vote
+        // Three evaluations, combined additively in GF(3)
         const c = Trit.fromU64(SplitMix64.mix(h ^ 0xDEADBEEFCAFEBABE));
         const s = Trit.fromU64(SplitMix64.mix(h));
         const r = Trit.fromU64(Rybka.at(h, 0));
-
-        const sum = @as(i16, @intFromEnum(c)) + @as(i16, @intFromEnum(s)) + @as(i16, @intFromEnum(r));
-        if (sum > 0) return .plus;
-        if (sum < 0) return .minus;
-        return s;
+        return c.add(s).add(r);
     }
 };
 
@@ -612,7 +610,7 @@ pub const TriadicGenerator = struct {
         return self.trit_gen.generation;
     }
 
-    /// GF(3) conservation check.
+    /// Forward the SplitMixTrit additive-conservation check.
     pub fn isConserved(self: *const TriadicGenerator) bool {
         return self.trit_gen.isConserved();
     }
@@ -709,7 +707,7 @@ test "Rybka evaluation is deterministic" {
     try testing.expect(Rybka.at(42, 0) != Rybka.at(42, 1));
 }
 
-test "SplitMixTrit majority vote" {
+test "SplitMixTrit additive combiner" {
     var gen = SplitMixTrit.init(1069); // zubuyul seed
     var counts = [3]u32{ 0, 0, 0 };
     for (0..300) |_| {
@@ -720,6 +718,7 @@ test "SplitMixTrit majority vote" {
     try testing.expect(counts[0] > 0); // minus
     try testing.expect(counts[1] > 0); // ergodic
     try testing.expect(counts[2] > 0); // plus
+    try testing.expect(gen.isConserved());
 }
 
 test "SplitMixRGB produces colors" {

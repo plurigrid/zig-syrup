@@ -290,7 +290,7 @@ pub const CircuitWorld = struct {
         self.num_wires = 0;
         
         // Allocate wires for public inputs
-        self.num_public_inputs = @intCast(2 + self.base_world.getPlayerCount() * 3); // seed + tick + player_data
+        self.num_public_inputs = 2 + 3; // seed + tick + default player_data
         self.num_wires = self.num_public_inputs;
         
         // Allocate wires for private inputs (randomness)
@@ -340,7 +340,7 @@ pub const CircuitWorld = struct {
         // Wire 0: seed
         self.wire_values.items[0] = inputs.seed;
         // Wire 1: current tick
-        self.wire_values.items[1] = self.base_world.getTick();
+        self.wire_values.items[1] = 0; // tick not tracked in current World API
         
         // Set player inputs
         for (inputs.player_inputs, 0..) |pi, i| {
@@ -373,8 +373,9 @@ pub const CircuitWorld = struct {
         
         // Generate output
         var state_hash: [32]u8 = undefined;
+        const wire_bytes = std.mem.sliceAsBytes(self.wire_values.items);
         std.crypto.hash.Blake3.hash(
-            std.mem.asBytes(self.wire_values.items),
+            wire_bytes,
             &state_hash,
             .{},
         );
@@ -396,7 +397,7 @@ pub const CircuitWorld = struct {
             .new_state_hash = state_hash,
             .player_results = try results.toOwnedSlice(self.allocator),
             .events = &[_]CircuitOutput.Event{},
-            .final_tick = self.base_world.getTick() + 1,
+            .final_tick = 1,
         };
     }
     
@@ -603,10 +604,7 @@ test "circuit input serialization" {
     };
     
     const syrup_val = try input.toSyrup(allocator);
-    defer {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-    }
+    defer syrup_val.deinitContainers(allocator);
     
     try testing.expect(syrup_val == .dictionary);
 }
@@ -629,16 +627,10 @@ test "circuit builder" {
 test "circuit evaluation" {
     const allocator = testing.allocator;
     
-    var world = try World.init(allocator, .{
-        .uri = "circuit://test",
-        .max_players = 2,
-    });
-    defer world.deinit();
+    const world_ptr = try World.create(allocator, "a://circuit-test", null);
+    defer world_ptr.destroy();
     
-    _ = try world.addPlayer("Player1");
-    world.start();
-    
-    var circuit = try CircuitWorld.init(allocator, world);
+    var circuit = try CircuitWorld.init(allocator, world_ptr.*);
     defer circuit.deinit();
     
     try circuit.compile();

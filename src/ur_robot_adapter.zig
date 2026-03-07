@@ -144,7 +144,7 @@ pub const URModbusController = struct {
 
     pub fn disconnect(self: *URModbusController) void {
         if (self.conn) |*c| {
-            c.close();
+            c.deinit();
             self.conn = null;
         }
     }
@@ -299,9 +299,26 @@ pub const URModbusController = struct {
             angles[i] = (@as(f64, @floatFromInt(value_int)) / 100.0) * std.math.pi / 180.0;
         }
 
+        // Read velocity registers 280-285 (mrad/s per joint)
+        var velocities: [6]f64 = undefined;
+        if (response.len >= 8 + 12 + 12) {
+            // Velocity data follows angle data in extended response
+            for (0..6) |i| {
+                const vel_offset = 8 + 12 + (i * 2); // after 6 angle registers
+                if (vel_offset + 2 <= response.len) {
+                    const vel_int = std.mem.readInt(i16, response[vel_offset..][0..2], .big);
+                    velocities[i] = @as(f64, @floatFromInt(vel_int)) / 1000.0; // mrad/s -> rad/s
+                } else {
+                    velocities[i] = 0;
+                }
+            }
+        } else {
+            velocities = [6]f64{ 0, 0, 0, 0, 0, 0 };
+        }
+
         return .{
             .angles = angles,
-            .velocities = [6]f64{ 0, 0, 0, 0, 0, 0 }, // TODO: read from velocity registers
+            .velocities = velocities,
             .accelerations = [6]f64{ 0, 0, 0, 0, 0, 0 },
             .gripper_width = 0.0,
             .timestamp_us = @intCast(std.time.microTimestamp()),
@@ -417,14 +434,14 @@ fn computeModbusCrc(data: []const u8) u16 {
 // ============================================================================
 
 test "ur modbus frame encoding" {
-    var allocator = std.testing.allocator;
+    const allocator = std.testing.allocator;
     var controller = URModbusController.init(allocator);
     defer controller.disconnect();
 
     // Test angle encoding (90° = π/2 radians)
-    const test_angles = [6]f64{
+    _ = [6]f64{
         0.0,
-        std.math.pi / 2,
+        std.math.pi / 2.0,
         0.0,
         0.0,
         0.0,

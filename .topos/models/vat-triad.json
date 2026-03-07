@@ -1,0 +1,233 @@
+{
+  "type": "model",
+  "name": "Mitsein: Human → World ← Human (Spans of Vats)",
+  "theory": "causal-loop",
+  "notebook": {
+    "cellContents": {
+      "a0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "a0000001-0000-7000-8000-000000000001",
+        "content": "# Mitsein: Human → World ← Human\n\nMitsein is NOT a morphism between vats. It is a **span**:\n\n```\nHuman → World ← Human\n```\n\nNeither human has direct access to the other. They meet IN the world. The world is the mediating object — the shared plane where projection happens. Both agents project into it. Neither owns it.\n\nThis is the fundamental correction to the entire framework:\n- NOT: Vat → Vat (direct morphism)\n- YES: Vat → World ← Vat (span through shared context)\n\n## Span Composition (Pullback)\n```\nA → W₁ ← B → W₂ ← C\n       composes via pullback at B:\nA → W₁ ×_B W₂ ← C\n```\n\nB doesn't just relay — B co-constitutes the composed world. The pullback IS the shared context.\n\n## Instances\n| Left | World | Right | Module |\n|------|-------|-------|--------|\n| Human | CapTPSession | Human | tcp_transport.zig |\n| Tablet | ReelPlane | Tablet | cell_dispatch.zig |\n| Agent | TaskList | Agent | team coordination |\n| Tree | EditPath (TreeDiff) | Tree | syrup.zig |\n| Actor | Actormap (transactional heap) | Actor | worlds/world.zig |\n| Vat | Bootstrap Object | Vat | message_frame.zig |\n\n## 326 Worlds (world_enum.zig)\nEach world is a meeting point, not a container:\n- WorldConfig: variant (A/B/C) × trit[7] × depth\n- GF(3) conservation: only balanced worlds survive filtering\n- Necklace reduction: mod rotational symmetry\n- De Bruijn window: every local pattern appears once\n- 326 = the number of maximally interesting meeting points\n\n## GF(3) of the Span\n- Left projection: +1 (Generator — the one who initiates)\n- World: 0 (Coordinator — the shared meeting place)\n- Right projection: -1 (Validator — the one who responds/validates)\n- Sum: (+1) + 0 + (-1) = 0 ✓\n\nBut the roles are symmetric! Either human can be +1 or -1. The world is always 0. This is Heidegger's point: Mitsein is equiprimordial. Neither party is ontologically prior."
+      },
+      "a0000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "HumanVat",
+          "id": "a0000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "World",
+          "id": "a0000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "GoblinsVat",
+          "id": "a0000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000013": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000013",
+        "content": {
+          "tag": "object",
+          "name": "AgentVat",
+          "id": "a0000001-0000-7000-8000-000000000013",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000014": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000014",
+        "content": {
+          "tag": "object",
+          "name": "CapTPSession",
+          "id": "a0000001-0000-7000-8000-000000000014",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000015": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000015",
+        "content": {
+          "tag": "object",
+          "name": "ReelPlane",
+          "id": "a0000001-0000-7000-8000-000000000015",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000016": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000016",
+        "content": {
+          "tag": "object",
+          "name": "EditPath",
+          "id": "a0000001-0000-7000-8000-000000000016",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000017": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000017",
+        "content": {
+          "tag": "object",
+          "name": "Actormap",
+          "id": "a0000001-0000-7000-8000-000000000017",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000018": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000018",
+        "content": {
+          "tag": "object",
+          "name": "BootstrapObject",
+          "id": "a0000001-0000-7000-8000-000000000018",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000020": {
+        "tag": "rich-text",
+        "id": "a0000001-0000-7000-8000-000000000020",
+        "content": "## Span Morphisms (projections into shared worlds)\n\nEvery morphism is a projection: Vat → World. There are no direct Vat → Vat edges. Meeting requires a mediating world. The signed edges encode whether the projection is active (+, initiating) or passive (-, responding)."
+      },
+      "a0000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "left_projection",
+          "id": "a0000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "right_projection",
+          "id": "a0000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Basic", "content": "Negative" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000032": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000032",
+        "content": {
+          "tag": "morphism",
+          "name": "captp_left",
+          "id": "a0000001-0000-7000-8000-000000000032",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000014" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000033": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000033",
+        "content": {
+          "tag": "morphism",
+          "name": "captp_right",
+          "id": "a0000001-0000-7000-8000-000000000033",
+          "morType": { "tag": "Basic", "content": "Negative" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000014" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000034": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000034",
+        "content": {
+          "tag": "morphism",
+          "name": "tablet_to_reel",
+          "id": "a0000001-0000-7000-8000-000000000034",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000013" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000015" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000035": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000035",
+        "content": {
+          "tag": "morphism",
+          "name": "tree_to_editpath",
+          "id": "a0000001-0000-7000-8000-000000000035",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000016" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000036": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000036",
+        "content": {
+          "tag": "morphism",
+          "name": "actor_to_actormap",
+          "id": "a0000001-0000-7000-8000-000000000036",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000017" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000037": {
+        "tag": "formal",
+        "id": "a0000001-0000-7000-8000-000000000037",
+        "content": {
+          "tag": "morphism",
+          "name": "vat_to_bootstrap",
+          "id": "a0000001-0000-7000-8000-000000000037",
+          "morType": { "tag": "Basic", "content": "Positive" },
+          "dom": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000012" },
+          "cod": { "tag": "Basic", "content": "a0000001-0000-7000-8000-000000000018" }
+        }
+      },
+      "a0000001-0000-7000-8000-000000000040": {
+        "tag": "rich-text",
+        "id": "a0000001-0000-7000-8000-000000000040",
+        "content": "## The 326 Worlds as Span Vertices\n\nEach WorldConfig in world_enum.zig is a potential meeting point:\n- Variant A/B/C = the three URI schemes (a://, b://, c://)\n- Trit sequence = the path through GF(3) state space\n- Conservation filter = only balanced worlds survive\n- Necklace reduction = symmetry up to rotation (the span is symmetric!)\n\nThe 326 worlds are exactly the maximally interesting vertices in the bicategory of spans. They are the non-trivial, conserved, rotationally-reduced meeting points.\n\n## Diffusion on Spans\n\nTree diffusion on Mitsein is not diffusion on vats. It is diffusion on the **worlds between them**:\n- Forward noise: corrupt the shared world (mutate the meeting point)\n- Reverse denoise: reconstruct the shared world from both projections\n- The denoising is inherently multi-agent: both participants contribute to reconstruction\n- Grammar constraint: the shared world must remain a valid meeting point (conserved, balanced)\n\nThis is why the ncreel layout starts from the focused tablet. The focus IS one agent's projection. The layout algorithm reconstructs the shared world (ReelPlane) from that projection, then incorporates others."
+      }
+    },
+    "cellOrder": [
+      "a0000001-0000-7000-8000-000000000001",
+      "a0000001-0000-7000-8000-000000000010",
+      "a0000001-0000-7000-8000-000000000011",
+      "a0000001-0000-7000-8000-000000000012",
+      "a0000001-0000-7000-8000-000000000013",
+      "a0000001-0000-7000-8000-000000000014",
+      "a0000001-0000-7000-8000-000000000015",
+      "a0000001-0000-7000-8000-000000000016",
+      "a0000001-0000-7000-8000-000000000017",
+      "a0000001-0000-7000-8000-000000000018",
+      "a0000001-0000-7000-8000-000000000020",
+      "a0000001-0000-7000-8000-000000000030",
+      "a0000001-0000-7000-8000-000000000031",
+      "a0000001-0000-7000-8000-000000000032",
+      "a0000001-0000-7000-8000-000000000033",
+      "a0000001-0000-7000-8000-000000000034",
+      "a0000001-0000-7000-8000-000000000035",
+      "a0000001-0000-7000-8000-000000000036",
+      "a0000001-0000-7000-8000-000000000037",
+      "a0000001-0000-7000-8000-000000000040"
+    ]
+  },
+  "version": "1"
+}

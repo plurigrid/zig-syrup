@@ -342,16 +342,30 @@ def epoch_from_raw_eeg(samples: np.ndarray, sample_rate: int = 250) -> EEGEpoch:
         EEGEpoch with band powers computed per channel.
     """
     from scipy.signal import welch
-
+    trapz_func = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    
+    # Cache masks for common sample lengths
+    if not hasattr(epoch_from_raw_eeg, "_mask_cache"):
+        epoch_from_raw_eeg._mask_cache = {}
+    
+    cache_key = (len(samples), sample_rate)
+    if cache_key not in epoch_from_raw_eeg._mask_cache:
+        # Dummy run to get freqs
+        f, _ = welch(np.zeros(len(samples)), fs=sample_rate, nperseg=min(len(samples), sample_rate))
+        masks = []
+        for band_name, (f_low, f_high) in BAND_RANGES_HZ.items():
+            masks.append((f, (f >= f_low) & (f < f_high)))
+        epoch_from_raw_eeg._mask_cache[cache_key] = masks
+    
+    masks = epoch_from_raw_eeg._mask_cache[cache_key]
     bands = {}
     for ch_idx, ch_name in enumerate(CHANNELS_10_20):
         signal = samples[:, ch_idx]
         freqs, psd = welch(signal, fs=sample_rate, nperseg=min(len(signal), sample_rate))
 
         powers = np.zeros(5)
-        for band_idx, (band_name, (f_low, f_high)) in enumerate(BAND_RANGES_HZ.items()):
-            mask = (freqs >= f_low) & (freqs < f_high)
-            powers[band_idx] = np.trapz(psd[mask], freqs[mask]) if mask.any() else 1e-10
+        for band_idx, (f, mask) in enumerate(masks):
+            powers[band_idx] = trapz_func(psd[mask], freqs[mask]) if mask.any() else 1e-10
 
         bands[ch_name] = powers
 

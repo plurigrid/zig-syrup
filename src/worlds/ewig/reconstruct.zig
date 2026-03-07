@@ -93,7 +93,7 @@ pub const SnapshotCache = struct {
         defer self.mutex.unlock();
         
         if (self.entries.getPtr(hash)) |entry| {
-            entry.last_accessed = std.time.nanoTimestamp();
+            entry.last_accessed = @intCast(std.time.nanoTimestamp());
             entry.access_count += 1;
             self.hits += 1;
             return entry.snapshot;
@@ -127,7 +127,7 @@ pub const SnapshotCache = struct {
         
         try self.entries.put(snap_copy.hash, .{
             .snapshot = snap_copy,
-            .last_accessed = std.time.nanoTimestamp(),
+            .last_accessed = @intCast(std.time.nanoTimestamp()),
             .access_count = 1,
         });
         
@@ -156,7 +156,7 @@ pub const SnapshotCache = struct {
     }
     
     /// Get cache statistics
-    pub fn stats(self: Self) struct { hits: u64, misses: u64, size: usize, capacity: usize } {
+    pub fn stats(self: *Self) struct { hits: u64, misses: u64, size: usize, capacity: usize } {
         self.mutex.lock();
         defer self.mutex.unlock();
         
@@ -195,12 +195,12 @@ pub const StateReconstructor = struct {
     
     const Self = @This();
     
-    pub fn init(allocator: Allocator, events: *log.EventLog, store: *MemoryStore, cache_size: usize) Self {
+    pub fn init(allocator: Allocator, events: *log.EventLog, memory_store: *MemoryStore, cache_size: usize) Self {
         return .{
             .allocator = allocator,
             .cache = SnapshotCache.init(allocator, cache_size),
             .events = events,
-            .store = store,
+            .store = memory_store,
         };
     }
     
@@ -221,16 +221,16 @@ pub const StateReconstructor = struct {
         const nearest = try self.findNearestCachedAncestor(target_hash);
         
         // Build list of events to replay
-        var events_to_replay = std.ArrayList(Event).init(self.allocator);
-        defer events_to_replay.deinit();
-        
+        var events_to_replay = std.ArrayListUnmanaged(Event){};
+        defer events_to_replay.deinit(self.allocator);
+
         var current = target_hash;
         const zero_hash = [_]u8{0} ** 32;
-        
-        while (!std.mem.eql(u8, &current, &zero_hash) and 
+
+        while (!std.mem.eql(u8, &current, &zero_hash) and
                !std.mem.eql(u8, &current, &nearest.hash)) {
             const event = self.events.getByHash(current) orelse break;
-            try events_to_replay.append(event);
+            try events_to_replay.append(self.allocator, event);
             current = event.parent;
         }
         
@@ -239,11 +239,14 @@ pub const StateReconstructor = struct {
         
         // Start from base state
         var state_data = try self.allocator.dupe(u8, nearest.data);
+        self.allocator.free(nearest.data);
         errdefer self.allocator.free(state_data);
         
         // Replay events
         for (events_to_replay.items) |event| {
-            state_data = try self.applyEvent(state_data, event);
+            const new_data = try self.applyEvent(state_data, event);
+            self.allocator.free(state_data);
+            state_data = new_data;
         }
         
         // Get the final event for metadata
@@ -420,12 +423,9 @@ pub const ParallelReconstructor = struct {
         if (best_checkpoint == null) {
             return error.NoCheckpointFound;
         }
-        
+
         // In a real implementation, this would parallelize the replay
         // For now, fall back to sequential
-        _ = self;
-        _ = best_checkpoint;
-        
         return error.NotImplemented;
     }
     
@@ -461,13 +461,13 @@ pub const ParallelReconstructor = struct {
         reduce_fn: *const fn (T, T) T,
     ) !T {
         // Collect events
-        var events_list = std.ArrayList(Event).init(self.allocator);
-        defer events_list.deinit();
-        
+        var events_list = std.ArrayListUnmanaged(Event){};
+        defer events_list.deinit(self.allocator);
+
         var current = end;
         while (!std.mem.eql(u8, &current, &start)) {
             const event = self.events.getByHash(current) orelse break;
-            try events_list.append(event);
+            try events_list.append(self.allocator, event);
             current = event.parent;
         }
         
@@ -516,7 +516,7 @@ pub const ParallelReconstructor = struct {
 pub const IncrementalReconstructor = struct {
     allocator: Allocator,
     base_reconstructor: *StateReconstructor,
-    pending_events: std.ArrayList(Event),
+    pending_events: std.ArrayListUnmanaged(Event),
     last_computed: ?StateSnapshot,
     
     const Self = @This();
@@ -525,13 +525,13 @@ pub const IncrementalReconstructor = struct {
         return .{
             .allocator = allocator,
             .base_reconstructor = base,
-            .pending_events = std.ArrayList(Event).init(allocator),
+            .pending_events = .{},
             .last_computed = null,
         };
     }
     
     pub fn deinit(self: *Self) void {
-        self.pending_events.deinit();
+        self.pending_events.deinit(self.allocator);
         if (self.last_computed) |*snap| {
             self.allocator.free(snap.data);
         }
@@ -539,7 +539,7 @@ pub const IncrementalReconstructor = struct {
     
     /// Add an event to be applied incrementally
     pub fn addEvent(self: *Self, event: Event) !void {
-        try self.pending_events.append(event);
+        try self.pending_events.append(self.allocator, event);
     }
     
     /// Compute or update state
@@ -560,8 +560,8 @@ pub const IncrementalReconstructor = struct {
         } else {
             const last_pending = self.pending_events.items[self.pending_events.items.len - 1];
             const base = try self.base_reconstructor.reconstructAt(last_pending.parent);
-            state = base.data;
-            // Don't free base.data as we moved it to state
+            state = try self.allocator.dupe(u8, base.data);
+            self.allocator.free(base.data);
         }
         
         // Apply pending events
@@ -726,7 +726,7 @@ test "state reconstructor" {
     defer reconstructor.deinit();
     
     // Create some events
-    const e1 = try events.append(.WorldCreated, "a://world", "{\"players\":[]}");
+    _ = try events.append(.WorldCreated, "a://world", "{\"players\":[]}");
     const e2 = try events.append(.PlayerJoined, "a://world", "{\"player\":\"Alice\"}");
     const e3 = try events.append(.PlayerJoined, "a://world", "{\"player\":\"Bob\"}");
     
@@ -762,8 +762,7 @@ test "incremental reconstructor" {
     defer inc.deinit();
     
     // Add some events
-    const e1 = try events.append(.WorldCreated, "a://world", "{\"init\":true}");
-    _ = e1;
+    _ = try events.append(.WorldCreated, "a://world", "{\"init\":true}");
     
     const e2 = try events.append(.StateChanged, "a://world", "{\"x\":1}");
     try inc.addEvent(e2);

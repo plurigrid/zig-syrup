@@ -287,7 +287,120 @@ export fn gf3_decode_frame_length(buf: [*]const u8, buf_len: usize) u32 {
 }
 
 // ============================================================================
-// 5. Cross-language verification
+// 5. TCP Transport — send/recv Syrup-framed messages to Nashator
+// ============================================================================
+
+const tcp_transport = @import("tcp_transport.zig");
+
+/// Connection pool: up to 16 concurrent connections.
+/// Handle = index into pool. -1 = invalid.
+const MAX_CONNECTIONS = 16;
+var connection_pool: [MAX_CONNECTIONS]?tcp_transport.Connection = .{null} ** MAX_CONNECTIONS;
+
+fn findFreeSlot() ?usize {
+    for (0..MAX_CONNECTIONS) |i| {
+        if (connection_pool[i] == null) return i;
+    }
+    return null;
+}
+
+/// Connect to host:port. Returns handle (0..15) or -1 on error.
+/// host must be a null-terminated C string (IPv4 address or "127.0.0.1").
+export fn gf3_tcp_connect(host: [*:0]const u8, port: u16) i32 {
+    const slot = findFreeSlot() orelse return -1;
+
+    // Parse address
+    const host_slice = std.mem.sliceTo(host, 0);
+    const addr = std.net.Address.parseIp4(host_slice, port) catch return -1;
+
+    // Connect
+    const stream = std.net.tcpConnectToAddress(addr) catch return -1;
+    connection_pool[slot] = tcp_transport.Connection.init(std.heap.page_allocator, stream);
+
+    return @intCast(slot);
+}
+
+/// Send a length-prefixed frame. Returns 0 on success, -1 on error.
+export fn gf3_tcp_send_frame(handle: i32, payload: [*]const u8, payload_len: usize) i32 {
+    if (handle < 0 or handle >= MAX_CONNECTIONS) return -1;
+    const h: usize = @intCast(handle);
+    var conn = &(connection_pool[h] orelse return -1);
+    conn.send(payload[0..payload_len]) catch return -1;
+    return 0;
+}
+
+/// Receive a length-prefixed frame. Blocks until complete.
+/// Writes payload to out_buf, returns payload length, or -1 on error.
+export fn gf3_tcp_recv_frame(handle: i32, out_buf: [*]u8, out_buf_len: usize) i32 {
+    if (handle < 0 or handle >= MAX_CONNECTIONS) return -1;
+    const h: usize = @intCast(handle);
+    var conn = &(connection_pool[h] orelse return -1);
+    const payload = conn.recv() catch return -1;
+    if (payload.len > out_buf_len) return -1;
+    @memcpy(out_buf[0..payload.len], payload);
+    return @intCast(payload.len);
+}
+
+/// Close a connection and free the handle.
+export fn gf3_tcp_close(handle: i32) void {
+    if (handle < 0 or handle >= MAX_CONNECTIONS) return;
+    const h: usize = @intCast(handle);
+    if (connection_pool[h]) |*conn| {
+        conn.close();
+        connection_pool[h] = null;
+    }
+}
+
+/// Check if a connection handle is still active.
+export fn gf3_tcp_connected(handle: i32) bool {
+    if (handle < 0 or handle >= MAX_CONNECTIONS) return false;
+    const h: usize = @intCast(handle);
+    const conn = connection_pool[h] orelse return false;
+    return conn.isConnected();
+}
+
+/// Send a Syrup-encoded CapTP deliver message and receive the response.
+/// Convenience function: encodes game-spec, sends frame, receives response.
+///
+/// tool_name: null-terminated C string (e.g., "nashator_solve")
+/// game_json: null-terminated JSON string of game-spec
+/// out_buf: buffer for response payload
+/// out_buf_len: size of out_buf
+///
+/// Returns response payload length, or -1 on error.
+export fn gf3_captp_rpc(
+    handle: i32,
+    tool_name: [*:0]const u8,
+    game_json: [*]const u8,
+    game_json_len: usize,
+    out_buf: [*]u8,
+    out_buf_len: usize,
+) i32 {
+    if (handle < 0 or handle >= MAX_CONNECTIONS) return -1;
+    const h: usize = @intCast(handle);
+    var conn = &(connection_pool[h] orelse return -1);
+
+    // Build a minimal JSON-RPC request frame:
+    // {"jsonrpc":"2.0","method":"<tool_name>","params":<game_json>,"id":1}
+    var req_buf: [65536]u8 = undefined;
+    const tool_slice = std.mem.sliceTo(tool_name, 0);
+    const game_slice = game_json[0..game_json_len];
+
+    const req = std.fmt.bufPrint(&req_buf, "{{\"jsonrpc\":\"2.0\",\"method\":\"{s}\",\"params\":{s},\"id\":1}}", .{ tool_slice, game_slice }) catch return -1;
+
+    // Send as length-prefixed frame
+    conn.send(req) catch return -1;
+
+    // Receive response frame
+    const response = conn.recv() catch return -1;
+    if (response.len > out_buf_len) return -1;
+    @memcpy(out_buf[0..response.len], response);
+
+    return @intCast(response.len);
+}
+
+// ============================================================================
+// 6. Cross-language verification
 // ============================================================================
 
 /// Verify that this Zig implementation matches the Guile gf3-goblins.scm.

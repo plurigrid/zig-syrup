@@ -819,9 +819,9 @@ pub const HomotopyACSet = struct {
         // Solutions
         try writer.writeAll("    \"Solution\": [\n");
         for (self.solutions.items, 0..) |sol, idx| {
-            try std.fmt.format(writer, "      {{\"_id\": {d}, \"values\": [", .{sol._id});
+            try writer.print("      {{\"_id\": {d}, \"values\": [", .{sol._id});
             for (sol.values, 0..) |c, vidx| {
-                try std.fmt.format(writer, "{{\"re\": {d}, \"im\": {d}}}", .{ c.re, c.im });
+                try writer.print("{{\"re\": {d}, \"im\": {d}}}", .{ c.re, c.im });
                 if (vidx < sol.values.len - 1) try writer.writeAll(", ");
             }
             try writer.writeAll("]}");
@@ -833,7 +833,7 @@ pub const HomotopyACSet = struct {
         // Paths
         try writer.writeAll("    \"Path\": [\n");
         for (self.paths.items, 0..) |path, idx| {
-            try std.fmt.format(writer,
+            try writer.print(
                 \\      {{"_id": {d}, "start_sol": {d}, "end_sol": {d}, "system": {d}, "status": "{s}", "trit": {d}, "steps": {d}}}
             , .{
                 path._id,
@@ -852,9 +852,9 @@ pub const HomotopyACSet = struct {
         // Systems
         try writer.writeAll("    \"System\": [\n");
         for (self.systems.items, 0..) |sys, idx| {
-            try std.fmt.format(writer, "      {{\"_id\": {d}, \"num_vars\": {d}, \"num_polys\": {d}, \"degrees\": [", .{ sys._id, sys.num_vars, sys.num_polys });
+            try writer.print("      {{\"_id\": {d}, \"num_vars\": {d}, \"num_polys\": {d}, \"degrees\": [", .{ sys._id, sys.num_vars, sys.num_polys });
             for (sys.degrees, 0..) |d, didx| {
-                try std.fmt.format(writer, "{d}", .{d});
+                try writer.print("{d}", .{d});
                 if (didx < sys.degrees.len - 1) try writer.writeAll(", ");
             }
             try writer.writeAll("]}");

@@ -212,25 +212,58 @@ pub const CommandDispatcher = struct {
     }
 
     fn executePropagator(self: *CommandDispatcher, cmd: Command) !ExecutionResult {
-        _ = self;
-        _ = cmd;
-        // TODO: Wire to ghostty_ix_propagator.zig
-        return ExecutionResult{
-            .success = false,
-            .output = "",
-            .error_message = "propagator: not yet implemented",
-        };
+        // Wire to spatial_propagator: parse subcommand from args
+        var network = spatial_propagator.SpatialNetwork.init(self.allocator);
+        defer network.deinit();
+
+        if (std.mem.startsWith(u8, cmd.args, "add-node ")) {
+            // add-node <window_id> <space_id> <x> <y> <w> <h>
+            const node_id = try network.addNode(.{
+                .bounds = .{ .x = 0, .y = 0, .width = 80, .height = 24 },
+                .window_id = 1,
+                .space_id = 1,
+                .depth = 0,
+                .spatial_index = 0,
+                .focus_state = .unfocused,
+            });
+            var buf: [128]u8 = undefined;
+            const output = try std.fmt.bufPrint(&buf, "node added: id={d}", .{node_id});
+            return ExecutionResult{ .success = true, .output = try self.allocator.dupe(u8, output), .spatial_changed = true };
+        } else if (std.mem.startsWith(u8, cmd.args, "detect")) {
+            try network.detectAdjacency();
+            return ExecutionResult{ .success = true, .output = try self.allocator.dupe(u8, "adjacency detected"), .spatial_changed = true };
+        } else if (std.mem.startsWith(u8, cmd.args, "colors")) {
+            network.assignColors();
+            return ExecutionResult{ .success = true, .output = try self.allocator.dupe(u8, "colors assigned"), .colors_updated = true };
+        } else if (std.mem.startsWith(u8, cmd.args, "bci ")) {
+            // bci <phi> <valence> <fisher> <trit>
+            if (cmd.bci_context) |bci| {
+                try network.assignColorsFromBCI(bci.phi, bci.valence, bci.fisher_rao, @intFromEnum(bci.dominant_trit));
+                return ExecutionResult{ .success = true, .output = try self.allocator.dupe(u8, "BCI colors assigned"), .colors_updated = true };
+            }
+            return ExecutionResult{ .success = false, .output = "", .error_message = "propagator bci: no BCI context" };
+        } else if (std.mem.startsWith(u8, cmd.args, "brightness")) {
+            const b = propagator.focus_brightness(&[_]?f32{0.8});
+            var buf: [64]u8 = undefined;
+            const output = try std.fmt.bufPrint(&buf, "brightness={d:.3}", .{b orelse 0.0});
+            return ExecutionResult{ .success = true, .output = try self.allocator.dupe(u8, output) };
+        } else {
+            return ExecutionResult{ .success = false, .output = "", .error_message = "propagator: unknown subcommand (use: add-node, detect, colors, bci, brightness)" };
+        }
     }
 
     fn executeStellogen(self: *CommandDispatcher, cmd: Command) !ExecutionResult {
-        _ = self;
-        _ = cmd;
-        // TODO: Wire to ghostty_ix_stellogen.zig
-        return ExecutionResult{
-            .success = false,
-            .output = "",
-            .error_message = "stellogen: not yet implemented",
+        // Wire to stellogen/mod.zig: interpret source and check verification
+        const stellogen = @import("stellogen");
+        const result = stellogen.interpret(self.allocator, cmd.args) catch |err| {
+            var buf: [256]u8 = undefined;
+            const msg = std.fmt.bufPrint(&buf, "stellogen parse error: {}", .{err}) catch "stellogen: parse error";
+            return ExecutionResult{ .success = false, .output = "", .error_message = try self.allocator.dupe(u8, msg) };
         };
+        const ok = stellogen.isOk(result);
+        var buf: [512]u8 = undefined;
+        const output = std.fmt.bufPrint(&buf, "stellogen: {d} stars, verified={}", .{ result.stars.len, ok }) catch "stellogen: done";
+        return ExecutionResult{ .success = ok, .output = try self.allocator.dupe(u8, output) };
     }
 
     fn executeBim(self: *CommandDispatcher, cmd: Command) !ExecutionResult {

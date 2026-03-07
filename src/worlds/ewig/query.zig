@@ -142,8 +142,12 @@ pub const CustomQuery = struct {
     
     pub fn deinit(self: *CustomQuery, allocator: Allocator) void {
         allocator.free(self.name);
-        for (self.args) |*arg| {
-            arg.deinit(allocator);
+        for (self.args) |arg| {
+            switch (arg) {
+                .String => |s| allocator.free(s),
+                .Bytes => |b| allocator.free(b),
+                else => {},
+            }
         }
         allocator.free(self.args);
     }
@@ -173,7 +177,7 @@ pub const Expr = union(enum) {
     
     /// Evaluate expression against an event
     pub fn evaluate(self: Expr, event: Event) bool {
-        switch (self) {
+        return switch (self) {
             .Binary => |b| {
                 const left = b.left.evaluate(event);
                 const right = b.right.evaluate(event);
@@ -221,7 +225,7 @@ pub const Expr = union(enum) {
                 return false;
             },
             .Function => return false, // Not implemented
-        }
+        };
     }
     
     /// Get value from expression
@@ -374,14 +378,14 @@ pub const QueryExecutor = struct {
     }
     
     fn executeSelect(self: Self, query: SelectQuery, event_log: *EventLog) !QueryResult {
-        var results = std.ArrayList(Event).init(self.allocator);
-        errdefer results.deinit();
+        var results = std.ArrayListUnmanaged(Event){};
+        errdefer results.deinit(self.allocator);
         
         // Filter events
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
             if (self.matchesWhere(event, query.where)) {
-                try results.append(event);
+                try results.append(self.allocator, event);
             }
         }
         
@@ -397,7 +401,7 @@ pub const QueryExecutor = struct {
             results.items;
         
         return QueryResult{
-            .events = try results.toOwnedSlice(),
+            .events = try results.toOwnedSlice(self.allocator),
             .count = limited.len,
             .aggregates = null,
             .allocator = self.allocator,
@@ -406,13 +410,13 @@ pub const QueryExecutor = struct {
     
     fn executeAggregate(self: Self, query: AggregateQuery, event_log: *EventLog) !QueryResult {
         // Filter events
-        var events = std.ArrayList(Event).init(self.allocator);
-        defer events.deinit();
+        var events = std.ArrayListUnmanaged(Event){};
+        defer events.deinit(self.allocator);
         
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
             if (self.matchesWhere(event, query.where)) {
-                try events.append(event);
+                try events.append(self.allocator, event);
             }
         }
         
@@ -436,8 +440,8 @@ pub const QueryExecutor = struct {
     
     fn executeTemporal(self: Self, query: TemporalQuery, event_log: *EventLog) !QueryResult {
         // Apply time filter
-        var filtered = std.ArrayList(Event).init(self.allocator);
-        defer filtered.deinit();
+        var filtered = std.ArrayListUnmanaged(Event){};
+        defer filtered.deinit(self.allocator);
         
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
@@ -447,16 +451,14 @@ pub const QueryExecutor = struct {
             if (query.until) |until| {
                 if (event.timestamp > until) continue;
             }
-            try filtered.append(event);
+            try filtered.append(self.allocator, event);
         }
         
         // Execute inner query on filtered events
         // Simplified: just return filtered events
-        _ = self;
-        _ = query.query;
         
         return QueryResult{
-            .events = try filtered.toOwnedSlice(),
+            .events = try filtered.toOwnedSlice(self.allocator),
             .count = filtered.items.len,
             .aggregates = null,
             .allocator = self.allocator,
@@ -550,10 +552,10 @@ pub const QueryResult = struct {
     
     /// Convert to JSON
     pub fn toJson(self: QueryResult, allocator: Allocator) ![]u8 {
-        var output = std.ArrayList(u8).init(allocator);
-        defer output.deinit();
+        var output = std.ArrayListUnmanaged(u8){};
+        defer output.deinit(allocator);
         
-        const writer = output.writer();
+        const writer = output.writer(allocator);
         
         try writer.writeAll("{\n");
         try writer.print("  \"count\": {d},\n", .{self.count});
@@ -588,7 +590,7 @@ pub const QueryResult = struct {
         
         try writer.writeAll("\n}");
         
-        return output.toOwnedSlice();
+        return output.toOwnedSlice(allocator);
     }
 };
 
@@ -600,7 +602,13 @@ fn writeValue(writer: anytype, value: Value) !void {
         .Uint => |u| try writer.print("{d}", .{u}),
         .Float => |f| try writer.print("{d}", .{f}),
         .String => |s| try writer.print("\"{s}\"", .{s}),
-        .Bytes => |b| try writer.print("\"{}\", .{std.fmt.fmtSliceHexLower(b)}"),
+        .Bytes => |b| {
+            try writer.writeAll("\"");
+            for (b) |byte| {
+                try writer.print("{x:0>2}", .{byte});
+            }
+            try writer.writeAll("\"");
+        },
     }
 }
 
@@ -649,14 +657,23 @@ pub const QueryParser = struct {
     
     fn parseSelect(self: *Self) !Query {
         // Simplified parser
-        var columns = std.ArrayList([]const u8).init(self.allocator);
+        var columns = std.ArrayListUnmanaged([]const u8){};
         errdefer {
             for (columns.items) |c| self.allocator.free(c);
-            columns.deinit();
+            columns.deinit(self.allocator);
         }
-        
-        try columns.append(try self.allocator.dupe(u8, "*"));
-        
+
+        // Parse column list (simplified: only supports *)
+        self.skipWhitespace();
+        if (self.pos < self.input.len and self.input[self.pos] == '*') {
+            self.pos += 1;
+            try columns.append(self.allocator, try self.allocator.dupe(u8, "*"));
+        } else {
+            // Try parsing identifier columns
+            const col = try self.parseIdentifier();
+            try columns.append(self.allocator, col);
+        }
+
         // Parse FROM
         self.skipWhitespace();
         if (!self.matchKeyword("FROM")) return error.ExpectedFrom;
@@ -673,7 +690,7 @@ pub const QueryParser = struct {
         
         return Query{
             .Select = .{
-                .columns = try columns.toOwnedSlice(),
+                .columns = try columns.toOwnedSlice(self.allocator),
                 .from = from,
                 .where = where,
                 .order_by = null,
@@ -740,7 +757,8 @@ pub const QueryParser = struct {
         };
         
         expr.* = .{ .Binary = bin.* };
-        
+        self.allocator.destroy(bin);
+
         return expr;
     }
     
@@ -887,10 +905,14 @@ test "query executor select" {
     
     const where_expr = try testing.allocator.create(Expr);
     where_expr.* = .{ .Binary = bin.* };
-    
-    const query = Query{
+    testing.allocator.destroy(bin);
+
+    const columns = try testing.allocator.alloc([]const u8, 1);
+    columns[0] = try testing.allocator.dupe(u8, "*");
+
+    var query = Query{
         .Select = .{
-            .columns = &.{"*"},
+            .columns = columns,
             .from = try testing.allocator.dupe(u8, "events"),
             .where = where_expr,
             .order_by = null,
@@ -908,7 +930,7 @@ test "query executor select" {
 test "query parser" {
     var parser = QueryParser.init(testing.allocator, "SELECT * FROM events WHERE type = 'PlayerAction'");
     
-    const query = try parser.parse();
+    var query = try parser.parse();
     defer query.deinit(testing.allocator);
     
     try testing.expectEqual(@as(std.meta.Tag(Query), .Select), std.meta.activeTag(query));

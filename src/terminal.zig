@@ -105,9 +105,29 @@ pub const Color = packed struct(u32) {
                 return (@as(u24, c.r) << 16) | (@as(u24, c.g) << 8) | @as(u24, c.b);
             },
             .palette => {
-                // TODO: Implement ANSI palette lookup if needed
-                // For now, map simple indices or fallback
-                return 0xFFFFFF;
+                const idx: u8 = @intCast(self.payload & 0xFF);
+                if (idx < 16) {
+                    // Standard + bright ANSI colors
+                    const ansi16 = [16]u24{
+                        0x000000, 0xAA0000, 0x00AA00, 0xAA5500, // black, red, green, yellow
+                        0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA, // blue, magenta, cyan, white
+                        0x555555, 0xFF5555, 0x55FF55, 0xFFFF55, // bright variants
+                        0x5555FF, 0xFF55FF, 0x55FFFF, 0xFFFFFF,
+                    };
+                    return ansi16[idx];
+                } else if (idx < 232) {
+                    // 6x6x6 color cube (indices 16-231)
+                    const cube = idx - 16;
+                    const ri: u24 = cube / 36;
+                    const gi: u24 = (cube % 36) / 6;
+                    const bi: u24 = cube % 6;
+                    const steps = [6]u8{ 0, 95, 135, 175, 215, 255 };
+                    return (@as(u24, steps[ri]) << 16) | (@as(u24, steps[gi]) << 8) | @as(u24, steps[bi]);
+                } else {
+                    // Grayscale ramp (indices 232-255)
+                    const g: u24 = 8 + @as(u24, idx - 232) * 10;
+                    return (g << 16) | (g << 8) | g;
+                }
             },
             .default => return 0x000000, // or handling context dependent
         }
@@ -913,27 +933,27 @@ const testing = if (!is_freestanding) @import("std").testing else struct {};
 
 test "grid write and read" {
     var grid = Grid.init(80, 24);
-    grid.put(5, 3, 'A', 0xFF0000, 0x000000, .{});
+    grid.put(5, 3, 'A', Color.RED, Color.BLACK, .{});
 
     const cell = grid.readCell(5, 3);
     try testing.expectEqual(@as(u21, 'A'), cell.codepoint);
-    try testing.expectEqual(@as(u24, 0xFF0000), cell.fg);
+    try testing.expectEqual(Color.RED, cell.fg);
 }
 
 test "grid dirty tracking" {
     var grid = Grid.init(80, 24);
     try testing.expectEqual(@as(usize, 0), grid.dirty_count);
 
-    grid.put(0, 0, 'X', 0xFFFFFF, 0x000000, .{});
+    grid.put(0, 0, 'X', Color.WHITE, Color.BLACK, .{});
     try testing.expectEqual(@as(usize, 1), grid.dirty_count);
 
     // Writing same cell again should not add to dirty
-    grid.put(0, 0, 'X', 0xFFFFFF, 0x000000, .{});
+    grid.put(0, 0, 'X', Color.WHITE, Color.BLACK, .{});
     try testing.expectEqual(@as(usize, 1), grid.dirty_count);
 }
 
 test "cell pack and unpack roundtrip" {
-    const cell = Cell{ .codepoint = 0x1F600, .fg = 0xABCDEF, .bg = 0x123456, .attrs = .{ .bold = true, .italic = true } };
+    const cell = Cell{ .codepoint = 0x1F600, .fg = Color.rgb(0xAB, 0xCD, 0xEF), .bg = Color.rgb(0x12, 0x34, 0x56), .attrs = .{ .bold = true, .italic = true } };
     var buf: [CELL_PACKED_SIZE]u8 = undefined;
     packCell(42, 17, cell, &buf);
 
@@ -948,8 +968,8 @@ test "cell pack and unpack roundtrip" {
 
 test "sync frame encode and decode roundtrip" {
     var grid = Grid.init(80, 24);
-    grid.put(0, 0, 'H', 0xFF0000, 0x000000, .{});
-    grid.put(1, 0, 'i', 0x00FF00, 0x000000, .{});
+    grid.put(0, 0, 'H', Color.RED, Color.BLACK, .{});
+    grid.put(1, 0, 'i', Color.GREEN, Color.BLACK, .{});
 
     var buf: [4096]u8 = undefined;
     const frame_len = try encodeSyncFrame(&grid, &buf);
@@ -1012,7 +1032,7 @@ test "URI parsing" {
 
 test "dispatch frame/sync" {
     var grid = Grid.init(80, 24);
-    grid.put(0, 0, 'Z', 0xABCDEF, 0x000000, .{});
+    grid.put(0, 0, 'Z', Color.rgb(0xAB, 0xCD, 0xEF), Color.BLACK, .{});
 
     var buf: [4096]u8 = undefined;
     const result = try dispatch(&grid, "terminal://frame/sync", &buf);
@@ -1021,19 +1041,21 @@ test "dispatch frame/sync" {
 
 test "dispatch cell/read" {
     var grid = Grid.init(80, 24);
-    grid.put(3, 7, 'Q', 0x112233, 0x445566, .{ .bold = true });
+    const fg = Color.rgb(0x11, 0x22, 0x33);
+    const bg = Color.rgb(0x44, 0x55, 0x66);
+    grid.put(3, 7, 'Q', fg, bg, .{ .bold = true });
 
     var buf: [64]u8 = undefined;
     const result = try dispatch(&grid, "terminal://cell/read?x=3&y=7", &buf);
     try testing.expect(result.cell != null);
     try testing.expectEqual(@as(u21, 'Q'), result.cell.?.codepoint);
-    try testing.expectEqual(@as(u24, 0x112233), result.cell.?.fg);
+    try testing.expectEqual(fg, result.cell.?.fg);
 }
 
 test "dispatch color/trit" {
     var grid = Grid.init(80, 24);
     // Red foreground → hue ≈ 0° → PLUS
-    grid.put(0, 0, 'R', 0xFF0000, 0x000000, .{});
+    grid.put(0, 0, 'R', Color.RED, Color.BLACK, .{});
 
     var buf: [64]u8 = undefined;
     const result = try dispatch(&grid, "terminal://color/trit?x=0&y=0", &buf);
@@ -1051,11 +1073,11 @@ test "GF(3) trit from RGB" {
 }
 
 test "full pipeline: write → commit → decode → apply" {
-    // Source terminal
+    // Source terminal — GF(3) trit primaries: PLUS(red) ERGODIC(green) MINUS(blue)
     var src = Grid.init(80, 24);
-    src.put(0, 0, 'A', 0xFF0000, 0x000000, .{ .bold = true });
-    src.put(1, 0, 'B', 0x00FF00, 0x000000, .{});
-    src.put(2, 0, 'C', 0x0000FF, 0x000000, .{ .underline = true });
+    src.put(0, 0, 'A', Color.RED, Color.BLACK, .{ .bold = true });
+    src.put(1, 0, 'B', Color.GREEN, Color.BLACK, .{});
+    src.put(2, 0, 'C', Color.BLUE, Color.BLACK, .{ .underline = true });
 
     // Encode sync frame
     var buf: [4096]u8 = undefined;
@@ -1086,7 +1108,7 @@ test "full pipeline: write → commit → decode → apply" {
 
 test "writeString" {
     var grid = Grid.init(80, 24);
-    grid.writeString("Hi", 0xFFFFFF, 0x000000);
+    grid.writeString("Hi", Color.WHITE, Color.BLACK);
 
     try testing.expectEqual(@as(u21, 'H'), grid.readCell(0, 0).codepoint);
     try testing.expectEqual(@as(u21, 'i'), grid.readCell(1, 0).codepoint);

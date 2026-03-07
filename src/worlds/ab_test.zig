@@ -6,7 +6,7 @@
 const std = @import("std");
 const World = @import("world.zig").World;
 const WorldVariant = @import("world.zig").WorldVariant;
-const ArrayList = std.ArrayList;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const StringHashMap = std.StringHashMap;
 const Random = std.Random;
 
@@ -68,7 +68,7 @@ pub const ABTest = struct {
     config: ABTestConfig,
     worlds: StringHashMap(*World),
     player_assignments: StringHashMap(WorldVariant),
-    metrics: ArrayList(SessionMetrics),
+    metrics: ArrayListUnmanaged(SessionMetrics),
     random: Random,
     start_time: ?i64,
     
@@ -84,7 +84,7 @@ pub const ABTest = struct {
             .config = config,
             .worlds = StringHashMap(*World).init(allocator),
             .player_assignments = StringHashMap(WorldVariant).init(allocator),
-            .metrics = std.ArrayList(SessionMetrics).init(allocator),
+            .metrics = .{},
             .random = prng.random(),
             .start_time = null,
         };
@@ -93,8 +93,14 @@ pub const ABTest = struct {
     pub fn deinit(self: *ABTest) void {
         var it = self.worlds.valueIterator();
         while (it.next()) |world| world.*.destroy();
+        // Free allocated keys in worlds map
+        var wk_it = self.worlds.keyIterator();
+        while (wk_it.next()) |key| self.allocator.free(key.*);
         self.worlds.deinit();
         
+        // Free allocated keys in player_assignments map
+        var pk_it = self.player_assignments.keyIterator();
+        while (pk_it.next()) |key| self.allocator.free(key.*);
         self.player_assignments.deinit();
         self.metrics.deinit(self.allocator);
     }
@@ -274,20 +280,20 @@ pub const ABTest = struct {
         b: WorldVariant,
     ) !TestResult {
         // Collect scores for each variant
-        var scores_a = ArrayList(f64).init(self.allocator);
-        defer scores_a.deinit();
+        var scores_a = std.ArrayListUnmanaged(f64){};
+        defer scores_a.deinit(self.allocator);
         
-        var scores_b = ArrayList(f64).init(self.allocator);
-        defer scores_b.deinit();
+        var scores_b = std.ArrayListUnmanaged(f64){};
+        defer scores_b.deinit(self.allocator);
         
         for (self.metrics.items) |m| {
             const variant = WorldVariant.fromString(m.world_uri) orelse continue;
             const score = m.engagement_score * 0.4 + m.success_score * 0.6;
             
             if (variant == a) {
-                try scores_a.append(score);
+                try scores_a.append(self.allocator, score);
             } else if (variant == b) {
-                try scores_b.append(score);
+                try scores_b.append(self.allocator, score);
             }
         }
         
@@ -497,7 +503,7 @@ test "ABTest metrics aggregation" {
         .error_count = 0,
     });
     
-    const metrics = try ab_test_instance.getVariantMetrics();
+    var metrics = try ab_test_instance.getVariantMetrics();
     defer metrics.deinit();
     
     const a_metrics = metrics.get("a://").?;

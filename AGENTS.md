@@ -20,6 +20,15 @@ Run these from the repo root:
 - `zig build world-demo` — world A/B testing demo.
 - `zig build bci-demo` — BCI-Aptos bridge demo.
 
+## Project-Specific Tools
+- `syrup`: JSON ↔ Syrup CLI converter.
+- `syrup-verify`: CID verification tool.
+- `eeg`: EEG processing pipeline (Cyton → FFT → bands).
+- `bench-zig` / `bench-cell-sync`: Performance and synchronization benchmarks.
+- `bristol-syrup`: Bristol MPC circuit converter.
+- `vibesnipe`: Vibesnipe generator.
+- `world-demo` / `bci-demo`: Architectural demos for worlds and BCI integration.
+
 ## Coding Style & Naming Conventions
 - Use Zig’s standard style (`zig fmt`) and keep formatting stable before commits.
 - Prefer `snake_case.zig` filenames and descriptive module names (e.g., `message_frame.zig`, `tcp_transport.zig`).

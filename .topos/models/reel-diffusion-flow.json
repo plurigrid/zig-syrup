@@ -1,0 +1,184 @@
+{
+  "type": "model",
+  "name": "Reel Diffusion Flow: ncreel as Stock-Flow Dynamics",
+  "theory": "primitive-stock-flow",
+  "notebook": {
+    "cellContents": {
+      "b0000001-0000-7000-8000-000000000001": {
+        "tag": "rich-text",
+        "id": "b0000001-0000-7000-8000-000000000001",
+        "content": "# ncreel Diffusion as Stock-Flow\n\nThe entire TUI state modeled as a notcurses_reel(3). Stocks are state quantities (tablet content, focus position, layout allocation). Flows are diffusion processes (noise/denoise at two timescales). The focused tablet is the denoising anchor — reconstructed first at full resolution via focal Kan extension.\n\n## Two-Level Geometry\n- **Inter-tablet**: S^1 cylinder, flat, O(n^2) mixing\n- **Intra-tablet**: Tree hierarchy, 0-hyperbolic, O(log m) mixing\n\n## Gromov Simplification\nM = S^1 x_f T ~QI T. The cylinder is a bounded perturbation. Tree structure dominates asymptotically."
+      },
+      "b0000001-0000-7000-8000-000000000010": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000010",
+        "content": {
+          "tag": "object",
+          "name": "ReelState",
+          "id": "b0000001-0000-7000-8000-000000000010",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000011": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000011",
+        "content": {
+          "tag": "object",
+          "name": "FocusedTablet",
+          "id": "b0000001-0000-7000-8000-000000000011",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000012": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000012",
+        "content": {
+          "tag": "object",
+          "name": "UnfocusedTablets",
+          "id": "b0000001-0000-7000-8000-000000000012",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000013": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000013",
+        "content": {
+          "tag": "object",
+          "name": "BorderFrame",
+          "id": "b0000001-0000-7000-8000-000000000013",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000014": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000014",
+        "content": {
+          "tag": "object",
+          "name": "NoiseLevel",
+          "id": "b0000001-0000-7000-8000-000000000014",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000015": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000015",
+        "content": {
+          "tag": "object",
+          "name": "SpectralGap",
+          "id": "b0000001-0000-7000-8000-000000000015",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000016": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000016",
+        "content": {
+          "tag": "object",
+          "name": "SyrupEncoding",
+          "id": "b0000001-0000-7000-8000-000000000016",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000017": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000017",
+        "content": {
+          "tag": "object",
+          "name": "TreeDiffEditPath",
+          "id": "b0000001-0000-7000-8000-000000000017",
+          "obType": { "tag": "Basic", "content": "Object" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000030": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000030",
+        "content": {
+          "tag": "morphism",
+          "name": "focal_denoise",
+          "id": "b0000001-0000-7000-8000-000000000030",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "dom": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000014" },
+          "cod": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000011" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000031": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000031",
+        "content": {
+          "tag": "morphism",
+          "name": "peripheral_fill",
+          "id": "b0000001-0000-7000-8000-000000000031",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "dom": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000011" },
+          "cod": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000012" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000032": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000032",
+        "content": {
+          "tag": "morphism",
+          "name": "encode_syrup",
+          "id": "b0000001-0000-7000-8000-000000000032",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "dom": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000010" },
+          "cod": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000016" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000033": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000033",
+        "content": {
+          "tag": "morphism",
+          "name": "tree_diff",
+          "id": "b0000001-0000-7000-8000-000000000033",
+          "morType": { "tag": "Hom", "content": { "tag": "Basic", "content": "Object" } },
+          "dom": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000016" },
+          "cod": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000017" }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000034": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000034",
+        "content": {
+          "tag": "morphism",
+          "name": "cheeger_bound",
+          "id": "b0000001-0000-7000-8000-000000000034",
+          "morType": { "tag": "Basic", "content": "Link" },
+          "dom": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000015" },
+          "cod": { "tag": "Tabulated", "content": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000030" } }
+        }
+      },
+      "b0000001-0000-7000-8000-000000000035": {
+        "tag": "formal",
+        "id": "b0000001-0000-7000-8000-000000000035",
+        "content": {
+          "tag": "morphism",
+          "name": "gf3_conservation",
+          "id": "b0000001-0000-7000-8000-000000000035",
+          "morType": { "tag": "Basic", "content": "Link" },
+          "dom": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000013" },
+          "cod": { "tag": "Tabulated", "content": { "tag": "Basic", "content": "b0000001-0000-7000-8000-000000000031" } }
+        }
+      }
+    },
+    "cellOrder": [
+      "b0000001-0000-7000-8000-000000000001",
+      "b0000001-0000-7000-8000-000000000010",
+      "b0000001-0000-7000-8000-000000000011",
+      "b0000001-0000-7000-8000-000000000012",
+      "b0000001-0000-7000-8000-000000000013",
+      "b0000001-0000-7000-8000-000000000014",
+      "b0000001-0000-7000-8000-000000000015",
+      "b0000001-0000-7000-8000-000000000016",
+      "b0000001-0000-7000-8000-000000000017",
+      "b0000001-0000-7000-8000-000000000030",
+      "b0000001-0000-7000-8000-000000000031",
+      "b0000001-0000-7000-8000-000000000032",
+      "b0000001-0000-7000-8000-000000000033",
+      "b0000001-0000-7000-8000-000000000034",
+      "b0000001-0000-7000-8000-000000000035"
+    ]
+  },
+  "version": "1"
+}

@@ -34,6 +34,44 @@ pub const RGB = struct {
     }
 };
 
+/// Comptime-memoized sine table for 0..359 degrees
+const sin_table = blk: {
+    @setEvalBranchQuota(2000);
+    var table: [360]f32 = undefined;
+    for (0..360) |i| {
+        table[i] = @sin(@as(f32, @floatFromInt(i)) * std.math.pi / 180.0);
+    }
+    break :blk table;
+};
+
+/// Comptime-memoized cosine table for 0..359 degrees
+const cos_table = blk: {
+    @setEvalBranchQuota(2000);
+    var table: [360]f32 = undefined;
+    for (0..360) |i| {
+        table[i] = @cos(@as(f32, @floatFromInt(i)) * std.math.pi / 180.0);
+    }
+    break :blk table;
+};
+
+/// Fast sine lookup with degree input
+fn fastSin(degrees: f32) f32 {
+    const d = @mod(degrees, 360.0);
+    const idx = @as(usize, @intFromFloat(d));
+    const frac = d - @as(f32, @floatFromInt(idx));
+    const next_idx = (idx + 1) % 360;
+    return sin_table[idx] * (1.0 - frac) + sin_table[next_idx] * frac;
+}
+
+/// Fast cosine lookup with degree input
+fn fastCos(degrees: f32) f32 {
+    const d = @mod(degrees, 360.0);
+    const idx = @as(usize, @intFromFloat(d));
+    const frac = d - @as(f32, @floatFromInt(idx));
+    const next_idx = (idx + 1) % 360;
+    return cos_table[idx] * (1.0 - frac) + cos_table[next_idx] * frac;
+}
+
 /// HCL color (Hue-Chroma-Lightness, perceptually uniform)
 pub const HCL = struct {
     h: f32, // Hue in degrees [0, 360)
@@ -43,9 +81,9 @@ pub const HCL = struct {
     /// Convert to RGB via Lab intermediate
     pub fn toRGB(self: HCL) RGB {
         // HCL -> Lab
-        const h_rad = self.h * std.math.pi / 180.0;
-        const a = self.c * @cos(h_rad);
-        const b = self.c * @sin(h_rad);
+        // Optimization: Use memoized trig tables
+        const a = self.c * fastCos(self.h);
+        const b = self.c * fastSin(self.h);
         const l = self.l * 100.0;
 
         // Lab -> XYZ (D65 illuminant)

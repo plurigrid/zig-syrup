@@ -3,10 +3,10 @@
 //! Assigns golden-spiral colors to spatial nodes, propagates focus state, and exports via C ABI.
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
-const rainbow = @import("rainbow.zig");
-const propagator = @import("propagator.zig");
-const cell_dispatch = @import("cell_dispatch.zig");
+const syrup = @import("syrup");
+const rainbow = @import("rainbow");
+const propagator = @import("propagator");
+const cell_dispatch = @import("cell_dispatch");
 const Allocator = std.mem.Allocator;
 
 // =============================================================================

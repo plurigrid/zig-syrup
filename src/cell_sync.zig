@@ -21,8 +21,8 @@
 //!   [0xFFFF][u16 count] = 4 bytes for a run
 
 const std = @import("std");
-const syrup = @import("syrup.zig");
-const damage = @import("damage.zig");
+const syrup = @import("syrup");
+const damage = @import("damage");
 const Allocator = std.mem.Allocator;
 
 const Cell = damage.Cell;

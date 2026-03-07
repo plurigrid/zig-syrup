@@ -55,58 +55,58 @@ pub const MerkleNode = struct {
 /// Merkle tree for efficient verification
 pub const MerkleTree = struct {
     allocator: Allocator,
-    leaves: std.ArrayList(Hash),
-    levels: std.ArrayList(std.ArrayList(Hash)),
+    leaves: std.ArrayListUnmanaged(Hash),
+    levels: std.ArrayListUnmanaged(std.ArrayListUnmanaged(Hash)),
     root: Hash,
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: Allocator) Self {
         return .{
             .allocator = allocator,
-            .leaves = std.ArrayList(Hash).init(allocator),
-            .levels = std.ArrayList(std.ArrayList(Hash)).init(allocator),
+            .leaves = .{},
+            .levels = .{},
             .root = [_]u8{0} ** 32,
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
-        self.leaves.deinit();
+        self.leaves.deinit(self.allocator);
         for (self.levels.items) |*level| {
-            level.deinit();
+            level.deinit(self.allocator);
         }
-        self.levels.deinit();
+        self.levels.deinit(self.allocator);
     }
-    
+
     /// Add a leaf hash
     pub fn addLeaf(self: *Self, hash: Hash) !void {
-        try self.leaves.append(hash);
+        try self.leaves.append(self.allocator, hash);
     }
-    
+
     /// Build the tree and compute root
     pub fn build(self: *Self) !Hash {
         if (self.leaves.items.len == 0) {
             self.root = [_]u8{0} ** 32;
             return self.root;
         }
-        
+
         // Clear previous levels
         for (self.levels.items) |*level| {
-            level.deinit();
+            level.deinit(self.allocator);
         }
         self.levels.clearRetainingCapacity();
-        
+
         // Start with leaves
-        var current_level = std.ArrayList(Hash).init(self.allocator);
-        try current_level.appendSlice(self.leaves.items);
-        
+        var current_level = std.ArrayListUnmanaged(Hash){};
+        try current_level.appendSlice(self.allocator, self.leaves.items);
+
         // Build tree bottom-up
         while (current_level.items.len > 1) {
-            try self.levels.append(current_level);
-            
-            const parent_size = (current_level.items.len + 1) / 2;
-            var parent_level = std.ArrayList(Hash).init(self.allocator);
-            
+            try self.levels.append(self.allocator, current_level);
+
+            _ = (current_level.items.len + 1) / 2;
+            var parent_level = std.ArrayListUnmanaged(Hash){};
+
             var i: usize = 0;
             while (i < current_level.items.len) : (i += 2) {
                 if (i + 1 < current_level.items.len) {
@@ -114,17 +114,17 @@ pub const MerkleTree = struct {
                         current_level.items[i],
                         current_level.items[i + 1]
                     );
-                    try parent_level.append(combined);
+                    try parent_level.append(self.allocator, combined);
                 } else {
                     // Odd node out - promote to next level
-                    try parent_level.append(current_level.items[i]);
+                    try parent_level.append(self.allocator, current_level.items[i]);
                 }
             }
-            
+
             current_level = parent_level;
         }
         
-        try self.levels.append(current_level);
+        try self.levels.append(self.allocator, current_level);
         
         self.root = current_level.items[0];
         return self.root;
@@ -133,23 +133,24 @@ pub const MerkleTree = struct {
     /// Generate proof for a leaf at given index
     pub fn getProof(self: Self, leaf_index: usize) !MerkleProof {
         if (leaf_index >= self.leaves.items.len) return error.InvalidIndex;
-        
+
         var proof = MerkleProof{
+            .allocator = self.allocator,
             .leaf_hash = self.leaves.items[leaf_index],
-            .siblings = std.ArrayList(Hash).init(self.allocator),
-            .indices = std.ArrayList(usize).init(self.allocator),
+            .siblings = .{},
+            .indices = .{},
         };
-        
+
         var idx = leaf_index;
         for (self.levels.items) |level| {
             const sibling_idx = if (idx % 2 == 0) idx + 1 else idx - 1;
             if (sibling_idx < level.items.len) {
-                try proof.siblings.append(level.items[sibling_idx]);
-                try proof.indices.append(idx % 2);
+                try proof.siblings.append(self.allocator, level.items[sibling_idx]);
+                try proof.indices.append(self.allocator, idx % 2);
             }
             idx /= 2;
         }
-        
+
         return proof;
     }
     
@@ -161,15 +162,16 @@ pub const MerkleTree = struct {
 
 /// Merkle proof for verification
 pub const MerkleProof = struct {
+    allocator: Allocator,
     leaf_hash: Hash,
-    siblings: std.ArrayList(Hash),
-    indices: std.ArrayList(usize), // 0 = left, 1 = right
-    
+    siblings: std.ArrayListUnmanaged(Hash),
+    indices: std.ArrayListUnmanaged(usize), // 0 = left, 1 = right
+
     pub fn deinit(self: *MerkleProof) void {
-        self.siblings.deinit();
-        self.indices.deinit();
+        self.siblings.deinit(self.allocator);
+        self.indices.deinit(self.allocator);
     }
-    
+
     /// Verify proof against a root hash
     pub fn verify(self: MerkleProof, root: Hash) bool {
         var current = self.leaf_hash;
@@ -337,13 +339,13 @@ pub const MemoryStore = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         
-        var to_remove = std.ArrayList(Hash).init(self.allocator);
-        defer to_remove.deinit();
-        
+        var to_remove = std.ArrayListUnmanaged(Hash){};
+        defer to_remove.deinit(self.allocator);
+
         var it = self.refs.iterator();
         while (it.next()) |entry| {
             if (entry.value_ptr.* == 0) {
-                try to_remove.append(entry.key_ptr.*);
+                try to_remove.append(self.allocator, entry.key_ptr.*);
             }
         }
         
@@ -360,7 +362,7 @@ pub const MemoryStore = struct {
         return freed;
     }
     
-    pub fn cas(self: *Self) CAS {
+    pub fn cas(_: *Self) CAS {
         return .{
             .vtable = &.{
                 .put = struct {
@@ -575,7 +577,7 @@ pub const FileStore = struct {
         try f.seekTo(entry.offset + 4); // Skip size prefix
         
         // Read data
-        var data = try self.allocator.alloc(u8, entry.size);
+        const data = try self.allocator.alloc(u8, entry.size);
         errdefer self.allocator.free(data);
         
         const read = try f.read(data);
@@ -611,7 +613,7 @@ test "merkle tree" {
     const root = try tree.build();
     
     // Root should not be zero
-    var zero_hash = [_]u8{0} ** 32;
+    const zero_hash = [_]u8{0} ** 32;
     try testing.expect(!std.mem.eql(u8, &root, &zero_hash));
     
     // Get proof for leaf 0
