@@ -20,6 +20,8 @@ const lsl = @import("lsl_inlet");
 const edf = @import("edf_writer");
 const edf_reader = @import("edf_reader");
 const bci = @import("bci_receiver");
+const propagator = @import("propagator");
+const fft_bands = @import("fft_bands");
 
 // ============================================================================
 // TEST 1: DSI-24 → parse → verify channel count + scale
@@ -340,4 +342,119 @@ test "integration: parse PhysioNet-format EDF fixture" {
 
     // Sample rate
     try std.testing.expectApproxEqAbs(@as(f64, 4.0), parsed.sampleRate(0), 0.001);
+}
+
+// ============================================================================
+// TEST 12: Full pipeline — EEG → FFT → BandPowers → Propagator → Action
+// Bridges fft_bands.zig and propagator.zig (SDF Ch7 recommendation)
+// ============================================================================
+
+test "integration: EEG FFT bands into propagator network" {
+    const allocator = std.testing.allocator;
+
+    // --- Stage 1: Generate synthetic EEG (strong 10Hz alpha + weak beta noise) ---
+    const sample_rate: f64 = 250.0;
+    const n_samples: usize = 250; // 1 second epoch
+    const samples = try allocator.alloc(f32, n_samples);
+    defer allocator.free(samples);
+
+    for (0..n_samples) |i| {
+        const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+        // Strong alpha (10Hz) + weak beta (20Hz) — simulates relaxed but alert state
+        samples[i] = 1.0 * @sin(2.0 * std.math.pi * 10.0 * t) +
+            0.2 * @sin(2.0 * std.math.pi * 20.0 * t);
+    }
+
+    // --- Stage 2: Extract EEG band powers via comptime-memoized FFT ---
+    const bands = try fft_bands.extractBands(samples, sample_rate, allocator);
+
+    // Alpha should dominate (10Hz sine)
+    try std.testing.expect(bands.alpha > bands.delta);
+    try std.testing.expect(bands.alpha > bands.theta);
+    try std.testing.expect(bands.alpha > bands.beta);
+
+    // --- Stage 3: Compute focus and relaxation from band powers ---
+    // Focus metric: beta / (alpha + beta) — low when alpha dominates
+    const total_ab = bands.alpha + bands.beta;
+    const focus_level: f32 = if (total_ab > 0) bands.beta / total_ab else 0.0;
+    // Relaxation metric: theta / (theta + beta) — moderate here
+    const total_tb = bands.theta + bands.beta;
+    const relax_level: f32 = if (total_tb > 0) bands.theta / total_tb else 0.0;
+
+    // --- Stage 4: Wire into propagator cells ---
+    const CellF32 = propagator.Cell(f32, comptime propagator.defaultMerge(f32));
+
+    var focus_cell = CellF32.init(allocator, "eeg_focus");
+    defer focus_cell.deinit();
+    var relax_cell = CellF32.init(allocator, "eeg_relax");
+    defer relax_cell.deinit();
+    var threshold_cell = CellF32.init(allocator, "threshold");
+    defer threshold_cell.deinit();
+    var action_cell = CellF32.init(allocator, "action");
+    defer action_cell.deinit();
+
+    // Set cell values from BCI signal processing
+    try focus_cell.set_content(focus_level);
+    try relax_cell.set_content(relax_level);
+    try threshold_cell.set_content(0.5); // neurofeedback threshold
+
+    // --- Stage 5: Apply neurofeedback_gate propagator function ---
+    const gate_result = propagator.neurofeedback_gate(&.{
+        focus_cell.get_content(),
+        relax_cell.get_content(),
+        threshold_cell.get_content(),
+    });
+
+    // With strong alpha (focus_level low, ~0.04), gate should NOT trigger
+    try std.testing.expect(gate_result != null);
+    try action_cell.set_content(gate_result.?);
+    try std.testing.expectEqual(@as(?f32, 0.0), action_cell.get_content());
+
+    // --- Stage 6: Verify focus_brightness propagator ---
+    const brightness = propagator.focus_brightness(&.{focus_cell.get_content()});
+    try std.testing.expect(brightness != null);
+    // Low focus → brightness near 0.6 (dim)
+    try std.testing.expect(brightness.? < 0.7);
+    try std.testing.expect(brightness.? >= 0.6);
+}
+
+// ============================================================================
+// TEST 13: Multi-modal propagator fusion — EEG + fNIRS + Eye → unified trit
+// ============================================================================
+
+test "integration: multi-modal propagator fusion with GF(3) balance" {
+    const allocator = std.testing.allocator;
+    const LCell = propagator.Cell(f32, comptime propagator.latticeMerge(f32));
+
+    // Create cells for each modality's trit output (as f32: -1, 0, +1)
+    var eeg_trit_cell = LCell.init(allocator, "eeg_trit");
+    defer eeg_trit_cell.deinit();
+    var fnirs_trit_cell = LCell.init(allocator, "fnirs_trit");
+    defer fnirs_trit_cell.deinit();
+    var eye_trit_cell = LCell.init(allocator, "eye_trit");
+    defer eye_trit_cell.deinit();
+
+    // EEG → ERGODIC (0), fNIRS → PLUS (+1), Eye → MINUS (-1)
+    try eeg_trit_cell.set_content(0.0);
+    try fnirs_trit_cell.set_content(1.0);
+    try eye_trit_cell.set_content(-1.0);
+
+    // Verify lattice merge is idempotent (setting same value again)
+    try eeg_trit_cell.set_content(0.0);
+    try std.testing.expectEqual(@as(?f32, 0.0), eeg_trit_cell.get_content());
+
+    // Setting contradictory value triggers contradiction
+    try fnirs_trit_cell.set_content(-1.0); // was +1, now -1 → contradiction
+    try std.testing.expect(fnirs_trit_cell.get_cell_value().isContradiction());
+
+    // GF(3) conservation: sum of non-contradicted modalities
+    // eeg(0) + eye(-1) = -1, missing fnirs(+1) to balance
+    const eeg_val = eeg_trit_cell.get_content() orelse 0.0;
+    const eye_val = eye_trit_cell.get_content() orelse 0.0;
+    // fnirs is in contradiction — detectable!
+    try std.testing.expect(fnirs_trit_cell.get_cell_value().isContradiction());
+
+    // Only balanced if all three are coherent
+    const partial_sum = @as(i8, @intFromFloat(eeg_val + eye_val));
+    try std.testing.expectEqual(@as(i8, -1), partial_sum); // Unbalanced — contradiction detected
 }

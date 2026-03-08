@@ -2521,6 +2521,8 @@ pub fn build(b: *std.Build) void {
     const edf_reader_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/edf_reader.zig"), .target = target, .optimize = optimize });
     edf_reader_mod_for_integ.addImport("edf_writer", edf_mod_for_integ);
     bci_integ_test_mod.addImport("edf_reader", edf_reader_mod_for_integ);
+    bci_integ_test_mod.addImport("propagator", propagator_mod);
+    bci_integ_test_mod.addImport("fft_bands", fft_bands_mod);
     const bci_integ_tests = b.addTest(.{ .root_module = bci_integ_test_mod });
     const run_bci_integ_tests = b.addRunArtifact(bci_integ_tests);
     test_step.dependOn(&run_bci_integ_tests.step);
