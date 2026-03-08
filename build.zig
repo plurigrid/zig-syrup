@@ -2346,6 +2346,32 @@ pub fn build(b: *std.Build) void {
     test_bci_step.dependOn(&run_bci_receiver_tests.step);
 
     // ========================================
+    // Ensemble Reservoir Computing (ERC)
+    // ========================================
+
+    const erc_mod = b.addModule("erc", .{
+        .root_source_file = b.path("src/erc.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    erc_mod.addImport("fft_bands", fft_bands_mod);
+    erc_mod.addImport("bci_receiver", bci_receiver_mod);
+    erc_mod.addImport("propagator", propagator_mod);
+
+    const erc_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/erc.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    erc_test_mod.addImport("fft_bands", fft_bands_mod);
+    erc_test_mod.addImport("bci_receiver", bci_receiver_mod);
+    erc_test_mod.addImport("propagator", propagator_mod);
+    const erc_tests = b.addTest(.{ .root_module = erc_test_mod });
+    const run_erc_tests = b.addRunArtifact(erc_tests);
+    test_step.dependOn(&run_erc_tests.step);
+    test_bci_step.dependOn(&run_erc_tests.step);
+
+    // ========================================
     // LSL Inlet (Lab Streaming Layer C FFI)
     // ========================================
 
@@ -2523,6 +2549,7 @@ pub fn build(b: *std.Build) void {
     bci_integ_test_mod.addImport("edf_reader", edf_reader_mod_for_integ);
     bci_integ_test_mod.addImport("propagator", propagator_mod);
     bci_integ_test_mod.addImport("fft_bands", fft_bands_mod);
+    bci_integ_test_mod.addImport("erc", erc_mod);
     const bci_integ_tests = b.addTest(.{ .root_module = bci_integ_test_mod });
     const run_bci_integ_tests = b.addRunArtifact(bci_integ_tests);
     test_step.dependOn(&run_bci_integ_tests.step);

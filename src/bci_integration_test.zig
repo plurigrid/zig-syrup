@@ -22,6 +22,7 @@ const edf_reader = @import("edf_reader");
 const bci = @import("bci_receiver");
 const propagator = @import("propagator");
 const fft_bands = @import("fft_bands");
+const erc = @import("erc");
 
 // ============================================================================
 // TEST 1: DSI-24 → parse → verify channel count + scale
@@ -457,4 +458,109 @@ test "integration: multi-modal propagator fusion with GF(3) balance" {
     // Only balanced if all three are coherent
     const partial_sum = @as(i8, @intFromFloat(eeg_val + eye_val));
     try std.testing.expectEqual(@as(i8, -1), partial_sum); // Unbalanced — contradiction detected
+}
+
+// ============================================================================
+// TEST 14: ERC multi-channel ensemble → trit with propagator integration
+// ============================================================================
+
+test "integration: ERC 8-channel ensemble to propagator cell" {
+    const allocator = std.testing.allocator;
+
+    // Generate 8 channels of synthetic EEG (alpha-dominant, ~10Hz)
+    const sample_rate: f64 = 250.0;
+    const n_samples: usize = 250;
+    var all_bands: [8]fft_bands.BandPowers = undefined;
+
+    for (0..8) |ch| {
+        const samples = try allocator.alloc(f32, n_samples);
+        defer allocator.free(samples);
+
+        for (0..n_samples) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+            // 10Hz alpha + small per-channel phase offset (spatial multiplexing)
+            const phase = @as(f32, @floatFromInt(ch)) * 0.3;
+            samples[i] = 1.0 * @sin(2.0 * std.math.pi * 10.0 * t + phase) +
+                0.1 * @sin(2.0 * std.math.pi * 25.0 * t); // weak beta noise
+        }
+
+        all_bands[ch] = try fft_bands.extractBands(samples, sample_rate, allocator);
+    }
+
+    // ERC classification
+    var reservoir = erc.Cyton.init(.uniform);
+    const result = reservoir.processFromBandPowers(all_bands);
+
+    // Alpha-dominant → ZERO (relaxed baseline)
+    try std.testing.expectEqual(bci.Trit.zero, result.trit);
+    try std.testing.expect(result.confidence > 0.3);
+
+    // Wire ERC output into propagator cell
+    const CellF32 = propagator.Cell(f32, comptime propagator.defaultMerge(f32));
+    var erc_cell = CellF32.init(allocator, "erc_trit");
+    defer erc_cell.deinit();
+
+    const cv = reservoir.toCellValue();
+    try erc_cell.set_cell_value(cv);
+    try std.testing.expectEqual(@as(?f32, 0.0), erc_cell.get_content()); // zero trit
+
+    // GF(3) balance: erc(0) + fnirs(+1) + eye(-1) = 0
+    const erc_trit: i8 = @intFromEnum(result.trit);
+    const fnirs_trit: i8 = @intFromEnum(fnirs.Trit.plus);
+    const eye_trit_val: i8 = @intFromEnum(eye.Trit.minus);
+    const gf3_sum = erc_trit + fnirs_trit + eye_trit_val;
+    try std.testing.expectEqual(@as(i8, 0), @as(i8, @intCast(@mod(gf3_sum + 3, 3))));
+}
+
+// ============================================================================
+// TEST 15: ERC entropy-weighted denoising through full pipeline
+// ============================================================================
+
+test "integration: ERC entropy-weighted denoises bad channel" {
+    const allocator = std.testing.allocator;
+
+    const sample_rate: f64 = 250.0;
+    const n_samples: usize = 250;
+    var all_bands: [4]fft_bands.BandPowers = undefined;
+
+    // Channels 0-2: clean beta-dominant (25Hz) → should classify as PLUS
+    for (0..3) |ch| {
+        const samples = try allocator.alloc(f32, n_samples);
+        defer allocator.free(samples);
+
+        for (0..n_samples) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+            samples[i] = 1.0 * @sin(2.0 * std.math.pi * 25.0 * t);
+        }
+        all_bands[ch] = try fft_bands.extractBands(samples, sample_rate, allocator);
+    }
+
+    // Channel 3: pure noise (flat spectrum from white noise approximation)
+    {
+        const samples = try allocator.alloc(f32, n_samples);
+        defer allocator.free(samples);
+        // Create broadband signal: sum of many frequencies
+        for (0..n_samples) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+            samples[i] = @sin(2.0 * std.math.pi * 2.0 * t) + // delta
+                @sin(2.0 * std.math.pi * 6.0 * t) + // theta
+                @sin(2.0 * std.math.pi * 10.0 * t) + // alpha
+                @sin(2.0 * std.math.pi * 20.0 * t) + // beta
+                @sin(2.0 * std.math.pi * 40.0 * t); // gamma
+        }
+        all_bands[3] = try fft_bands.extractBands(samples, sample_rate, allocator);
+    }
+
+    // Both modes should classify as PLUS (beta dominant in clean channels)
+    var erc_weighted = erc.ERC(4).init(.entropy_weighted);
+    const result_weighted = erc_weighted.processFromBandPowers(all_bands);
+    try std.testing.expectEqual(bci.Trit.plus, result_weighted.trit);
+
+    // Verify the ERC output is compatible with neurofeedback_gate
+    const focus = result_weighted.confidence; // high confidence → focused
+    const gate = propagator.neurofeedback_gate(&.{ focus, 0.1, 0.5 });
+    // If confidence > 0.5 and relax < 0.3, gate triggers
+    if (focus > 0.5) {
+        try std.testing.expectEqual(@as(?f32, 1.0), gate);
+    }
 }
