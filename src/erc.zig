@@ -106,6 +106,13 @@ pub fn EnsembleAverage(comptime N: usize) type {
 /// Output: 3 logits (minus, zero, plus).
 pub const FEATURE_DIM = NUM_BANDS * 2; // mean + variance = 10
 
+/// Online learning configuration for NLMS (Normalized LMS) weight adaptation.
+pub const LearningConfig = struct {
+    learning_rate: f32 = 0.01,
+    weight_decay: f32 = 0.0001, // L2 regularization prevents divergence
+    nlms_epsilon: f32 = 1.0, // NLMS normalization stability term
+};
+
 pub fn ReadoutLayer(comptime N: usize) type {
     _ = N; // N used only for type consistency; readout operates on ensemble features
     return struct {
@@ -204,6 +211,66 @@ pub fn ReadoutLayer(comptime N: usize) type {
                 .logits = logits,
                 .ensemble_entropy = 0, // set by ERC.process
             };
+        }
+
+        /// NLMS (Normalized Least Mean Squares) online weight update.
+        /// Normalizes gradient by input power so learning rate is scale-independent.
+        /// Uses softmax cross-entropy gradient: dL/dz = softmax(z) - target.
+        /// Returns prediction error (MSE) for convergence monitoring.
+        pub fn lmsUpdate(self: *Self, features: [FEATURE_DIM]f32, target_trit: bci.Trit, config: LearningConfig) f32 {
+            // Forward pass: logits
+            var logits: [OUTPUT_DIM]f32 = undefined;
+            for (0..OUTPUT_DIM) |o| {
+                var sum: f32 = self.bias[o];
+                for (0..FEATURE_DIM) |f| {
+                    sum += self.weights[o][f] * features[f];
+                }
+                logits[o] = sum;
+            }
+
+            // Softmax
+            const max_logit = @max(logits[0], @max(logits[1], logits[2]));
+            var outputs: [OUTPUT_DIM]f32 = undefined;
+            var exp_sum: f32 = 0;
+            for (0..OUTPUT_DIM) |o| {
+                outputs[o] = @exp(logits[o] - max_logit);
+                exp_sum += outputs[o];
+            }
+            for (0..OUTPUT_DIM) |o| {
+                outputs[o] /= exp_sum;
+            }
+
+            // One-hot target: trit enum → index (minus=-1→0, zero=0→1, plus=+1→2)
+            var target: [OUTPUT_DIM]f32 = [_]f32{ 0, 0, 0 };
+            const target_idx: usize = @intCast(@as(i8, @intFromEnum(target_trit)) + 1);
+            target[target_idx] = 1.0;
+
+            // Compute errors and MSE
+            var mse: f32 = 0;
+            var errors: [OUTPUT_DIM]f32 = undefined;
+            for (0..OUTPUT_DIM) |o| {
+                errors[o] = target[o] - outputs[o];
+                mse += errors[o] * errors[o];
+            }
+            mse /= OUTPUT_DIM;
+
+            // NLMS: normalize step by input power (||x||^2 + epsilon)
+            // This makes learning rate independent of feature magnitude.
+            var input_power: f32 = 0;
+            for (features) |feat| {
+                input_power += feat * feat;
+            }
+            const norm_factor = config.learning_rate / (input_power + config.nlms_epsilon);
+            const wd = config.weight_decay;
+
+            for (0..OUTPUT_DIM) |o| {
+                for (0..FEATURE_DIM) |f| {
+                    self.weights[o][f] += norm_factor * errors[o] * features[f] - wd * self.weights[o][f];
+                }
+                self.bias[o] += norm_factor * errors[o] - wd * self.bias[o];
+            }
+
+            return mse;
         }
     };
 }
@@ -349,6 +416,39 @@ pub fn ERC(comptime N: usize) type {
         pub fn toCellValue(self: *const Self) propagator.CellValue(f32) {
             const result = self.latestResult() orelse return .{ .nothing = {} };
             return .{ .value = @as(f32, @floatFromInt(@intFromEnum(result.trit))) };
+        }
+
+        /// Online weight adaptation via LMS.
+        /// Call with the true label after observing the ground truth.
+        /// Returns prediction error (MSE) for convergence monitoring.
+        pub fn adapt(self: *Self, channels: [N][NUM_BANDS]f32, target: bci.Trit, config: LearningConfig) f32 {
+            // Same ensemble path as process()
+            const avg = switch (self.mode) {
+                .uniform => EnsembleAverage(N).compute(channels),
+                .entropy_weighted => blk: {
+                    var weights: [N]f32 = undefined;
+                    for (channels, 0..) |ch, i| {
+                        const entropy = channelEntropy(ch);
+                        weights[i] = if (entropy > 0) 1.0 / entropy else 10.0;
+                    }
+                    break :blk EnsembleAverage(N).computeWeighted(channels, weights);
+                },
+            };
+
+            var features: [FEATURE_DIM]f32 = undefined;
+            @memcpy(features[0..NUM_BANDS], &avg.mean);
+            @memcpy(features[NUM_BANDS..], &avg.variance);
+
+            return self.readout.lmsUpdate(features, target, config);
+        }
+
+        /// Online adaptation from BandPowers array.
+        pub fn adaptFromBandPowers(self: *Self, bands: [N]fft_bands.BandPowers, target: bci.Trit, config: LearningConfig) f32 {
+            var channels: [N][NUM_BANDS]f32 = undefined;
+            for (0..N) |i| {
+                channels[i] = bands[i].asArray();
+            }
+            return self.adapt(channels, target, config);
         }
     };
 }
@@ -567,4 +667,102 @@ test "DSI24 preset compiles" {
     }
     const result = erc.process(channels);
     try std.testing.expect(result.confidence > 0);
+}
+
+test "online learning from zero weights converges" {
+    // Start from zero weights — no domain knowledge.
+    // Train on 3 classes of synthetic band patterns.
+    var readout = ReadoutLayer(4).initZero();
+    const config = LearningConfig{ .learning_rate = 0.05, .weight_decay = 0.0001 };
+
+    // Training data: 3 classes × features
+    const alpha_features = [FEATURE_DIM]f32{ 0.1, 0.2, 5.0, 0.3, 0.1, 0.01, 0.01, 0.01, 0.01, 0.01 };
+    const beta_features = [FEATURE_DIM]f32{ 0.1, 0.1, 0.2, 4.0, 2.0, 0.01, 0.01, 0.01, 0.01, 0.01 };
+    const delta_features = [FEATURE_DIM]f32{ 5.0, 3.0, 0.2, 0.1, 0.05, 0.01, 0.01, 0.01, 0.01, 0.01 };
+
+    // Before training: zero weights → prediction is random (uniform softmax)
+    const pre = readout.classify(alpha_features);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0 / 3.0), pre.confidence, 0.01);
+
+    // Train for 100 epochs cycling through all 3 classes
+    var last_mse: f32 = 1.0;
+    for (0..100) |_| {
+        _ = readout.lmsUpdate(alpha_features, .zero, config);
+        _ = readout.lmsUpdate(beta_features, .plus, config);
+        last_mse = readout.lmsUpdate(delta_features, .minus, config);
+    }
+
+    // After training: MSE should decrease
+    try std.testing.expect(last_mse < 0.2);
+
+    // Verify correct classification
+    const r_alpha = readout.classify(alpha_features);
+    const r_beta = readout.classify(beta_features);
+    const r_delta = readout.classify(delta_features);
+
+    try std.testing.expectEqual(bci.Trit.zero, r_alpha.trit);
+    try std.testing.expectEqual(bci.Trit.plus, r_beta.trit);
+    try std.testing.expectEqual(bci.Trit.minus, r_delta.trit);
+
+    // Confidence should be well above chance (1/3)
+    try std.testing.expect(r_alpha.confidence > 0.5);
+    try std.testing.expect(r_beta.confidence > 0.5);
+    try std.testing.expect(r_delta.confidence > 0.5);
+}
+
+test "ERC adapt refines classification on noisy data" {
+    // Start with heuristic weights, then adapt on data where one channel is misleading.
+    var reservoir = ERC(4).init(.uniform);
+    const config = LearningConfig{ .learning_rate = 0.02, .weight_decay = 0.0001 };
+
+    // 3 beta-dominant channels + 1 alpha-dominant outlier
+    const channels = [4][NUM_BANDS]f32{
+        [_]f32{ 0.1, 0.1, 0.3, 4.0, 2.0 }, // beta
+        [_]f32{ 0.1, 0.1, 0.3, 4.0, 2.0 }, // beta
+        [_]f32{ 0.1, 0.1, 0.3, 4.0, 2.0 }, // beta
+        [_]f32{ 0.1, 0.1, 3.0, 0.5, 0.1 }, // alpha outlier
+    };
+
+    // Classify before adaptation
+    const pre_result = reservoir.process(channels);
+    const pre_confidence = pre_result.confidence;
+
+    // Adapt: true label is PLUS (beta state)
+    for (0..50) |_| {
+        _ = reservoir.adapt(channels, .plus, config);
+    }
+
+    // Classify after adaptation — confidence on PLUS should improve
+    const post_result = reservoir.process(channels);
+    try std.testing.expectEqual(bci.Trit.plus, post_result.trit);
+    try std.testing.expect(post_result.confidence >= pre_confidence - 0.05);
+}
+
+test "LMS weight decay prevents divergence" {
+    var readout = ReadoutLayer(4).initZero();
+
+    // Large learning rate, but weight decay keeps weights bounded
+    const config = LearningConfig{ .learning_rate = 0.5, .weight_decay = 0.01 };
+    const features = [FEATURE_DIM]f32{ 10.0, 10.0, 10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+
+    // Train with contradictory labels to stress-test stability
+    for (0..200) |i| {
+        const target: bci.Trit = switch (i % 3) {
+            0 => .minus,
+            1 => .zero,
+            2 => .plus,
+            else => unreachable,
+        };
+        _ = readout.lmsUpdate(features, target, config);
+    }
+
+    // Weights should remain bounded (not NaN or Inf)
+    for (0..3) |o| {
+        for (0..FEATURE_DIM) |f| {
+            try std.testing.expect(!math.isNan(readout.weights[o][f]));
+            try std.testing.expect(!math.isInf(readout.weights[o][f]));
+            try std.testing.expect(@abs(readout.weights[o][f]) < 100.0);
+        }
+        try std.testing.expect(!math.isNan(readout.bias[o]));
+    }
 }

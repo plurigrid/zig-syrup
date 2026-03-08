@@ -564,3 +564,99 @@ test "integration: ERC entropy-weighted denoises bad channel" {
         try std.testing.expectEqual(@as(?f32, 1.0), gate);
     }
 }
+
+// ============================================================================
+// TEST 16: Online ERC adaptation — learn from zero, classify real FFT data
+// Full pipeline: synthetic EEG → FFT → ERC(zero weights) → LMS adapt → correct trit
+// ============================================================================
+
+test "integration: ERC online learning from zero weights with FFT pipeline" {
+    const allocator = std.testing.allocator;
+    const sample_rate: f64 = 250.0;
+    const n_samples: usize = 250;
+    const config = erc.LearningConfig{ .learning_rate = 0.5, .weight_decay = 0.0001, .nlms_epsilon = 1.0 };
+
+    // Initialize ERC with ZERO weights (no domain knowledge)
+    var reservoir = erc.ERC(4).init(.uniform);
+    reservoir.readout = erc.ReadoutLayer(4).initZero();
+
+    // --- Generate training data: 3 classes of 4-channel synthetic EEG ---
+
+    // Class ZERO: 10Hz alpha-dominant
+    var alpha_bands: [4]fft_bands.BandPowers = undefined;
+    for (0..4) |ch| {
+        const samples = try allocator.alloc(f32, n_samples);
+        defer allocator.free(samples);
+        for (0..n_samples) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+            const phase = @as(f32, @floatFromInt(ch)) * 0.2;
+            samples[i] = 1.0 * @sin(2.0 * std.math.pi * 10.0 * t + phase);
+        }
+        alpha_bands[ch] = try fft_bands.extractBands(samples, sample_rate, allocator);
+    }
+
+    // Class PLUS: 25Hz beta-dominant
+    var beta_bands: [4]fft_bands.BandPowers = undefined;
+    for (0..4) |ch| {
+        const samples = try allocator.alloc(f32, n_samples);
+        defer allocator.free(samples);
+        for (0..n_samples) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+            const phase = @as(f32, @floatFromInt(ch)) * 0.2;
+            samples[i] = 1.0 * @sin(2.0 * std.math.pi * 25.0 * t + phase);
+        }
+        beta_bands[ch] = try fft_bands.extractBands(samples, sample_rate, allocator);
+    }
+
+    // Class MINUS: 2Hz delta-dominant
+    var delta_bands: [4]fft_bands.BandPowers = undefined;
+    for (0..4) |ch| {
+        const samples = try allocator.alloc(f32, n_samples);
+        defer allocator.free(samples);
+        for (0..n_samples) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatCast(sample_rate));
+            const phase = @as(f32, @floatFromInt(ch)) * 0.2;
+            samples[i] = 1.0 * @sin(2.0 * std.math.pi * 2.0 * t + phase);
+        }
+        delta_bands[ch] = try fft_bands.extractBands(samples, sample_rate, allocator);
+    }
+
+    // --- Before training: zero weights → near-uniform confidence ---
+    const pre = reservoir.processFromBandPowers(alpha_bands);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0 / 3.0), pre.confidence, 0.05);
+
+    // --- Train for 200 epochs (FFT features have large magnitudes, need more iterations) ---
+    var last_mse: f32 = 1.0;
+    for (0..200) |_| {
+        _ = reservoir.adaptFromBandPowers(alpha_bands, .zero, config);
+        _ = reservoir.adaptFromBandPowers(beta_bands, .plus, config);
+        last_mse = reservoir.adaptFromBandPowers(delta_bands, .minus, config);
+    }
+
+    // MSE should converge
+    try std.testing.expect(last_mse < 0.25);
+
+    // --- After training: correct classification ---
+    const r_alpha = reservoir.processFromBandPowers(alpha_bands);
+    const r_beta = reservoir.processFromBandPowers(beta_bands);
+    const r_delta = reservoir.processFromBandPowers(delta_bands);
+
+    try std.testing.expectEqual(bci.Trit.zero, r_alpha.trit);
+    try std.testing.expectEqual(bci.Trit.plus, r_beta.trit);
+    try std.testing.expectEqual(bci.Trit.minus, r_delta.trit);
+
+    // Confidence above chance (1/3)
+    try std.testing.expect(r_alpha.confidence > 0.4);
+    try std.testing.expect(r_beta.confidence > 0.4);
+    try std.testing.expect(r_delta.confidence > 0.4);
+
+    // Wire the learned output into propagator
+    const CellF32 = propagator.Cell(f32, comptime propagator.defaultMerge(f32));
+    var cell = CellF32.init(allocator, "erc_learned");
+    defer cell.deinit();
+    const cv = reservoir.toCellValue();
+    try cell.set_cell_value(cv);
+
+    // Last processed was delta → minus → -1.0
+    try std.testing.expectEqual(@as(?f32, -1.0), cell.get_content());
+}
