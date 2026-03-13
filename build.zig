@@ -694,6 +694,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    linalg_test_mod.addImport("syrup", syrup_mod);
+    linalg_test_mod.addImport("continuation", continuation_mod);
     const linalg_tests = b.addTest(.{ .root_module = linalg_test_mod });
     const run_linalg_tests = b.addRunArtifact(linalg_tests);
 
@@ -935,6 +937,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     worlds_mod.addImport("syrup", syrup_mod);
+    worlds_mod.addImport("fft_bands", fft_bands_mod);
     worlds_mod.addImport("bristol", bristol_lib);
     worlds_mod.addImport("bci_homotopy", bci_mod);
     worlds_mod.addImport("continuation", continuation_mod);

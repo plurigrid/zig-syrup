@@ -204,10 +204,10 @@ test "parse positive adc value" {
     packet[0] = CYTON_START_BYTE;
     packet[1] = 0;
 
-    // Channel 0: 0x800000 (8388608, midpoint)
-    packet[2] = 0x80;
-    packet[3] = 0x00;
-    packet[4] = 0x00;
+    // Channel 0: 0x7FFFFF (maximum positive 24-bit value)
+    packet[2] = 0x7F;
+    packet[3] = 0xFF;
+    packet[4] = 0xFF;
 
     // All other channels 0
     for (5..26) |i| {
@@ -219,8 +219,7 @@ test "parse positive adc value" {
     packet[32] = CYTON_STOP_BYTE;
 
     const sample = try parseCytonPacket(packet, 0);
-    // 0x800000 × scale ≈ 0.268 µV (very small)
-    try std.testing.expectApproxEqAbs(sample.channels[0], 0.268, 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 93749.99), sample.channels[0], 0.05);
 }
 
 test "reject invalid start byte" {

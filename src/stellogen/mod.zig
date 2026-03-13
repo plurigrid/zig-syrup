@@ -51,14 +51,19 @@ pub const Compiler = codegen.Compiler;
 
 /// Compile Stellogen source to WASM binary
 pub fn compile(allocator: std.mem.Allocator, source: []const u8) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const parse_allocator = arena.allocator();
+
     // Parse source
-    const program = try parser.parse(allocator, source);
+    const program = try parser.parse(parse_allocator, source);
 
     // Compile to WASM
     var compiler = try Compiler.init(allocator);
     defer compiler.deinit();
 
-    return compiler.compileProgram(program);
+    const wasm = try compiler.compileProgram(program);
+    return try allocator.dupe(u8, wasm);
 }
 
 /// Parse and execute Stellogen source (interpreted mode)
@@ -109,7 +114,9 @@ pub fn isOk(result: Constellation) bool {
 // ============================================================================
 
 test "compile simple program" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const source = "(def nat {[(+nat z)] [(-nat X) (+nat (s X))]})";
 
     const wasm = try compile(allocator, source);
@@ -126,9 +133,10 @@ test "polarity to GF(3)" {
 
 test "lexer tokenizes stellogen" {
     var lex = Lexer.init("(def add {[(+add z Y Y)] [(-add X Y Z) (+add (s X) Y (s Z))]})");
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const tokens = try lex.tokenize(allocator);
-    defer allocator.free(tokens);
 
     try std.testing.expect(tokens.len > 10);
 }

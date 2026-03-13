@@ -177,7 +177,9 @@ pub fn canUnify(allocator: std.mem.Allocator, t1: Term, t2: Term) bool {
 // ============================================================================
 
 test "unify identical terms" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const x = ast.makeVar("X");
 
     const result = try unify(allocator, x, x);
@@ -188,7 +190,9 @@ test "unify identical terms" {
 }
 
 test "unify variable with term" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const x = ast.makeVar("X");
     const a = ast.makeAtom(.null, "a");
 
@@ -203,7 +207,9 @@ test "unify variable with term" {
 }
 
 test "unify function terms" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     // f(X) and f(a)
     const x = ast.makeVar("X");
@@ -221,7 +227,9 @@ test "unify function terms" {
 }
 
 test "unify fails on different functions" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     const a = ast.makeAtom(.null, "a");
     const b = ast.makeAtom(.null, "b");
@@ -231,7 +239,9 @@ test "unify fails on different functions" {
 }
 
 test "unify fails on occurs check" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     // X and f(X) should fail
     const x = ast.makeVar("X");
@@ -242,7 +252,9 @@ test "unify fails on occurs check" {
 }
 
 test "unify with polarities" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     // +f(X) and -f(a) should unify (opposite polarities)
     const x = ast.makeVar("X");

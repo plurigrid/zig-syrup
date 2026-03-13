@@ -20,6 +20,10 @@ pub const ABTestConfig = ab_test.ABTestConfig;
 pub const SessionMetrics = ab_test.SessionMetrics;
 pub const TestResult = ab_test.TestResult;
 
+// Performance adapter
+pub const benchmark_adapter = @import("benchmark_adapter.zig");
+pub const BenchmarkAdapter = benchmark_adapter.BenchmarkAdapter;
+
 // Multi-armed bandits (A/B → Bandit → Thompson → RL)
 pub const bandit = @import("bandit.zig");
 pub const Bandit = bandit.Bandit;
@@ -84,6 +88,11 @@ pub const BciAptosBridge = bci_aptos.BciAptosBridge;
 pub const BrainAction = bci_aptos.BrainAction;
 pub const Neurofeedback = bci_aptos.Neurofeedback;
 
+// OpenBCI bridge
+pub const openbci_bridge = @import("openbci_bridge.zig");
+pub const BrainState = openbci_bridge.BrainState;
+pub const EEGChannel = openbci_bridge.EEGChannel;
+
 // Colored Parentheses World
 pub const colored_parens = @import("colored_parens.zig");
 pub const ColoredParensWorld = colored_parens.ColoredParensWorld;
@@ -114,8 +123,17 @@ pub const MorphismArrow = world_morphism.Arrow;
 pub const MorphismChain = world_morphism.Chain;
 pub const MorphismTrit = world_morphism.Trit;
 
+// Persistent structures
+pub const persistent = @import("persistent.zig");
+pub const PersistentVector = persistent.PersistentVector;
+pub const VersionedState = persistent.VersionedState;
+
 /// Module version
 pub const version = "0.1.0";
+
+pub fn getVersion() []const u8 {
+    return version;
+}
 
 /// Initialize the worlds module
 pub fn init(allocator: std.mem.Allocator) WorldsContext {
