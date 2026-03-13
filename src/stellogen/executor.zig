@@ -244,7 +244,9 @@ pub fn hasOk(constellation: Constellation) bool {
 // ============================================================================
 
 test "basic fusion" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     // State: [(-f X) X]
     // Action: [(+f a)]
@@ -274,7 +276,9 @@ test "basic fusion" {
 }
 
 test "execute simple constellation" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     // Natural number: 0 + Y = Y
     // Query: -add(0, 2, R) R

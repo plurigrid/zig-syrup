@@ -331,11 +331,11 @@ pub const Trit = enum(i8) {
 
 /// Verify GF(3) conservation: sum of all trits must be 0 mod 3
 pub fn verifyTriadBalance(trits: []const Trit) bool {
-    var sum: i8 = 0;
+    var sum: i16 = 0;
     for (trits) |t| {
         sum += @intFromEnum(t);
     }
-    return @mod(sum + 300, 3) == 0;
+    return sum == 0;
 }
 
 // ============================================================================

@@ -752,7 +752,9 @@ fn computeWitnessId(w: *const Witness) CredId {
     hasher.update(std.mem.asBytes(&w.issued_at));
     hasher.update(std.mem.asBytes(&w.expires_at));
     hasher.update(&[_]u8{SIGIL_WITNESS});
-    return hasher.finalResult();
+    var digest: CredId = undefined;
+    hasher.final(&digest);
+    return digest;
 }
 
 fn computeCredId(c: *const Credential) CredId {
@@ -763,7 +765,9 @@ fn computeCredId(c: *const Credential) CredId {
     hasher.update(std.mem.asBytes(&c.issued_at));
     hasher.update(std.mem.asBytes(&c.gay_color_seed));
     hasher.update(&[_]u8{SIGIL_CREDENTIAL});
-    return hasher.finalResult();
+    var digest: CredId = undefined;
+    hasher.final(&digest);
+    return digest;
 }
 
 fn endsWith(haystack: []const u8, needle: []const u8) bool {

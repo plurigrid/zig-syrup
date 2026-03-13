@@ -6,6 +6,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const syrup = @import("syrup");
+const fft_bands = @import("fft_bands");
 const World = @import("world.zig").World;
 const Player = @import("world.zig").Player;
 
@@ -211,7 +212,6 @@ pub const OpenBCIBridge = struct {
     
     pub fn init(allocator: Allocator, world: World) !Self {
         const fft_size = 256;
-        const fft_bands = @import("../fft_bands.zig");
         const window = try allocator.alloc(f32, fft_size);
         @memcpy(window, &fft_bands.hanning_256);
         

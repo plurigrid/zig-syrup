@@ -234,6 +234,7 @@ pub const WorldState = struct {
 /// Main World struct
 pub const World = struct {
     allocator: std.mem.Allocator,
+    raw_uri: []u8,
     uri: WorldUri,
     state: *WorldState,
     // ewig_log: ?*ewig.Log,
@@ -246,8 +247,11 @@ pub const World = struct {
     ) !*World {
         const self = try allocator.create(World);
         errdefer allocator.destroy(self);
-        
-        self.uri = try WorldUri.parse(allocator, uri_str);
+
+        self.raw_uri = try allocator.dupe(u8, uri_str);
+        errdefer allocator.free(self.raw_uri);
+
+        self.uri = try WorldUri.parse(allocator, self.raw_uri);
         errdefer self.uri.deinit();
         
         self.state = try WorldState.init(allocator);
@@ -270,6 +274,7 @@ pub const World = struct {
     pub fn destroy(self: *World) void {
         self.state.deinit();
         self.uri.deinit();
+        self.allocator.free(self.raw_uri);
         self.allocator.destroy(self);
     }
     

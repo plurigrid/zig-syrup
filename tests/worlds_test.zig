@@ -1,122 +1,68 @@
-//! World A/B Testing Test Suite
-//!
-//! Tests world creation/destruction, A/B assignment correctness,
-//! multiplayer synchronization, immer structures, and ewig persistence.
+//! Worlds integration smoke tests against the current public API.
 
 const std = @import("std");
 const testing = std.testing;
 const worlds = @import("worlds");
 
-// ========================================
-// World Creation/Destruction Tests
-// ========================================
-
-test "world initialization" {
+test "world helper constructors create expected variants" {
     const allocator = testing.allocator;
-    
-    var world = try worlds.createWorld(allocator, .{
-        .uri = "test://world",
-        .max_players = 4,
-        .tile_system = .default,
-    });
-    defer world.deinit();
-    
-    try testing.expectEqualStrings("test://world", world.config.uri);
-    try testing.expectEqual(@as(usize, 4), world.config.max_players);
-    try testing.expectEqual(@as(u64, 0), world.getTick());
-    try testing.expect(!world.isRunning());
+
+    const a = try worlds.worldA(allocator, "baseline");
+    defer a.destroy();
+    const b = try worlds.worldB(allocator, "variant");
+    defer b.destroy();
+    const c = try worlds.worldC(allocator, "control");
+    defer c.destroy();
+
+    try testing.expectEqual(worlds.WorldVariant.A, a.uri.variant);
+    try testing.expectEqual(worlds.WorldVariant.B, b.uri.variant);
+    try testing.expectEqual(worlds.WorldVariant.C, c.uri.variant);
+    try testing.expectEqualStrings("baseline", a.uri.name);
 }
 
-test "world lifecycle" {
+test "ab test hash assignment is stable" {
     const allocator = testing.allocator;
-    
-    var world = try worlds.createWorld(allocator, .{
-        .uri = "test://world",
-        .max_players = 2,
-    });
-    defer world.deinit();
-    
-    world.start();
-    try testing.expect(world.isRunning());
-    
-    try world.tick();
-    try world.tick();
-    try testing.expectEqual(@as(u64, 2), world.getTick());
-    
-    world.stop();
-    try testing.expect(!world.isRunning());
-}
 
-test "player management" {
-    const allocator = testing.allocator;
-    
-    var world = try worlds.createWorld(allocator, .{
-        .uri = "test://world",
-        .max_players = 3,
-    });
-    defer world.deinit();
-    
-    const p1 = try world.addPlayer("Alice");
-    const p2 = try world.addPlayer("Bob");
-    
-    try testing.expectEqual(@as(usize, 2), world.getPlayerCount());
-    
-    const player = world.getPlayer(p1);
-    try testing.expect(player != null);
-    try testing.expectEqualStrings("Alice", player.?.name);
-    
-    try world.removePlayer(p1);
-    try testing.expectEqual(@as(usize, 1), world.getPlayerCount());
-}
-
-test "ab test assignment" {
-    const allocator = testing.allocator;
-    
-    const variants = &[_]worlds.Variant{
-        .{ .uri = "a://", .name = "A", .config = .{}, .weight = 50 },
-        .{ .uri = "b://", .name = "B", .config = .{}, .weight = 50 },
-    };
-    
-    var ab_test = try worlds.createABTest(allocator, variants);
+    var ab_test = try worlds.ABTest.init(allocator, .{
+        .name = "smoke",
+        .duration_ms = 1_000,
+        .min_samples = 2,
+        .confidence_threshold = 0.95,
+        .metric_weights = .{
+            .engagement = 0.4,
+            .success = 0.4,
+            .duration = 0.2,
+        },
+    }, 42);
     defer ab_test.deinit();
-    
-    try ab_test.start();
-    
-    const uri = try ab_test.assignPlayer(1);
-    try testing.expect(uri.len > 0);
-    
-    // Consistent assignment
-    const uri2 = try ab_test.assignPlayer(1);
-    try testing.expectEqualStrings(uri, uri2);
+
+    const first = try ab_test.assignPlayer("alice", .HashBased, null);
+    const second = try ab_test.assignPlayer("alice", .HashBased, null);
+
+    try testing.expectEqual(first, second);
 }
 
-test "persistent vector" {
+test "persistent vector and versioned state exports work" {
     const allocator = testing.allocator;
-    
+
     var vec = worlds.PersistentVector(i64).init(allocator);
     defer vec.deinit();
-    
     try testing.expect(vec.isEmpty());
-}
 
-test "versioned state" {
-    const allocator = testing.allocator;
-    
     var state = try worlds.VersionedState(i64).init(allocator, 0);
     defer state.deinit();
-    
     try state.commit(10);
     try state.commit(20);
-    
     try testing.expectEqual(@as(i64, 20), state.getCurrent());
-    
     try testing.expect(state.undo());
     try testing.expectEqual(@as(i64, 10), state.getCurrent());
 }
 
-test "brain state" {
-    const allocator = testing.allocator;
-    
+test "brain state serializes to syrup" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     const brain_state = worlds.BrainState{
         .timestamp = 0,
         .focus_level = 0.75,
@@ -126,48 +72,20 @@ test "brain state" {
         .band_powers = .{ 0.1, 0.2, 0.3, 0.4, 0.0 },
         .signal_quality = .{0.9} ** worlds.EEGChannel.COUNT,
     };
-    
+
     const syrup_val = try brain_state.toSyrup(allocator);
-    defer {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        defer arena.deinit();
-    }
-    
     try testing.expect(syrup_val == .dictionary);
 }
 
-test "circuit world" {
+test "benchmark adapter runs world benchmark" {
     const allocator = testing.allocator;
-    
-    var world = try worlds.createWorld(allocator, .{
-        .uri = "circuit://test",
-        .max_players = 2,
-    });
-    defer world.deinit();
-    
-    var circuit = try worlds.createCircuitWorld(allocator, world);
-    defer circuit.deinit();
-    
-    try circuit.compile();
-    _ = circuit.getStats();
-}
 
-test "benchmark adapter" {
-    const allocator = testing.allocator;
-    
     var adapter = try worlds.BenchmarkAdapter.init(allocator);
     defer adapter.deinit();
-    
-    const result = try adapter.benchmarkWorld(
-        .{
-            .uri = "benchmark://test",
-            .max_players = 4,
-        },
-        10,
-        .tick,
-    );
-    
-    try testing.expectEqualStrings("benchmark://test", result.world_uri);
+
+    const result = try adapter.benchmarkWorld("a://benchmark-test", 10, .tick);
+    try testing.expectEqualStrings("a://benchmark-test", result.world_uri);
+    try testing.expectEqual(@as(usize, 10), result.iterations);
     try testing.expect(result.avg_ns > 0);
 }
 

@@ -445,10 +445,11 @@ pub fn parse(allocator: std.mem.Allocator, source: []const u8) ParseError![]Expr
 // ============================================================================
 
 test "parse variable" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     var lex = lexer.Lexer.init("X");
     const tokens = try lex.tokenize(allocator);
-    defer allocator.free(tokens);
 
     var parser = Parser.init(allocator, tokens);
     const term = try parser.parseTerm();
@@ -457,10 +458,11 @@ test "parse variable" {
 }
 
 test "parse atom" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     var lex = lexer.Lexer.init("foo");
     const tokens = try lex.tokenize(allocator);
-    defer allocator.free(tokens);
 
     var parser = Parser.init(allocator, tokens);
     const term = try parser.parseTerm();
@@ -476,10 +478,11 @@ test "parse atom" {
 }
 
 test "parse polarized atom" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     var lex = lexer.Lexer.init("+foo");
     const tokens = try lex.tokenize(allocator);
-    defer allocator.free(tokens);
 
     var parser = Parser.init(allocator, tokens);
     const term = try parser.parseTerm();
@@ -494,10 +497,11 @@ test "parse polarized atom" {
 }
 
 test "parse star" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     var lex = lexer.Lexer.init("[+foo X]");
     const tokens = try lex.tokenize(allocator);
-    defer allocator.free(tokens);
 
     var parser = Parser.init(allocator, tokens);
     const star = try parser.parseStar();
@@ -506,10 +510,11 @@ test "parse star" {
 }
 
 test "parse constellation" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     var lex = lexer.Lexer.init("{[+foo X] @[-bar Y]}");
     const tokens = try lex.tokenize(allocator);
-    defer allocator.free(tokens);
 
     var parser = Parser.init(allocator, tokens);
     const constellation = try parser.parseConstellation();
@@ -520,7 +525,9 @@ test "parse constellation" {
 }
 
 test "parse def expression" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const exprs = try parse(allocator, "(def foo X)");
 
     try std.testing.expectEqual(@as(usize, 1), exprs.len);

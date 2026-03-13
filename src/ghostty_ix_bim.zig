@@ -202,8 +202,8 @@ pub const BIM = struct {
     fn unifyValues(self: *BIM, v1: Value, v2: Value) bool {
         _ = self;
         return switch (v1) {
-            .const_int => |i1| switch (v2) {
-                .const_int => |i2| i1 == i2,
+            .const_int => |lhs| switch (v2) {
+                .const_int => |rhs| lhs == rhs,
                 else => false,
             },
             .variable => |var_idx| {
