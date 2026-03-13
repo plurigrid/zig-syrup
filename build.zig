@@ -3,6 +3,11 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const ghostty_vt_lib_dir = "/Users/bob/i/libghostty-vt/zig-out/lib";
+    const has_ghostty_vt = blk: {
+        std.fs.accessAbsolute(ghostty_vt_lib_dir, .{}) catch break :blk false;
+        break :blk true;
+    };
 
     // Library module
     const syrup_mod = b.addModule("syrup", .{
@@ -1002,6 +1007,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     openbci_bridge_test_mod.addImport("syrup", syrup_mod);
+    openbci_bridge_test_mod.addImport("fft_bands", fft_bands_mod);
     const openbci_bridge_tests = b.addTest(.{ .root_module = openbci_bridge_test_mod });
     const run_openbci_bridge_tests = b.addRunArtifact(openbci_bridge_tests);
 
@@ -1382,7 +1388,9 @@ pub fn build(b: *std.Build) void {
         .name = "gf3_goblins",
         .root_module = goblins_ffi_mod,
     });
-    b.installArtifact(goblins_ffi_lib);
+    const install_goblins_ffi = b.addInstallArtifact(goblins_ffi_lib, .{});
+    const goblins_ffi_step = b.step("gf3-goblins", "Build GF(3) Goblins FFI (requires Guile)");
+    goblins_ffi_step.dependOn(&install_goblins_ffi.step);
 
     // PufferLib FFI — shared library for Python RL integration
     // Exports: c_init, c_reset, c_step, vec_init, vec_step, vec_close
@@ -2388,15 +2396,17 @@ pub fn build(b: *std.Build) void {
     ghostty_vt_tileable_mod.addImport("tileable_gof", tileable_for_display);
 
     // Link libghostty-vt dylib
-    ghostty_vt_tileable_mod.addLibraryPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
-    ghostty_vt_tileable_mod.addRPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
+    ghostty_vt_tileable_mod.addLibraryPath(.{ .cwd_relative = ghostty_vt_lib_dir });
+    ghostty_vt_tileable_mod.addRPath(.{ .cwd_relative = ghostty_vt_lib_dir });
     ghostty_vt_tileable_mod.linkSystemLibrary("ghostty-vt", .{});
 
     const ghostty_vt_tileable_exe = b.addExecutable(.{
         .name = "ghostty-vt-tileable",
         .root_module = ghostty_vt_tileable_mod,
     });
-    b.installArtifact(ghostty_vt_tileable_exe);
+    const install_ghostty_vt = b.addInstallArtifact(ghostty_vt_tileable_exe, .{});
+    const ghostty_vt_step = b.step("ghostty-vt", "Build ghostty-vt-tileable (requires libghostty-vt)");
+    ghostty_vt_step.dependOn(&install_ghostty_vt.step);
 
     const run_ghostty_vt = b.addRunArtifact(ghostty_vt_tileable_exe);
     const run_ghostty_vt_step = b.step("run-gof-display", "Run the gain-of-function tileable terminal display");
@@ -2419,14 +2429,16 @@ pub fn build(b: *std.Build) void {
     ghostty_vt_tileable_test_mod.addImport("terminal", terminal_mod);
     ghostty_vt_tileable_test_mod.addImport("virion", virion_mod);
     ghostty_vt_tileable_test_mod.addImport("tileable_gof", tileable_for_test);
-    ghostty_vt_tileable_test_mod.addLibraryPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
-    ghostty_vt_tileable_test_mod.addRPath(.{ .cwd_relative = "/Users/bob/i/libghostty-vt/zig-out/lib" });
+    ghostty_vt_tileable_test_mod.addLibraryPath(.{ .cwd_relative = ghostty_vt_lib_dir });
+    ghostty_vt_tileable_test_mod.addRPath(.{ .cwd_relative = ghostty_vt_lib_dir });
     ghostty_vt_tileable_test_mod.linkSystemLibrary("ghostty-vt", .{});
     const ghostty_vt_tileable_tests = b.addTest(.{ .root_module = ghostty_vt_tileable_test_mod });
     const run_ghostty_vt_tests = b.addRunArtifact(ghostty_vt_tileable_tests);
-    test_step.dependOn(&run_ghostty_vt_tests.step);
     const test_ghostty_vt_step = b.step("test-ghostty-vt", "Run ghostty-vt-tileable tests");
     test_ghostty_vt_step.dependOn(&run_ghostty_vt_tests.step);
+    if (has_ghostty_vt) {
+        test_step.dependOn(&run_ghostty_vt_tests.step);
+    }
 
     // Transient module (Emacs transient.el popup menus as retty widgets)
     _ = b.addModule("transient", .{
