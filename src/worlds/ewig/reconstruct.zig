@@ -34,7 +34,7 @@ pub const StateSnapshot = struct {
     const Self = @This();
     
     pub fn computeHash(data: []const u8, timestamp: i64, seq: u64) Hash {
-        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+        var hasher = std.crypto.hash.Blake3.init(.{});
         hasher.update(data);
         hasher.update(std.mem.asBytes(&timestamp));
         hasher.update(std.mem.asBytes(&seq));

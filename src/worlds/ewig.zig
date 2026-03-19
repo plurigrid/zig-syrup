@@ -117,7 +117,7 @@ pub const MerkleTree = struct {
     }
 
     fn hashPair(_: Self, left: [32]u8, right: [32]u8) [32]u8 {
-        var hasher = crypto.hash.sha2.Sha256.init(.{});
+        var hasher = crypto.hash.Blake3.init(.{});
         hasher.update(&left);
         hasher.update(&right);
         var result: [32]u8 = undefined;
@@ -191,7 +191,7 @@ pub const MerkleProof = struct {
 
         var current_hash = self.leaf_hash;
         for (self.siblings) |sibling| {
-            var hasher = crypto.hash.sha2.Sha256.init(.{});
+            var hasher = crypto.hash.Blake3.init(.{});
             // Note: In real implementation, need to know if sibling is left or right
             hasher.update(&current_hash);
             hasher.update(&sibling);
@@ -241,7 +241,7 @@ pub const EventLog = struct {
         errdefer self.allocator.free(data_copy);
 
         // Compute entry hash
-        var hasher = crypto.hash.sha2.Sha256.init(.{});
+        var hasher = crypto.hash.Blake3.init(.{});
         hasher.update(&[_]u8{@intFromEnum(entry_type)});
         hasher.update(std.mem.asBytes(&timestamp));
         hasher.update(std.mem.asBytes(&tick));
@@ -287,7 +287,7 @@ pub const EventLog = struct {
             }
 
             // Recompute and verify hash
-            var hasher = crypto.hash.sha2.Sha256.init(.{});
+            var hasher = crypto.hash.Blake3.init(.{});
             hasher.update(&[_]u8{@intFromEnum(entry.entry_type)});
             hasher.update(std.mem.asBytes(&entry.timestamp));
             hasher.update(std.mem.asBytes(&entry.tick));

@@ -28,7 +28,7 @@ pub const MerkleNode = struct {
     
     /// Compute Merkle hash of this node and its children
     pub fn computeMerkleHash(data: []const u8, children: []const Hash) Hash {
-        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+        var hasher = std.crypto.hash.Blake3.init(.{});
         
         // Hash data length and data
         hasher.update(std.mem.asBytes(&@as(u64, @intCast(data.len))));

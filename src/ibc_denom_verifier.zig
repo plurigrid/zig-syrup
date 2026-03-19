@@ -330,12 +330,16 @@ pub const Trit = enum(i8) {
 };
 
 /// Verify GF(3) conservation: sum of all trits must be 0 mod 3
+/// GF(3) conservation: triad trits must sum to exactly 0.
+/// Unlike the general modular case, for IBC verification we require
+/// the raw sum to be zero (not just 0 mod 3), because a triad
+/// is specifically {validator(-1), coordinator(0), relayer(+1)}.
 pub fn verifyTriadBalance(trits: []const Trit) bool {
-    var sum: i8 = 0;
+    var sum: i32 = 0;
     for (trits) |t| {
-        sum += @intFromEnum(t);
+        sum += @as(i32, @intFromEnum(t));
     }
-    return @mod(sum + 300, 3) == 0;
+    return sum == 0;
 }
 
 // ============================================================================
@@ -368,12 +372,9 @@ pub fn formatIbcDenom(hash: *const [32]u8, buf: *[68]u8) []const u8 {
 // ============================================================================
 
 /// Constant-time hash comparison (prevents timing attacks on denom verification)
+/// Uses std.crypto.timing_safe rather than hand-rolled XOR loop.
 pub fn constantTimeEqual(a: *const [32]u8, b: *const [32]u8) bool {
-    var diff: u8 = 0;
-    for (a, b) |x, y| {
-        diff |= x ^ y;
-    }
-    return diff == 0;
+    return std.crypto.timing_safe.eql([32]u8, a.*, b.*);
 }
 
 // ============================================================================

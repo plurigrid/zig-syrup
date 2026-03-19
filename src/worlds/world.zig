@@ -195,7 +195,7 @@ pub const WorldState = struct {
     }
     
     fn recomputeHash(self: *WorldState) void {
-        var hasher = crypto.hash.sha2.Sha256.init(.{});
+        var hasher = crypto.hash.Blake3.init(.{});
         
         var it = self.data.iterator();
         while (it.next()) |entry| {

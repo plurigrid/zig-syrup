@@ -914,10 +914,12 @@ export fn pumpkin_seal_message(
     std.crypto.random.bytes(out_nonce);
 
     var shared: [32]u8 = undefined;
+    defer std.crypto.secureZero(u8, &shared);
     for (0..32) |i| {
         shared[i] = sender_privkey[i] ^ recipient_pubkey[i];
     }
-    const key = sealDeriveKey(shared, out_nonce.*);
+    var key: [XSalsa20Poly1305.key_length]u8 = sealDeriveKey(shared, out_nonce.*);
+    defer std.crypto.secureZero(u8, &key);
 
     var tag: [XSalsa20Poly1305.tag_length]u8 = undefined;
     XSalsa20Poly1305.encrypt(
@@ -949,10 +951,12 @@ export fn pumpkin_unseal_message(
     if (out_plaintext_len < plaintext_len) return 0;
 
     var shared: [32]u8 = undefined;
+    defer std.crypto.secureZero(u8, &shared);
     for (0..32) |i| {
         shared[i] = recipient_privkey[i] ^ sender_pubkey[i];
     }
-    const key = sealDeriveKey(shared, nonce.*);
+    var key: [XSalsa20Poly1305.key_length]u8 = sealDeriveKey(shared, nonce.*);
+    defer std.crypto.secureZero(u8, &key);
 
     var tag: [XSalsa20Poly1305.tag_length]u8 = undefined;
     @memcpy(&tag, ciphertext[plaintext_len .. plaintext_len + 16]);

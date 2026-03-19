@@ -820,21 +820,21 @@ pub fn setCanonical(allocator: Allocator, items: []const Value) !Value {
 // CID (Content Identifier) Computation
 // ============================================================================
 
-/// Compute SHA-256 CID of encoded value
+/// Compute BLAKE3 CID of encoded value (replaces SHA-256: no length extension,
+/// tree construction, 2x faster on modern hardware).
 pub fn computeCid(value: Value, out: *[32]u8) !void {
     var buf: [4096]u8 = undefined;
     const encoded = try value.encodeBuf(&buf);
-    std.crypto.hash.sha2.Sha256.hash(encoded, out, .{});
+    std.crypto.hash.Blake3.hash(encoded, out, .{});
 }
 
-/// Compute SHA-256 CID using a caller-provided encode buffer
-/// Avoids the fixed 4096-byte stack allocation when the caller already has a buffer
+/// Compute BLAKE3 CID using a caller-provided encode buffer
 pub fn computeCidWithBuf(value: Value, out: *[32]u8, encode_buf: []u8) !void {
     const encoded = try value.encodeBuf(encode_buf);
-    std.crypto.hash.sha2.Sha256.hash(encoded, out, .{});
+    std.crypto.hash.Blake3.hash(encoded, out, .{});
 }
 
-/// Compute SHA-256 CID and return as hex string
+/// Compute BLAKE3 CID and return as hex string
 pub fn computeCidHex(value: Value, allocator: Allocator) ![]u8 {
     var hash: [32]u8 = undefined;
     try computeCid(value, &hash);
@@ -852,7 +852,7 @@ pub fn comptimeCid(comptime value: Value) [64]u8 {
         const encoded = buf[0..stream.pos];
 
         var hash: [32]u8 = undefined;
-        std.crypto.hash.sha2.Sha256.hash(encoded, &hash, .{});
+        std.crypto.hash.Blake3.hash(encoded, &hash, .{});
 
         var hex: [64]u8 = undefined;
         _ = std.fmt.bufPrint(&hex, "{s}", .{std.fmt.fmtSliceHexLower(&hash)}) catch @compileError("Formatting failed");
