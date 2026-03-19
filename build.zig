@@ -806,6 +806,15 @@ pub fn build(b: *std.Build) void {
     const color_value_tests = b.addTest(.{ .root_module = color_value_test_mod });
     const run_color_value_tests = b.addRunArtifact(color_value_tests);
 
+    // RGB region coloring module (ported from andrewgazelka/rgb)
+    const rgb_region_color_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/rgb_region_color.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const rgb_region_color_tests = b.addTest(.{ .root_module = rgb_region_color_test_mod });
+    const run_rgb_region_color_tests = b.addRunArtifact(rgb_region_color_tests);
+
     // Arrow Color IPC module (zero-copy Arrow IPC as SturdyRef bandwidth)
     const arrow_color_ipc_test_mod = b.createModule(.{
         .root_source_file = b.path("src/arrow_color_ipc.zig"),
@@ -1124,6 +1133,88 @@ pub fn build(b: *std.Build) void {
     const world_demo_cmd = b.addRunArtifact(world_demo_exe);
     const world_demo_step = b.step("world-demo", "Run world A/B testing demo");
     world_demo_step.dependOn(&world_demo_cmd.step);
+
+    // Embedded .world artifact demo
+    const geodesic_world_mod = b.createModule(.{
+        .root_source_file = b.path("examples/geodesic_parallel_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    geodesic_world_mod.addImport("syrup", syrup_mod);
+
+    const geodesic_world_exe = b.addExecutable(.{
+        .name = "geodesic-world",
+        .root_module = geodesic_world_mod,
+    });
+
+    const geodesic_world_cmd = b.addRunArtifact(geodesic_world_exe);
+    const geodesic_world_step = b.step("geodesic-world", "Render the embedded geodesic .world artifact");
+    geodesic_world_step.dependOn(&geodesic_world_cmd.step);
+
+    const geodesic_world_test_mod = b.createModule(.{
+        .root_source_file = b.path("examples/geodesic_parallel_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    geodesic_world_test_mod.addImport("syrup", syrup_mod);
+    const geodesic_world_tests = b.addTest(.{ .root_module = geodesic_world_test_mod });
+    const run_geodesic_world_tests = b.addRunArtifact(geodesic_world_tests);
+    const geodesic_world_test_step = b.step("test-geodesic-world", "Test embedded geodesic .world artifact");
+    geodesic_world_test_step.dependOn(&run_geodesic_world_tests.step);
+
+    const hylomorph_world_mod = b.createModule(.{
+        .root_source_file = b.path("examples/hylomorph_chronoscope_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    hylomorph_world_mod.addImport("syrup", syrup_mod);
+
+    const hylomorph_world_exe = b.addExecutable(.{
+        .name = "hylomorph-world",
+        .root_module = hylomorph_world_mod,
+    });
+
+    const hylomorph_world_cmd = b.addRunArtifact(hylomorph_world_exe);
+    const hylomorph_world_step = b.step("hylomorph-world", "Render the embedded hylomorph chronoscope .world artifact");
+    hylomorph_world_step.dependOn(&hylomorph_world_cmd.step);
+
+    const hylomorph_world_test_mod = b.createModule(.{
+        .root_source_file = b.path("examples/hylomorph_chronoscope_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    hylomorph_world_test_mod.addImport("syrup", syrup_mod);
+    const hylomorph_world_tests = b.addTest(.{ .root_module = hylomorph_world_test_mod });
+    const run_hylomorph_world_tests = b.addRunArtifact(hylomorph_world_tests);
+    const hylomorph_world_test_step = b.step("test-hylomorph-world", "Test embedded hylomorph chronoscope .world artifact");
+    hylomorph_world_test_step.dependOn(&run_hylomorph_world_tests.step);
+
+    const disco_world_mod = b.createModule(.{
+        .root_source_file = b.path("examples/disco_wire_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    disco_world_mod.addImport("syrup", syrup_mod);
+
+    const disco_world_exe = b.addExecutable(.{
+        .name = "disco-world-renderer",
+        .root_module = disco_world_mod,
+    });
+
+    const disco_world_cmd = b.addRunArtifact(disco_world_exe);
+    const disco_world_step = b.step("disco-world", "Render the embedded Disco wire .world artifact");
+    disco_world_step.dependOn(&disco_world_cmd.step);
+
+    const disco_world_test_mod = b.createModule(.{
+        .root_source_file = b.path("examples/disco_wire_world.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    disco_world_test_mod.addImport("syrup", syrup_mod);
+    const disco_world_tests = b.addTest(.{ .root_module = disco_world_test_mod });
+    const run_disco_world_tests = b.addRunArtifact(disco_world_tests);
+    const disco_world_test_step = b.step("test-disco-world", "Test embedded Disco wire .world artifact");
+    disco_world_test_step.dependOn(&run_disco_world_tests.step);
 
     // World Bandit executable (A/B → Bandit → Thompson → RL)
     const world_bandit_mod = b.createModule(.{
@@ -1672,6 +1763,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_qasm_tests.step);
     test_step.dependOn(&run_color_simd_tests.step);
     test_step.dependOn(&run_color_value_tests.step);
+    test_step.dependOn(&run_rgb_region_color_tests.step);
     test_step.dependOn(&run_arrow_color_ipc_tests.step);
     test_step.dependOn(&run_rhino_tests.step);
     test_step.dependOn(&run_rhino_bci_tests.step);
@@ -1698,6 +1790,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_spatial_propagator_tests.step);
     test_step.dependOn(&run_quantize_tests.step);
     test_step.dependOn(&run_virion_tests.step);
+    test_step.dependOn(&run_geodesic_world_tests.step);
+    test_step.dependOn(&run_hylomorph_world_tests.step);
+    test_step.dependOn(&run_disco_world_tests.step);
     test_step.dependOn(&run_factor_graph_tests.step);
     test_step.dependOn(&run_color_bandwidth_tests.step);
     test_step.dependOn(&run_gof_tests.step);
@@ -2479,6 +2574,23 @@ pub fn build(b: *std.Build) void {
     terminal_wasm.entry = .disabled; // Library, not executable
     terminal_wasm.rdynamic = true; // Export symbols
     b.installArtifact(terminal_wasm);
+
+    const disco_world_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/disco_world_wasm.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+    });
+
+    const disco_world_wasm = b.addExecutable(.{
+        .name = "disco-world",
+        .root_module = disco_world_wasm_mod,
+    });
+    disco_world_wasm.entry = .disabled;
+    disco_world_wasm.rdynamic = true;
+    b.installArtifact(disco_world_wasm);
+
+    const disco_world_wasm_step = b.step("disco-world-wasm", "Build the Disco wire freestanding WASM world");
+    disco_world_wasm_step.dependOn(&disco_world_wasm.step);
 
     // Zoad Executable (Zig Toad) - TUI ACP Client
     const zoad_mod = b.createModule(.{
