@@ -855,3 +855,104 @@ test "prime mechanism: ADC clock divider (Delsys 1926=2×3^2×107)" {
     _ = basis.registerRate(1926);
     try std.testing.expect(basis.contains(107));
 }
+
+// ============================================================================
+// CLOCK DOMAIN TESTS — folded golden-stride property
+// Proves that stride * GOLDEN folds into a single constant per clock domain.
+// See spi-race/spi-metal-clocks.swift for GPU proof that this is zero-cost.
+// ============================================================================
+
+test "clock domain: flick stride is exact for all E1 rates" {
+    // For every rate that divides E1, the flick stride and trit stride
+    // must both be exact integers, and flick_stride = 5 × trit_stride.
+    const rates = [_]u64{ 250, 500, 2000, 2500, 4800, 5000, 30000, 300 };
+    for (rates) |rate| {
+        try std.testing.expectEqual(@as(u64, 0), TICKS_PER_SECOND % rate);
+        try std.testing.expectEqual(@as(u64, 0), FLICKS_PER_SECOND % rate);
+        const trit_stride = TICKS_PER_SECOND / rate;
+        const flick_stride = FLICKS_PER_SECOND / rate;
+        try std.testing.expectEqual(flick_stride, trit_stride * 5);
+    }
+}
+
+test "clock domain: golden-stride fold is associative" {
+    // GOLDEN * (TICKS_PER_SECOND / rate) = (GOLDEN * TICKS_PER_SECOND) / rate
+    // when rate divides TICKS_PER_SECOND. This is the folding property.
+    const GOLDEN: u64 = 0x9e3779b97f4a7c15;
+    const rates = [_]u64{ 250, 500, 2500, 5000, 30000 };
+    for (rates) |rate| {
+        const stride = TICKS_PER_SECOND / rate;
+        const golden_stride = GOLDEN *% stride;
+        // Verify: seed + golden_stride * sample_k = seed + GOLDEN * (stride * sample_k)
+        // for sample_k = 0..7
+        const seed: u64 = 42;
+        var k: u64 = 0;
+        while (k < 8) : (k += 1) {
+            const direct = seed +% GOLDEN *% (stride * k);
+            const folded = seed +% golden_stride *% k;
+            try std.testing.expectEqual(direct, folded);
+        }
+    }
+}
+
+test "clock domain: stride ratio color→flick→trit is 1:flick_div:trit_div" {
+    // The three clock domains for 250 Hz OpenBCI:
+    // color:    stride = 1          (raw index)
+    // flick:    stride = 705600000/250 = 2822400
+    // trit:     stride = 141120000/250 = 564480
+    const rate: u64 = 250;
+    const color_stride: u64 = 1;
+    const flick_stride = FLICKS_PER_SECOND / rate;
+    const trit_stride = TICKS_PER_SECOND / rate;
+    try std.testing.expectEqual(@as(u64, 1), color_stride);
+    try std.testing.expectEqual(@as(u64, 2_822_400), flick_stride);
+    try std.testing.expectEqual(@as(u64, 564_480), trit_stride);
+    try std.testing.expectEqual(flick_stride, trit_stride * 5);
+    // Neuropixels 30kHz
+    const np_flick = FLICKS_PER_SECOND / 30000;
+    const np_trit = TICKS_PER_SECOND / 30000;
+    try std.testing.expectEqual(@as(u64, 23_520), np_flick);
+    try std.testing.expectEqual(@as(u64, 4_704), np_trit);
+    try std.testing.expectEqual(np_flick, np_trit * 5);
+}
+
+test "clock domain: E2 strides for rates needing expanded epoch" {
+    // BioSemi 2048 Hz doesn't divide E1, but divides E2.
+    // DBS 130 Hz doesn't divide E1, but divides E2.
+    try std.testing.expect(TICKS_PER_SECOND % 2048 != 0); // fails E1
+    try std.testing.expect(TICKS_PER_SECOND % 130 != 0); // fails E1
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 2048);
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 130);
+    const biosemi_stride = Expanded.TICKS_PER_SECOND / 2048;
+    const dbs_stride = Expanded.TICKS_PER_SECOND / 130;
+    // Both strides are valid u128 integers
+    try std.testing.expect(biosemi_stride > 0);
+    try std.testing.expect(dbs_stride > 0);
+}
+
+test "clock domain: all three domains agree at sample boundaries" {
+    // For a rate that divides both flick and trit-tick (e.g. 250 Hz),
+    // sample k maps to tick indices:
+    //   color: k
+    //   flick: k * 2822400
+    //   trit:  k * 564480
+    // The color_at() for each is DIFFERENT (different indices → different hash),
+    // but the STRUCTURE is isomorphic: sample k always maps to tick k*stride.
+    // This test verifies the stride arithmetic is consistent.
+    const rate: u64 = 250;
+    const f_stride = FLICKS_PER_SECOND / rate;
+    const t_stride = TICKS_PER_SECOND / rate;
+    // For 1 hour of recording: 250 * 3600 = 900,000 samples
+    const samples_1hr: u64 = rate * 3600;
+    try std.testing.expectEqual(@as(u64, 900_000), samples_1hr);
+    // Last sample's tick in each domain
+    const last_flick = (samples_1hr - 1) * f_stride;
+    const last_trit = (samples_1hr - 1) * t_stride;
+    // These are valid u64 (no overflow for 1 hour at 250 Hz)
+    try std.testing.expect(last_flick > last_trit);
+    try std.testing.expectEqual(last_flick, last_trit * 5);
+    // Even 1 year doesn't overflow u64 at 250 Hz in trit-tick space
+    const samples_1yr: u64 = rate * 86400 * 365;
+    const last_trit_1yr = (samples_1yr - 1) * t_stride;
+    try std.testing.expect(last_trit_1yr < std.math.maxInt(u64));
+}
