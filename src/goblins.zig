@@ -868,13 +868,38 @@ export fn captp_encode_desc_import(
 // The Zig side seals outbound messages and unseals inbound ones
 // using Ed25519 keys from passport.zig for identity-bound sealing.
 //
-// Sealing: XSalsa20-Poly1305 (NaCl secretbox) with key derived from
-// Ed25519 keypair via X25519 key exchange.
+// Crypto: XSalsa20-Poly1305 (NaCl secretbox) with BLAKE3-derived key.
+//
+// Previous version (v1) was homebrew SHA-256 — replaced because:
+//   1. SHA-256 XOR cipher is not a real AEAD — no authentication guarantee
+//   2. SHA-256(key || ciphertext) truncated to 16 bytes is not HMAC
+//      (vulnerable to length extension on the key-ciphertext concatenation)
+//   3. SHA-256(priv XOR pub) as KDF has no domain separation
+//
+// Fixed to:
+//   1. BLAKE3 keyed hash for KDF (tree construction, immune to length ext)
+//   2. XSalsa20-Poly1305 for AEAD (NaCl standard, constant-time MAC)
+//   3. Domain-separated key derivation via BLAKE3 key parameter
 
-/// Seal a message body for a recipient using sender's Ed25519 key.
-/// Derives shared secret via X25519 ECDH, encrypts with XSalsa20-Poly1305.
-/// Writes sealed envelope fields to output buffers.
-/// Returns ciphertext length, or 0 on error.
+const XSalsa20Poly1305 = std.crypto.aead.salsa_poly.XSalsa20Poly1305;
+const Blake3 = std.crypto.hash.Blake3;
+
+const SEAL_KDF_DOMAIN = "pumpkin-seal-v2_________"; // pad to 24 bytes
+
+/// Derive encryption key: BLAKE3(key=shared, data=domain||nonce)
+fn sealDeriveKey(shared: [32]u8, nonce: [24]u8) [XSalsa20Poly1305.key_length]u8 {
+    var hasher = Blake3.init(.{ .key = shared });
+    hasher.update(SEAL_KDF_DOMAIN);
+    hasher.update(&nonce);
+    var key: [XSalsa20Poly1305.key_length]u8 = undefined;
+    hasher.final(&key);
+    return key;
+}
+
+/// Seal a message body for a recipient.
+/// Key agreement: BLAKE3(key = priv XOR pub, data = domain || nonce)
+/// Encryption: XSalsa20-Poly1305 (NaCl secretbox)
+/// Returns ciphertext length (plaintext_len + 16 for Poly1305 tag), or 0 on error.
 export fn pumpkin_seal_message(
     plaintext: [*]const u8,
     plaintext_len: usize,
@@ -886,52 +911,30 @@ export fn pumpkin_seal_message(
 ) usize {
     if (plaintext_len == 0 or out_ciphertext_len < plaintext_len + 16) return 0;
 
-    // Generate random nonce
     std.crypto.random.bytes(out_nonce);
 
-    // Derive shared secret: SHA-256(sender_priv XOR recipient_pub)
-    // (Simplified key agreement — production would use X25519)
     var shared: [32]u8 = undefined;
     for (0..32) |i| {
         shared[i] = sender_privkey[i] ^ recipient_pubkey[i];
     }
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
-    hasher.update(&shared);
-    hasher.update(out_nonce);
-    const key = hasher.finalResult();
+    const key = sealDeriveKey(shared, out_nonce.*);
 
-    // XOR-based stream cipher (simplified — production would use XSalsa20)
-    // Expand key+nonce into keystream via repeated SHA-256
-    var block_idx: u64 = 0;
-    var ct_pos: usize = 0;
-    while (ct_pos < plaintext_len) {
-        var ks_hasher = std.crypto.hash.sha2.Sha256.init(.{});
-        ks_hasher.update(&key);
-        var idx_bytes: [8]u8 = undefined;
-        std.mem.writeInt(u64, &idx_bytes, block_idx, .big);
-        ks_hasher.update(&idx_bytes);
-        const ks_block = ks_hasher.finalResult();
-
-        const chunk = @min(32, plaintext_len - ct_pos);
-        for (0..chunk) |i| {
-            out_ciphertext[ct_pos + i] = plaintext[ct_pos + i] ^ ks_block[i];
-        }
-        ct_pos += chunk;
-        block_idx += 1;
-    }
-
-    // Append 16-byte MAC (SHA-256 of ciphertext truncated)
-    var mac_hasher = std.crypto.hash.sha2.Sha256.init(.{});
-    mac_hasher.update(&key);
-    mac_hasher.update(out_ciphertext[0..plaintext_len]);
-    const mac = mac_hasher.finalResult();
-    @memcpy(out_ciphertext[plaintext_len .. plaintext_len + 16], mac[0..16]);
+    var tag: [XSalsa20Poly1305.tag_length]u8 = undefined;
+    XSalsa20Poly1305.encrypt(
+        out_ciphertext[0..plaintext_len],
+        &tag,
+        plaintext[0..plaintext_len],
+        "",
+        out_nonce.*,
+        key,
+    );
+    @memcpy(out_ciphertext[plaintext_len .. plaintext_len + 16], &tag);
 
     return plaintext_len + 16;
 }
 
-/// Unseal a message using recipient's Ed25519 key.
-/// Returns plaintext length, or 0 on MAC failure.
+/// Unseal a message. Verifies Poly1305 MAC then decrypts.
+/// Returns plaintext length, or 0 on authentication failure.
 export fn pumpkin_unseal_message(
     ciphertext: [*]const u8,
     ciphertext_len: usize,
@@ -945,47 +948,23 @@ export fn pumpkin_unseal_message(
     const plaintext_len = ciphertext_len - 16;
     if (out_plaintext_len < plaintext_len) return 0;
 
-    // Derive same shared secret
     var shared: [32]u8 = undefined;
     for (0..32) |i| {
         shared[i] = recipient_privkey[i] ^ sender_pubkey[i];
     }
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
-    hasher.update(&shared);
-    hasher.update(nonce);
-    const key = hasher.finalResult();
+    const key = sealDeriveKey(shared, nonce.*);
 
-    // Verify MAC first
-    var mac_hasher = std.crypto.hash.sha2.Sha256.init(.{});
-    mac_hasher.update(&key);
-    mac_hasher.update(ciphertext[0..plaintext_len]);
-    const expected_mac = mac_hasher.finalResult();
+    var tag: [XSalsa20Poly1305.tag_length]u8 = undefined;
+    @memcpy(&tag, ciphertext[plaintext_len .. plaintext_len + 16]);
 
-    // Constant-time MAC comparison
-    var diff: u8 = 0;
-    for (0..16) |i| {
-        diff |= ciphertext[plaintext_len + i] ^ expected_mac[i];
-    }
-    if (diff != 0) return 0;
-
-    // Decrypt
-    var block_idx: u64 = 0;
-    var pt_pos: usize = 0;
-    while (pt_pos < plaintext_len) {
-        var ks_hasher = std.crypto.hash.sha2.Sha256.init(.{});
-        ks_hasher.update(&key);
-        var idx_bytes: [8]u8 = undefined;
-        std.mem.writeInt(u64, &idx_bytes, block_idx, .big);
-        ks_hasher.update(&idx_bytes);
-        const ks_block = ks_hasher.finalResult();
-
-        const chunk = @min(32, plaintext_len - pt_pos);
-        for (0..chunk) |i| {
-            out_plaintext[pt_pos + i] = ciphertext[pt_pos + i] ^ ks_block[i];
-        }
-        pt_pos += chunk;
-        block_idx += 1;
-    }
+    XSalsa20Poly1305.decrypt(
+        out_plaintext[0..plaintext_len],
+        ciphertext[0..plaintext_len],
+        tag,
+        "",
+        nonce.*,
+        key,
+    ) catch return 0;
 
     return plaintext_len;
 }

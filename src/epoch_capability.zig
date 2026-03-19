@@ -243,6 +243,12 @@ pub const EpochCapTable = struct {
 
 /// For epoch 3 (unbounded), revocation is a signed certificate.
 /// The certificate can be verified without contacting the revoker.
+///
+/// Uses BLAKE3 (not SHA-256) for commitment:
+///   - No length extension vulnerability (tree hash, not Merkle-Damgard)
+///   - Domain-separated via key material (keyed mode)
+///   - 2x faster than SHA-256 on modern hardware
+///   - Already used in circuit_world.zig for state hashing
 pub const RevocationCert = struct {
     /// Slot being revoked
     slot: u16,
@@ -250,14 +256,20 @@ pub const RevocationCert = struct {
     epoch: Epoch,
     /// Trit-tick timestamp of revocation
     timestamp: u64,
-    /// SHA-256 of (slot ++ epoch ++ timestamp ++ revoker_pubkey)
+    /// BLAKE3 keyed hash of (slot ++ epoch ++ timestamp)
     commitment: [32]u8,
-    /// Revoker's public key
+    /// Revoker's public key (also serves as BLAKE3 key for domain separation)
     revoker_pubkey: [32]u8,
 
-    /// Compute commitment hash for a revocation.
+    const DOMAIN_SEP = "epoch-cap-revoke-v1______"; // pad to 32 bytes
+
+    /// Compute commitment: BLAKE3(domain ++ slot ++ epoch ++ timestamp),
+    /// keyed with revoker_pubkey for domain separation.
     pub fn computeCommitment(slot: u16, epoch: Epoch, timestamp: u64, revoker_pubkey: [32]u8) [32]u8 {
-        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+        // BLAKE3 keyed mode: 32-byte key provides domain separation
+        // and binds the commitment to the revoker's identity.
+        var hasher = std.crypto.hash.Blake3.init(.{ .key = revoker_pubkey });
+        hasher.update(DOMAIN_SEP);
         var slot_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &slot_bytes, slot, .big);
         hasher.update(&slot_bytes);
@@ -265,8 +277,9 @@ pub const RevocationCert = struct {
         var ts_bytes: [8]u8 = undefined;
         std.mem.writeInt(u64, &ts_bytes, timestamp, .big);
         hasher.update(&ts_bytes);
-        hasher.update(&revoker_pubkey);
-        return hasher.finalResult();
+        var out: [32]u8 = undefined;
+        hasher.final(&out);
+        return out;
     }
 
     /// Create a revocation certificate.
@@ -280,10 +293,10 @@ pub const RevocationCert = struct {
         };
     }
 
-    /// Verify the certificate's commitment hash.
+    /// Verify the certificate's commitment hash (constant-time comparison).
     pub fn verifyCommitment(self: *const RevocationCert) bool {
         const expected = computeCommitment(self.slot, self.epoch, self.timestamp, self.revoker_pubkey);
-        return std.mem.eql(u8, &self.commitment, &expected);
+        return std.crypto.timing_safe.eql([32]u8, self.commitment, expected);
     }
 };
 

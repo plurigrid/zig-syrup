@@ -37,10 +37,11 @@ fn valueTrit(val: u64) i8 {
 }
 
 // ============================================================================
-// Sealer (HMAC-SHA256, duplicated from goblins.zig section 7 simplified)
+// Sealer (BLAKE3 keyed hash — replaces previous SHA-256(key||msg) which
+// was vulnerable to length extension and was not HMAC)
 // ============================================================================
 
-const Sha256 = std.crypto.hash.sha2.Sha256;
+const PumpkinBlake3 = std.crypto.hash.Blake3;
 
 fn deriveKey(seed: u64) [32]u8 {
     var key: [32]u8 = undefined;
@@ -55,11 +56,11 @@ fn seal(key: [32]u8, plaintext: []const u8, out: []u8) usize {
     const total = plaintext.len + 32;
     if (out.len < total) return 0;
 
-    // HMAC-SHA256 tag
-    var h = Sha256.init(.{});
-    h.update(&key);
+    // BLAKE3 keyed hash: key provides domain separation, immune to length ext
+    var h = PumpkinBlake3.init(.{ .key = key });
     h.update(plaintext);
-    const tag = h.finalResult();
+    var tag: [32]u8 = undefined;
+    h.final(&tag);
 
     @memcpy(out[0..32], &tag);
     @memcpy(out[32..total], plaintext);
@@ -72,17 +73,13 @@ fn unseal(key: [32]u8, sealed_data: []const u8, out: []u8) ?usize {
     if (out.len < plain_len) return null;
 
     // Recompute tag
-    var h = Sha256.init(.{});
-    h.update(&key);
+    var h = PumpkinBlake3.init(.{ .key = key });
     h.update(sealed_data[32..]);
-    const expected = h.finalResult();
+    var expected: [32]u8 = undefined;
+    h.final(&expected);
 
     // Constant-time compare
-    var diff: u8 = 0;
-    for (0..32) |i| {
-        diff |= sealed_data[i] ^ expected[i];
-    }
-    if (diff != 0) return null;
+    if (!std.crypto.timing_safe.eql([32]u8, sealed_data[0..32].*, expected)) return null;
 
     @memcpy(out[0..plain_len], sealed_data[32..]);
     return plain_len;
