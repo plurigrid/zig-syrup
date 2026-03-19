@@ -601,3 +601,95 @@ test "unbounded: cascade multiple devices" {
     _ = basis.registerRate(3329); // Padovan prime, +1
     try std.testing.expect(basis.len >= 19);
 }
+
+// ============================================================================
+// TESTS — REAL-WORLD SYNC SCENARIOS (from sync analysis of 15 experimental setups)
+// The two rates that break ALL fixed epochs: 227 Hz (FLIR camera, prime)
+// and 1926 Hz (Delsys Trigno EMG, = 2 × 3² × 107 where 107 is prime).
+// Only the unbounded epoch handles these via registerRate().
+// ============================================================================
+
+test "sync scenario: FLIR 227 Hz breaks epochs 1-3, unbounded absorbs it" {
+    // 227 is prime — not in any epoch's factorization
+    try std.testing.expect(TICKS_PER_SECOND % 227 != 0);
+    try std.testing.expect(Expanded.TICKS_PER_SECOND % 227 != 0);
+    try std.testing.expect(Extreme.TICKS_PER_SECOND % 227 != 0);
+
+    // Unbounded absorbs it
+    var basis = Unbounded.PrimeBasis.initEpoch3();
+    try std.testing.expect(!basis.contains(227));
+    const grew = basis.registerRate(227);
+    try std.testing.expect(grew);
+    try std.testing.expect(basis.contains(227));
+}
+
+test "sync scenario: Delsys EMG 1926 Hz breaks epochs 1-3, unbounded absorbs it" {
+    // 1926 = 2 × 3² × 107. Prime 107 is in no epoch.
+    try std.testing.expect(TICKS_PER_SECOND % 1926 != 0);
+    try std.testing.expect(Expanded.TICKS_PER_SECOND % 1926 != 0);
+    try std.testing.expect(Extreme.TICKS_PER_SECOND % 1926 != 0);
+
+    var basis = Unbounded.PrimeBasis.initEpoch3();
+    try std.testing.expect(!basis.contains(107));
+    const grew = basis.registerRate(1926);
+    try std.testing.expect(grew);
+    try std.testing.expect(basis.contains(107));
+    // 2 and 3 already in basis, so only 107 is new
+    try std.testing.expectEqual(@as(u8, 17), basis.len);
+}
+
+test "sync scenario: full Neuropixels+FLIR rig" {
+    // Setup 3: 30000, 2500, 227, 200, 32000, 1000
+    const rates = [_]u64{ 30000, 2500, 227, 200, 32000, 1000 };
+    var basis = Unbounded.PrimeBasis.initEpoch3();
+    var new_primes: u8 = 0;
+    for (rates) |r| {
+        if (basis.registerRate(r)) new_primes += 1;
+    }
+    // Only 227 is new (all others factor into epoch 3 primes)
+    try std.testing.expectEqual(@as(u8, 1), new_primes);
+}
+
+test "sync scenario: full MoBI rig (canonical hard case)" {
+    // Setup 12: 2048, 240, 360, 1926, 2000, 1000
+    const rates = [_]u64{ 2048, 240, 360, 1926, 2000, 1000 };
+    var basis = Unbounded.PrimeBasis.initEpoch3();
+    var new_primes: u8 = 0;
+    for (rates) |r| {
+        if (basis.registerRate(r)) new_primes += 1;
+    }
+    // Only 107 (from 1926) is new
+    try std.testing.expectEqual(@as(u8, 1), new_primes);
+}
+
+test "sync scenario: DBS + LFP + EEG" {
+    // Setup 4: 250, 130, 185, 4800, 100
+    // Epoch 1 fails on 130 (needs 13) and 185 (needs 37)
+    try std.testing.expect(TICKS_PER_SECOND % 130 != 0);
+    try std.testing.expect(TICKS_PER_SECOND % 185 != 0);
+    // Epoch 2 handles both (has 13 and 37)
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 130);
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 185);
+}
+
+test "sync scenario: hyperscanning EEG 2048 + audio 44100" {
+    // GCD(2048, 44100) = 4, LCM = 22,579,200
+    // Epoch 1 fails on 2048 (needs 2^11, only has 2^9)
+    try std.testing.expect(TICKS_PER_SECOND % 2048 != 0);
+    // Epoch 2 handles it
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 2048);
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 44100);
+}
+
+test "sync scenario: DSD512 audio needs epoch 2+" {
+    // DSD512 = 22,579,200 Hz = 2^11 × 3^2 × 5^2 × 7^2
+    // Epoch 1 has only 2^9, so fails
+    try std.testing.expect(TICKS_PER_SECOND % 22_579_200 != 0);
+    // Epoch 2 has 2^15, so succeeds
+    try std.testing.expectEqual(@as(u128, 0), Expanded.TICKS_PER_SECOND % 22_579_200);
+    // Cross-modal: DSD512 / CD = 512 exactly
+    const dsd_tps = Extreme.TICKS_PER_SECOND / 22_579_200;
+    const cd_tps = Extreme.TICKS_PER_SECOND / 44_100;
+    try std.testing.expectEqual(@as(u128, 0), cd_tps % dsd_tps);
+    try std.testing.expectEqual(@as(u128, 512), cd_tps / dsd_tps);
+}
