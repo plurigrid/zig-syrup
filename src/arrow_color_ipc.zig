@@ -87,9 +87,9 @@ fn batchBufferSize(batch_len: u32, has_eps: bool) usize {
     return size;
 }
 
-/// Compute the schema CID (SHA-256 of the column layout descriptor).
+/// Compute the schema CID (BLAKE3 of the column layout descriptor).
 fn computeSchemaCid(batch_len: u32, flags: Flags) [32]u8 {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(&MAGIC);
     hasher.update(&[_]u8{SCHEMA_VERSION});
     hasher.update(&std.mem.toBytes(batch_len));

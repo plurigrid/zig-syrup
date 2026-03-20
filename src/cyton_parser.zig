@@ -8,6 +8,8 @@
 //!   - 6 bytes of aux data (3 × int16 accelerometer)
 //!   - 1 stop byte (0xC0)
 //!
+//! Timestamps use trit-tick units (1/141,120,000 s) for exact integer
+//! arithmetic.  See trit_tick.zig for the derivation.
 //! Total: 33 bytes @ 250 Hz = 8.25 KB/sec
 //!
 //! Channels: [Fp1, Fp2, C3, C4, P3, P4, O1, O2] (10-20 electrode placement)
@@ -16,6 +18,7 @@
 //! Scale: (Vref / (Gain × 2^24)) × 1e6 to get microvolts
 
 const std = @import("std");
+const trit_tick = @import("trit_tick.zig");
 
 // ============================================================================
 // CONSTANTS
@@ -48,7 +51,7 @@ pub const ADC24 = i32;  // Stored in i32 but only 24 bits used
 
 /// Single EEG sample from Cyton device
 pub const CytonSample = struct {
-    timestamp: i64,                        // Nanoseconds (or milliseconds from device)
+    timestamp: i64,                        // Trit-ticks (1/141,120,000 s). See trit_tick.zig.
     sample_number: u8,                     // 0-255 counter (wraps)
     channels: [CYTON_NUM_CHANNELS]f32,    // 8 channels in microvolts
     accel: [3]i16,                         // 3-axis accelerometer (raw)
@@ -158,7 +161,7 @@ pub fn parseStream(
         // Try to parse
         if (parseCytonPacket(packet, timestamp)) |sample| {
             try samples.append(allocator, sample);
-            timestamp += @as(i64, @intFromFloat(1e9 / CYTON_SAMPLE_RATE)); // ~4ms intervals
+            timestamp += @as(i64, @intCast(trit_tick.TICKS_PER_SECOND / @as(u64, @intFromFloat(CYTON_SAMPLE_RATE)))); // exact: 564,480 trit-ticks per sample
         } else |_| {
             // Skip this packet and continue searching
         }

@@ -664,7 +664,7 @@ test "sync engine" {
 }
 
 fn computeEventHash(seed: u64) Hash {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(std.mem.asBytes(&seed));
     var hash: Hash = undefined;
     hasher.final(&hash);

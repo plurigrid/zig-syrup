@@ -86,7 +86,7 @@ pub const ENCRYPT_CHACHA20: u8 = 0x02;
 /// Compute SHA-256 hash of data
 pub fn computeHash(data: []const u8) Hash {
     var hash: Hash = undefined;
-    std.crypto.hash.sha2.Sha256.hash(data, &hash, .{});
+    std.crypto.hash.Blake3.hash(data, &hash, .{});
     return hash;
 }
 

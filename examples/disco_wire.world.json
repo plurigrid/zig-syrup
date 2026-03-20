@@ -1,0 +1,87 @@
+{
+  "$label": "world",
+  "$fields": [
+    {
+      "name": "disco.wire.world",
+      "kind": "world://ies/disco/wire",
+      "world_uri": "world://ies/disco/wire",
+      "standalone": {
+        "target": "zig-wasm-standalone",
+        "artifact": "disco-world.wasm",
+        "binary_model": "freestanding wasm32 module with embedded .world bytes",
+        "host_story": "hosted rendering is optional; the world ships as data",
+        "exports": [
+          "disco_world_ptr",
+          "disco_world_len",
+          "disco_summary_ptr",
+          "disco_summary_len",
+          "disco_zen_today_ptr",
+          "disco_zen_today_len",
+          "disco_rendering_stack_ptr",
+          "disco_rendering_stack_len"
+        ]
+      },
+      "rendering_paths": [
+        {
+          "name": "retty",
+          "role": "native Zig widget and layout engine, freestanding-friendly"
+        },
+        {
+          "name": "restty",
+          "role": "browser terminal host already used in portal overlays"
+        },
+        {
+          "name": "dom_backend",
+          "role": "Ratzilla-equivalent diff renderer from cell buffer to DOM"
+        },
+        {
+          "name": "wgpu_compute",
+          "role": "WebGPU path for zero-copy color dispatch and pixel buffers"
+        }
+      ],
+      "goblins_hoot": {
+        "hoot": "ahead-of-time whole-program Scheme to Wasm compiler",
+        "goblins": "known locally to compile and run on Hoot",
+        "state_of_the_art": [
+          "main modules carry runtime and export ABI",
+          "auxiliary modules import ABI from a main module",
+          "browser deployment uses reflect.js plus reflect.wasm bootstrap",
+          "Hoot is unsupported on WASI runtimes in the current local docs",
+          "pure Zig freestanding standalone is the most direct local path"
+        ]
+      },
+      "catcolab": {
+        "delayed_action": "queued counterfactual commitments can outrank the immediate branch at commit time",
+        "regulatory_mechanisms": [
+          "causal-loop delays",
+          "Petri net transitions",
+          "timeline snapshots",
+          "accept and reject validators",
+          "ownership split between proposer, committer, and memory"
+        ]
+      },
+      "dataflow": {
+        "nuworlds": "discover candidate worlds in parallel",
+        "lazyframe": "chain recovered traces through Polars LazyFrame views",
+        "interleaving": "three concurrent interleaving string-diagrammatic lanes",
+        "jlcolor": "Gay.jl color support belongs at witness and interface layers"
+      },
+      "zen_today": [
+        "18:29 to 18:30 Morph Cloud instances, snapshots, settings, and docs",
+        "19:31 Itaca Fest 2025 and infinity-operad context",
+        "19:32 Lean and formalizing proofs with Claude Code",
+        "19:36 ar.io permaweb articles",
+        "19:38 automorphic forms for triangle groups",
+        "19:45 miniKanren and The Reasoned Schemer",
+        "19:51 to 19:53 GeoDatasets, GeoACSet, and olmoearth geodesics",
+        "20:19 foot terminal and kitty styled underlines",
+        "20:22 John Baez and Tai-Danae Bradley on categorical semantics of entropy"
+      ],
+      "status": {
+        "validation": "artifact can be decoded with the local syrup binary",
+        "zig_toolchain": "fresh zig compilation remains blocked while zig is unavailable on PATH",
+        "rendering": "restty and portal provide browser-hosted rendering today"
+      }
+    }
+  ]
+}

@@ -488,7 +488,7 @@ pub const SelfWalker = struct {
         const bytes = try self.toBytes(allocator);
         defer allocator.free(bytes);
         var hash: [32]u8 = undefined;
-        std.crypto.hash.sha2.Sha256.hash(bytes, &hash, .{});
+        std.crypto.hash.Blake3.hash(bytes, &hash, .{});
         return hash;
     }
 
@@ -708,7 +708,7 @@ pub const DeviceRecord = struct {
         const bytes = try self.toBytes(allocator);
         defer allocator.free(bytes);
         var hash: [32]u8 = undefined;
-        std.crypto.hash.sha2.Sha256.hash(bytes, &hash, .{});
+        std.crypto.hash.Blake3.hash(bytes, &hash, .{});
         return hash;
     }
 

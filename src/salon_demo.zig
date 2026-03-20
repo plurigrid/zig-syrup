@@ -173,11 +173,11 @@ fn runSnapshot(allocator: std.mem.Allocator, w: anytype) !void {
     // Compute CID
     var json_buf: [16384]u8 = undefined;
     const json_out = try grid.toJson(&json_buf);
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(json_out);
     var digest: [32]u8 = undefined;
     hasher.final(&digest);
-    try w.writeAll("\n  CID (sha256 of grid JSON): ");
+    try w.writeAll("\n  CID (blake3 of grid JSON): ");
     for (digest) |byte| {
         try w.print("{x:0>2}", .{byte});
     }

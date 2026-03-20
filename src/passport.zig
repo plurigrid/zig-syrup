@@ -18,7 +18,7 @@
 //!
 //! Design constraints:
 //!   - No allocator in hot path (wasm32-freestanding compatible)
-//!   - SHA-256 for all hashing (Zig std.crypto)
+//!   - BLAKE3 for all hashing (tree construction, no length extension)
 //!   - Base32-lower encoding (matches did:gay spec)
 //!   - GF(3) conservation at every layer
 
@@ -333,17 +333,20 @@ pub const VerifyResult = struct {
 // ============================================================================
 
 /// Derive a did:gay identifier from EEG-derived color + Ed25519 public key.
-/// The identifier is SHA-256(pubkey || color_hex)[0:15] → base32-lower[0:24].
+/// The identifier is BLAKE3(pubkey || color_hex)[0:15] → base32-lower[0:24].
 ///
 /// This binds the brain-derived color to a cryptographic key,
 /// making the DID both self-certifying AND brain-bound.
+///
+/// Uses BLAKE3 (not SHA-256): immune to length extension, domain-separated
+/// via the pubkey acting as implicit key material in the hash input.
 pub fn deriveDidIdentifier(pubkey: [32]u8, color_hex: [7]u8) DidIdentifier {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(&pubkey);
     hasher.update(&color_hex);
-    const hash = hasher.finalResult();
+    var hash: [32]u8 = undefined;
+    hasher.final(&hash);
 
-    // Base32-lower encode first 15 bytes → 24 chars
     return base32LowerEncode(hash[0..15].*);
 }
 
@@ -373,25 +376,25 @@ fn base32LowerEncode(input: [15]u8) [24]u8 {
 // GAP 2: Entropy Trajectory → Proof Commitment
 // ============================================================================
 
-/// Compute session commitment: SHA-256 of (nonce || trajectory || entropies).
+/// Compute session commitment: BLAKE3 of (nonce || trajectory || entropies).
 /// This is the value stored on-chain in did:gay registry.
+///
+/// BLAKE3 (not SHA-256): the nonce+trajectory concatenation is safe under
+/// tree hashing but was vulnerable to length extension under Merkle-Damgard.
 pub fn computeSessionCommitment(
     nonce: [16]u8,
     trajectory: []const Trit,
     entropies: []const f64,
 ) SessionCommitment {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
 
-    // Nonce (temporal binding)
     hasher.update(&nonce);
 
-    // Trit trajectory (packed: 2 bytes per trit as i8)
     for (trajectory) |t| {
         const byte: [1]u8 = .{@bitCast(@intFromEnum(t))};
         hasher.update(&byte);
     }
 
-    // Entropy values (8 bytes each, big-endian f64)
     for (entropies) |e| {
         const bits: u64 = @bitCast(e);
         var buf: [8]u8 = undefined;
@@ -399,18 +402,22 @@ pub fn computeSessionCommitment(
         hasher.update(&buf);
     }
 
-    return hasher.finalResult();
+    var out: [32]u8 = undefined;
+    hasher.final(&out);
+    return out;
 }
 
-/// Compute trajectory CID: SHA-256 of just the trit sequence.
+/// Compute trajectory CID: BLAKE3 of just the trit sequence.
 /// Used for content-addressing in DuckDB and IPFS.
 pub fn trajectoryContentId(trajectory: []const Trit) [32]u8 {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
     for (trajectory) |t| {
         const byte: [1]u8 = .{@bitCast(@intFromEnum(t))};
         hasher.update(&byte);
     }
-    return hasher.finalResult();
+    var out: [32]u8 = undefined;
+    hasher.final(&out);
+    return out;
 }
 
 // ============================================================================

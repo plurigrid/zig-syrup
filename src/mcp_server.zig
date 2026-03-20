@@ -467,7 +467,7 @@ fn handleVirionCreate(allocator: std.mem.Allocator, args: json.ObjectMap) !json.
     };
 
     // Compute CID
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(name);
     hasher.update(&[_]u8{
         @bitCast(role_int),
@@ -595,15 +595,15 @@ fn handleCidCompute(allocator: std.mem.Allocator, args: json.ObjectMap) !json.Va
         return toolError(allocator, msg);
     };
 
-    // SHA-256 hash
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    // BLAKE3 hash
+    var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(encoded);
     var cid: [32]u8 = undefined;
     hasher.final(&cid);
     const cid_hex = std.fmt.bytesToHex(cid, .lower);
 
     const text = try std.fmt.allocPrint(allocator,
-        \\CID (SHA-256 of canonical Syrup encoding):
+        \\CID (BLAKE3 of canonical Syrup encoding):
         \\  cid:      {s}
         \\  encoding: {d} bytes
     , .{ cid_hex, encoded.len });

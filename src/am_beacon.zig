@@ -211,28 +211,26 @@ pub const BeaconMeasurement = struct {
         return ratio > 0.5 and ratio < 2.0;
     }
 
-    /// Commitment hash: SHA-256 of (station_freq || audio_fingerprint || atmo_fingerprint || timestamp)
+    /// Commitment hash: BLAKE3 of (station_freq || audio_fingerprint || atmo_fingerprint || timestamp)
     pub fn commitmentHash(self: BeaconMeasurement) [32]u8 {
-        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+        var hasher = std.crypto.hash.Blake3.init(.{});
 
-        // Station identity
         const freq_bytes = std.mem.asBytes(&self.station.frequency_khz);
         hasher.update(freq_bytes);
 
-        // Audio fingerprint (band energies)
         for (self.audio.band_energy) |e| {
             hasher.update(std.mem.asBytes(&e));
         }
 
-        // Atmospheric fingerprint
         hasher.update(std.mem.asBytes(&self.atmosphere.delay_spread_us));
         hasher.update(std.mem.asBytes(&self.atmosphere.snr_db));
         hasher.update(std.mem.asBytes(&self.atmosphere.phase_offset_rad));
 
-        // Timestamp
         hasher.update(std.mem.asBytes(&self.timestamp_ms));
 
-        return hasher.finalResult();
+        var out: [32]u8 = undefined;
+        hasher.final(&out);
+        return out;
     }
 
     /// Serialize to Syrup record

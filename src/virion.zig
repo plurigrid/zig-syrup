@@ -269,21 +269,17 @@ pub const Virion = struct {
     // ----------------------------------------------------------------
 
     fn computeCid(self: *Virion) void {
-        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
-        // Hash name
+        var hasher = std.crypto.hash.Blake3.init(.{});
         hasher.update(self.name[0..self.name_len]);
-        // Hash trits
         hasher.update(&[_]u8{
             @bitCast(@as(i8, @intFromEnum(self.trit_role))),
             @bitCast(@as(i8, @intFromEnum(self.trit_mode))),
             @bitCast(@as(i8, @intFromEnum(self.trit_polarity))),
         });
-        // Hash capabilities
         for (self.capabilities[0..self.cap_count]) |cap| {
             const bytes: [2]u8 = @bitCast(cap.asU16());
             hasher.update(&bytes);
         }
-        // Hash generation
         hasher.update(&std.mem.toBytes(self.generation));
         hasher.final(&self.cid);
     }

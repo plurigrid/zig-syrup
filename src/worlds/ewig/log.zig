@@ -35,7 +35,7 @@ pub const Event = struct {
     
     /// Compute the hash of this event (excluding the hash field itself)
     pub fn computeEventHash(self: Self) Hash {
-        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+        var hasher = std.crypto.hash.Blake3.init(.{});
         
         // Hash all fields except hash itself
         hasher.update(std.mem.asBytes(&self.timestamp));

@@ -700,30 +700,30 @@ pub fn decodeBytesToLocation(bytes: []const u8, allocator: Allocator) !Coordinat
 // CID: Content-Addressable Geo Locations
 // ============================================================================
 
-/// Compute SHA-256 CID of a Coordinate's Syrup encoding
+/// Compute BLAKE3 CID of a Coordinate's Syrup encoding
 pub fn coordCid(coord: Coordinate, allocator: Allocator) ![32]u8 {
     const bytes = try coordToBytes(coord, allocator);
     defer allocator.free(bytes);
     var hash: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(bytes, &hash, .{});
+    std.crypto.hash.Blake3.hash(bytes, &hash, .{});
     return hash;
 }
 
-/// Compute SHA-256 CID of a PlusCode's Syrup encoding
+/// Compute BLAKE3 CID of a PlusCode's Syrup encoding
 pub fn plusCodeCid(plus_code: PlusCode, allocator: Allocator) ![32]u8 {
     const bytes = try plusCodeToBytes(plus_code, allocator);
     defer allocator.free(bytes);
     var hash: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(bytes, &hash, .{});
+    std.crypto.hash.Blake3.hash(bytes, &hash, .{});
     return hash;
 }
 
-/// Compute SHA-256 CID of a CodeArea's Syrup encoding
+/// Compute BLAKE3 CID of a CodeArea's Syrup encoding
 pub fn codeAreaCid(area: CodeArea, allocator: Allocator) ![32]u8 {
     const bytes = try codeAreaToBytes(area, allocator);
     defer allocator.free(bytes);
     var hash: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(bytes, &hash, .{});
+    std.crypto.hash.Blake3.hash(bytes, &hash, .{});
     return hash;
 }
 
