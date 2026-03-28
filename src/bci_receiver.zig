@@ -212,6 +212,9 @@ pub const Modality = enum(u8) {
     eng = 3,
     ecog = 4,
     fnirs = 5,
+    eye_tracking = 6,
+    accelerometer = 7,
+    bodytracking = 8,
 
     pub fn name(self: Modality) []const u8 {
         return switch (self) {
@@ -221,6 +224,9 @@ pub const Modality = enum(u8) {
             .eng => "ENG",
             .ecog => "ECoG",
             .fnirs => "fNIRS",
+            .eye_tracking => "Eye Tracking",
+            .accelerometer => "Accelerometer",
+            .bodytracking => "Body Tracking",
         };
     }
 
@@ -231,22 +237,29 @@ pub const Modality = enum(u8) {
             .emg => MAX_EMG_CHANNELS,
             .eng => MAX_EMG_CHANNELS,
             .ecog => 32,
-            .fnirs => 8,
+            .fnirs => 16,
+            .eye_tracking => 4, // gaze_x, gaze_y, pupil_l, pupil_r
+            .accelerometer => 6, // accel_xyz + gyro_xyz
+            .bodytracking => 12, // 12 joint angles (pose_bridge.zig)
         };
     }
 
     pub fn defaultSampleRate(self: Modality) u16 {
         return switch (self) {
-            .eeg => 250,
+            .eeg => 300, // DSI-24 native rate (was 250 for Cyton)
             .ultrasound => 100,
             .emg => 500,
             .eng => 500,
             .ecog => 2000,
-            .fnirs => 10,
+            .fnirs => 500, // PLUX biosignalsplux raw ADC rate; downsample to ~10Hz after mBLL
+            .eye_tracking => 120, // 7invensun aSee EVS
+            .accelerometer => 50, // GoPro GPMF metadata rate
+            .bodytracking => 30, // video frame rate (GoPro Hero13 / webcam)
         };
     }
 
-    /// SPI bus assignment on nRF5340
+    /// SPI bus assignment on nRF5340 (for embedded mode)
+    /// Eye tracking and accelerometer use LSL/USB, not SPI
     pub fn spiBus(self: Modality) u8 {
         return switch (self) {
             .eeg => 0, // SPI0, 8MHz
@@ -254,6 +267,9 @@ pub const Modality = enum(u8) {
             .emg, .eng => 2, // SPI2, 4MHz
             .ecog => 3, // QSPI, 32MHz
             .fnirs => 1, // shared with ultrasound (time-multiplexed)
+            .eye_tracking => 0xFF, // USB/LSL only, no SPI
+            .accelerometer => 0xFF, // USB/LSL only, no SPI
+            .bodytracking => 0xFF, // USB/network only, no SPI (video input)
         };
     }
 };
@@ -547,7 +563,7 @@ pub const DeviceState = enum {
 };
 
 pub const UniversalReceiver = struct {
-    sensors: [6]SensorConfig, // one per Modality
+    sensors: [9]SensorConfig, // one per Modality (eeg..bodytracking)
     baseline: BandPowers, // calibration baseline
     ring: ReadingRing,
     state: DeviceState,
@@ -559,17 +575,22 @@ pub const UniversalReceiver = struct {
     const RECALIBRATION_THRESHOLD: i32 = 50; // trit imbalance trigger
 
     pub fn init(serial: u32) UniversalReceiver {
-        var sensors: [6]SensorConfig = undefined;
+        var sensors: [9]SensorConfig = undefined;
         sensors[@intFromEnum(Modality.eeg)] = SensorConfig.default(.eeg);
         sensors[@intFromEnum(Modality.ultrasound)] = SensorConfig.default(.ultrasound);
         sensors[@intFromEnum(Modality.emg)] = SensorConfig.default(.emg);
         sensors[@intFromEnum(Modality.eng)] = SensorConfig.default(.eng);
         sensors[@intFromEnum(Modality.ecog)] = SensorConfig.default(.ecog);
         sensors[@intFromEnum(Modality.fnirs)] = SensorConfig.default(.fnirs);
+        sensors[@intFromEnum(Modality.eye_tracking)] = SensorConfig.default(.eye_tracking);
+        sensors[@intFromEnum(Modality.accelerometer)] = SensorConfig.default(.accelerometer);
+        sensors[@intFromEnum(Modality.bodytracking)] = SensorConfig.default(.bodytracking);
 
-        // Disable ECoG and fNIRS by default (future modalities)
+        // Disable modalities not yet connected by default (fNIRS is active)
         sensors[@intFromEnum(Modality.ecog)].enabled = false;
-        sensors[@intFromEnum(Modality.fnirs)].enabled = false;
+        sensors[@intFromEnum(Modality.eye_tracking)].enabled = false;
+        sensors[@intFromEnum(Modality.accelerometer)].enabled = false;
+        sensors[@intFromEnum(Modality.bodytracking)].enabled = false;
 
         return .{
             .sensors = sensors,
@@ -832,7 +853,7 @@ test "Modality SPI bus assignment" {
 
 test "SensorConfig defaults" {
     const eeg = SensorConfig.default(.eeg);
-    try std.testing.expectEqual(@as(u16, 250), eeg.sample_rate);
+    try std.testing.expectEqual(@as(u16, 300), eeg.sample_rate);
     try std.testing.expectEqual(@as(u8, 64), eeg.channelCount());
     try std.testing.expect(eeg.enabled);
 
