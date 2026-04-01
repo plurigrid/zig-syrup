@@ -2772,6 +2772,24 @@ pub fn build(b: *std.Build) void {
     const test_transient_step = b.step("test-transient", "Run transient widget tests");
     test_transient_step.dependOn(&run_transient_tests.step);
 
+    // Transient Diffusion module (transient UI → propagator cells → Brusselator control)
+    _ = b.addModule("transient_diffusion", .{
+        .root_source_file = b.path("src/transient_diffusion.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const transient_diffusion_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/transient_diffusion.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const transient_diffusion_tests = b.addTest(.{ .root_module = transient_diffusion_test_mod });
+    const run_transient_diffusion_tests = b.addRunArtifact(transient_diffusion_tests);
+    test_step.dependOn(&run_transient_diffusion_tests.step);
+
+    const test_transient_diffusion_step = b.step("test-transient-diffusion", "Run transient diffusion control tests");
+    test_transient_diffusion_step.dependOn(&run_transient_diffusion_tests.step);
+
     // GoI module (Geometry of Interaction — proof nets, token machine, cut elimination)
     _ = b.addModule("goi", .{
         .root_source_file = b.path("src/goi.zig"),
