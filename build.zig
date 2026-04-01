@@ -2067,6 +2067,26 @@ pub fn build(b: *std.Build) void {
     const run_qrtp_transport_tests = b.addRunArtifact(qrtp_transport_tests);
     test_step.dependOn(&run_qrtp_transport_tests.step);
 
+    // Fountain Propagator Bridge module + tests
+    const fountain_propagator_mod = b.addModule("fountain_propagator", .{
+        .root_source_file = b.path("src/fountain_propagator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fountain_propagator_mod.addImport("fountain", fountain_mod);
+    fountain_propagator_mod.addImport("propagator", propagator_mod);
+
+    const fountain_propagator_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/fountain_propagator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fountain_propagator_test_mod.addImport("fountain", fountain_mod);
+    fountain_propagator_test_mod.addImport("propagator", propagator_mod);
+    const fountain_propagator_tests = b.addTest(.{ .root_module = fountain_propagator_test_mod });
+    const run_fountain_propagator_tests = b.addRunArtifact(fountain_propagator_tests);
+    test_step.dependOn(&run_fountain_propagator_tests.step);
+
     // UR Robot Adapter module (Bridge 9 Phase 3) + tests
     const ur_robot_adapter_mod = b.addModule("ur_robot_adapter", .{
         .root_source_file = b.path("src/ur_robot_adapter.zig"),
@@ -2337,6 +2357,23 @@ pub fn build(b: *std.Build) void {
     const gf3_palette_tests = b.addTest(.{ .root_module = gf3_palette_test_mod });
     const run_gf3_palette_tests = b.addRunArtifact(gf3_palette_tests);
     test_step.dependOn(&run_gf3_palette_tests.step);
+
+    // Retrodiction module (GF(3) multiple realizability of pasts)
+    const retrodiction_mod = b.addModule("retrodiction", .{
+        .root_source_file = b.path("src/retrodiction.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Retrodiction tests
+    const retrodiction_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/retrodiction.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const retrodiction_tests = b.addTest(.{ .root_module = retrodiction_test_mod });
+    const run_retrodiction_tests = b.addRunArtifact(retrodiction_tests);
+    test_step.dependOn(&run_retrodiction_tests.step);
 
     // Supermap module (Cyberphysical affordances × RF phase space × quantum supermaps)
     _ = b.addModule("supermap", .{
@@ -2966,6 +3003,7 @@ pub fn build(b: *std.Build) void {
     });
     mcp_server_mod.addImport("syrup", syrup_mod);
     mcp_server_mod.addImport("nurse", nurse_mod);
+    mcp_server_mod.addImport("retrodiction", retrodiction_mod);
 
     const mcp_server_exe = b.addExecutable(.{
         .name = "mcp-server",
@@ -2984,6 +3022,7 @@ pub fn build(b: *std.Build) void {
     });
     mcp_server_test_mod.addImport("syrup", syrup_mod);
     mcp_server_test_mod.addImport("nurse", nurse_mod);
+    mcp_server_test_mod.addImport("retrodiction", retrodiction_mod);
     const mcp_server_tests = b.addTest(.{ .root_module = mcp_server_test_mod });
     const run_mcp_server_tests = b.addRunArtifact(mcp_server_tests);
     test_step.dependOn(&run_mcp_server_tests.step);
@@ -3139,4 +3178,5 @@ pub fn build(b: *std.Build) void {
     });
     const ibc_denom_verifier_tests = b.addTest(.{ .root_module = ibc_denom_verifier_test_mod });
     test_step.dependOn(&b.addRunArtifact(ibc_denom_verifier_tests).step);
+
 }

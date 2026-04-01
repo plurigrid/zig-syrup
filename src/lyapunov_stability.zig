@@ -5,7 +5,7 @@
 //!
 //! - Lyapunov exponent estimation (Rosenstein algorithm)
 //! - Quadratic Lyapunov function construction & verification
-//! - Attractor basin estimation via grid simulation
+//! - Attractor boris estimation via grid simulation
 //! - Exponential stability detection with decay rate fitting
 
 const std = @import("std");
@@ -286,17 +286,17 @@ pub fn checkExponentialStability(
 }
 
 // ============================================================================
-// ATTRACTOR BASIN ESTIMATION
+// ATTRACTOR BORIS ESTIMATION
 // ============================================================================
 
-pub const BasinResult = struct {
+pub const BorisResult = struct {
     converged_fraction: f64,
     total_points: usize,
     converged_count: usize,
 };
 
-/// Estimate basin of attraction by grid simulation
-pub fn estimateBasin(
+/// Estimate boris of attraction by grid simulation
+pub fn estimateBoris(
     dynamics: *const fn (Vec2) Vec2,
     equilibrium: Vec2,
     x_range: [2]f64,
@@ -304,7 +304,7 @@ pub fn estimateBasin(
     resolution: usize,
     max_steps: usize,
     threshold: f64,
-) BasinResult {
+) BorisResult {
     var converged: usize = 0;
     var total: usize = 0;
     const res_f: f64 = @floatFromInt(resolution);
@@ -430,8 +430,8 @@ test "exponential stability detection" {
     try std.testing.expect(result.convergence_time.? < 1000);
 }
 
-test "basin of attraction for dx/dt = -x" {
-    const result = estimateBasin(stableDynamics, .{ 0, 0 }, .{ -2, 2 }, .{ -2, 2 }, 10, 500, 0.1);
+test "boris of attraction for dx/dt = -x" {
+    const result = estimateBoris(stableDynamics, .{ 0, 0 }, .{ -2, 2 }, .{ -2, 2 }, 10, 500, 0.1);
     // Global attractor: everything converges
     try std.testing.expect(result.converged_fraction > 0.9);
 }

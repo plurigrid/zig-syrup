@@ -68,13 +68,13 @@ Repository metadata, commits, PRs, issues, contributor graphs.
 
 ## 4. Blockchain & Commitment Infrastructure
 
-Aptos, Basin, WEV (World Extractable Value), on-chain commitments.
+Aptos, Boris, WEV (World Extractable Value), on-chain commitments.
 
 | Database | Size | Tables | Top Table (rows) | Description |
 |----------|------|--------|-------------------|-------------|
 | `aptos_time_travel` | 16 MB | 15 | events (5.1K) | Temporal event sourcing: claude_events/raw, codex_events/raw, snapshots, aptos/wev/beeper_mcp mentions + goal hypotheses. |
-| `basin-replay` | 21 MB | 39 | blake3_cid (16.8K) | Session replay with Blake3 content addressing. Merkle trees, file_sizes, Catalan-Doppler analysis, vivarium/warehouse topology, GF(3) conservation proofs. |
-| `basin_commitment` | 1 MB | 3 | basin_messages, commitment_gradient, own_commitment_arc | Commitment trajectory tracking. |
+| `boris-replay` | 21 MB | 39 | blake3_cid (16.8K) | Session replay with Blake3 content addressing. Merkle trees, file_sizes, Catalan-Doppler analysis, vivarium/warehouse topology, GF(3) conservation proofs. |
+| `boris_commitment` | 1 MB | 3 | boris_messages, commitment_gradient, own_commitment_arc | Commitment trajectory tracking. |
 | `aptos_regret` (duck/) | 4.6 MB | 2 | aptos_docs, regret_plan | Aptos documentation + regret analysis. |
 | `gay_mcp` | 3.6 MB | 3 | rounds, gay_beacons, gay_session_overlay | Gay MCP drand beacon rounds + session overlays. |
 | `ecosystem_opengames` | 2.3 MB | 4 | games, companies, compositions, triads | Open games: Nash equilibria, company compositions, GF(3) triads. |
@@ -230,7 +230,7 @@ Agent capabilities, skill graphs, dispersal tracking.
 Tables with `gf3_trit INTEGER` or `trit INTEGER` columns:
 - `belief_revision.AGMPostulate`, `Commit`, `BeliefRevisionWalk`
 - `interaction_entropy.gf3_epoch_conservation`
-- `basin-replay.gf3_conservation_proof`
+- `boris-replay.gf3_conservation_proof`
 - `bridge9_phase4_feedback` (Python/DuckDB integration)
 - `claude_history_gay.gf3_quads`
 
@@ -249,7 +249,7 @@ Tables with `gay_color VARCHAR` or `color_hex VARCHAR`:
 ### ACSet (Attributed C-Set) Schemas
 - `belief_revision.duckdb`: Full ACSet with version tracking
 - `interaction_entropy`: `acset_objects`, `acset_morphisms`, `acset_color_parts`
-- `basin-replay`: Merkle tree + CID addressing
+- `boris-replay`: Merkle tree + CID addressing
 
 ### Embedding Vectors
 - `playlist_transcripts.transcripts`: `embedding FLOAT[]`, `cluster_id INTEGER`

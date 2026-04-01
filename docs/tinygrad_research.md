@@ -1,4 +1,4 @@
-# tinygrad Research Summary for Basin GPU Compute
+# tinygrad Research Summary for Boris GPU Compute
 
 ## 1. Architecture & Design Philosophy
 
@@ -118,7 +118,7 @@ tinygrad is fundamentally a **Python library**. It does NOT expose a C API. The 
 #### Option B: Extract tinygrad's codegen, rewrite runtime in Zig
 - tinygrad's compiler outputs CUDA PTX, Metal shaders, OpenCL kernels
 - These are strings of GPU code that any runtime can dispatch
-- Basin could use tinygrad's scheduler+compiler as a build step, then dispatch kernels from Zig
+- Boris could use tinygrad's scheduler+compiler as a build step, then dispatch kernels from Zig
 - **Pro**: Zero Python at runtime. Kernel quality matches tinygrad.
 - **Con**: Significant integration work. Must re-implement buffer management and dispatch.
 
@@ -129,7 +129,7 @@ tinygrad is fundamentally a **Python library**. It does NOT expose a C API. The 
 
 #### Option D: Use tinygrad's generated kernels via CUDA/Metal/OpenCL drivers directly
 - tinygrad can dump compiled kernels (DEBUG=4 shows full kernel code)
-- Basin could pre-compile models with tinygrad, serialize the kernel schedule, and replay from Zig
+- Boris could pre-compile models with tinygrad, serialize the kernel schedule, and replay from Zig
 - This is essentially "ahead-of-time compilation" using tinygrad as the compiler
 - **Pro**: Clean separation. Zig runtime dispatches pre-compiled kernels.
 - **Con**: Model changes require re-running tinygrad compiler.
@@ -142,29 +142,29 @@ tinygrad is fundamentally a **Python library**. It does NOT expose a C API. The 
 
 ---
 
-## 5. Concrete Benefits for Basin's GPU Compute Stack
+## 5. Concrete Benefits for Boris's GPU Compute Stack
 
-### What tinygrad gets right that Basin could learn from:
+### What tinygrad gets right that Boris could learn from:
 
-1. **Minimal IR Design** — UOps prove that ~20 operations suffice to express all of deep learning. Basin's Magma effect system could adopt a similarly minimal IR for GPU kernels.
+1. **Minimal IR Design** — UOps prove that ~20 operations suffice to express all of deep learning. Boris's Magma effect system could adopt a similarly minimal IR for GPU kernels.
 
-2. **ShapeTracker for Zero-Copy** — tinygrad's `ShapeTracker` tracks reshapes/permutes/expands without copying data. This is a powerful abstraction for Basin's plate system.
+2. **ShapeTracker for Zero-Copy** — tinygrad's `ShapeTracker` tracks reshapes/permutes/expands without copying data. This is a powerful abstraction for Boris's plate system.
 
-3. **Lazy Evaluation + Graph Scheduling** — Build a full compute graph, then optimize globally before execution. Basin could use lazy buffer patterns in its GPU compute.
+3. **Lazy Evaluation + Graph Scheduling** — Build a full compute graph, then optimize globally before execution. Boris could use lazy buffer patterns in its GPU compute.
 
-4. **Multi-Backend from Day 1** — tinygrad's architecture makes adding new backends relatively easy. The same graph compiles to CUDA, Metal, OpenCL, Vulkan, WebGPU. Basin could adopt this approach.
+4. **Multi-Backend from Day 1** — tinygrad's architecture makes adding new backends relatively easy. The same graph compiles to CUDA, Metal, OpenCL, Vulkan, WebGPU. Boris could adopt this approach.
 
 5. **Kernel Fusion Strategy** — Automatic fusion of elementwise ops into single kernels reduces memory bandwidth pressure. Critical for inference performance.
 
-6. **Sovereign Stack Philosophy** — Removing dependency on vendor SDKs (CUDA toolkit, ROCm). Basin's Zig philosophy aligns well with self-contained, minimal dependencies.
+6. **Sovereign Stack Philosophy** — Removing dependency on vendor SDKs (CUDA toolkit, ROCm). Boris's Zig philosophy aligns well with self-contained, minimal dependencies.
 
-### What Basin could practically use:
+### What Boris could practically use:
 
 | Approach | Effort | Benefit | Risk |
 |----------|--------|---------|------|
 | Use tinygrad as model compiler (pre-compile kernels, dispatch from Zig) | Medium | High kernel quality, no Python at runtime | Model compilation requires Python |
 | Port UOps IR to Zig | High | Full sovereignty, no Python | Large engineering effort |
-| Use tinygrad runtime backends as reference for Basin's own backends | Low | Learn from proven multi-backend patterns | Only informational |
+| Use tinygrad runtime backends as reference for Boris's own backends | Low | Learn from proven multi-backend patterns | Only informational |
 | Embed Python+tinygrad for training, Zig for inference | Medium | Leverage tinygrad's training stack | Python dependency for training |
 
 ---
@@ -202,21 +202,21 @@ tinygrad is fundamentally a **Python library**. It does NOT expose a C API. The 
 
 ---
 
-## 7. Recommendation for Basin
+## 7. Recommendation for Boris
 
 ### Best Path: "tinygrad-inspired" approach
 
-Rather than directly depending on tinygrad (which is Python-only), Basin should:
+Rather than directly depending on tinygrad (which is Python-only), Boris should:
 
-1. **Study tinygrad's UOps IR** — Adopt a similarly minimal operation set for Basin's GPU compute DSL. The ~20 ops that cover all of deep learning are well-documented in tinygrad's source.
+1. **Study tinygrad's UOps IR** — Adopt a similarly minimal operation set for Boris's GPU compute DSL. The ~20 ops that cover all of deep learning are well-documented in tinygrad's source.
 
-2. **Implement lazy graph + scheduler in Zig** — tinygrad proves this can be done in ~5,000 lines. Basin's Zig codebase is well-positioned to implement a similar lazy tensor + kernel fusion pipeline natively.
+2. **Implement lazy graph + scheduler in Zig** — tinygrad proves this can be done in ~5,000 lines. Boris's Zig codebase is well-positioned to implement a similar lazy tensor + kernel fusion pipeline natively.
 
-3. **Use tinygrad as a reference compiler** — When building Basin's GPU backends (CUDA, Metal, Vulkan), reference tinygrad's codegen for each backend. Their code is clean and well-documented.
+3. **Use tinygrad as a reference compiler** — When building Boris's GPU backends (CUDA, Metal, Vulkan), reference tinygrad's codegen for each backend. Their code is clean and well-documented.
 
-4. **Pre-compile models with tinygrad, dispatch from Zig** — For immediate production use, run `tinygrad` offline to compile model graphs into GPU kernels. Serialize the kernel schedule + compiled GPU code. Load and dispatch from Basin's Zig runtime. Zero Python dependency at runtime.
+4. **Pre-compile models with tinygrad, dispatch from Zig** — For immediate production use, run `tinygrad` offline to compile model graphs into GPU kernels. Serialize the kernel schedule + compiled GPU code. Load and dispatch from Boris's Zig runtime. Zero Python dependency at runtime.
 
-5. **Contribute to tinygrad's C API** — If Basin wants direct integration, proposing a C API for tinygrad's runtime (buffer alloc, kernel dispatch, schedule execution) would benefit both projects.
+5. **Contribute to tinygrad's C API** — If Boris wants direct integration, proposing a C API for tinygrad's runtime (buffer alloc, kernel dispatch, schedule execution) would benefit both projects.
 
 ---
 

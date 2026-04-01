@@ -10,7 +10,7 @@ SUMMARY
   Largest by rows:   claude-all-sessions.duckdb (165,374 rows in raw_messages)
   Largest by file:   claude-all-sessions.duckdb (706 MB)
   Most tables:       i.duckdb (46 tables), belief_revision.duckdb (41 tables),
-                     basin-replay.duckdb (39 tables)
+                     boris-replay.duckdb (39 tables)
 
 ================================================================================
 1. claude-all-sessions.duckdb  [706 MB]
@@ -319,8 +319,8 @@ SUMMARY
      toad_usage                       37
 
 ================================================================================
-10. basin-replay.duckdb  [21 MB]
-    Path: /Users/bob/i/duck/basin-replay.duckdb
+10. boris-replay.duckdb  [21 MB]
+    Path: /Users/bob/i/duck/boris-replay.duckdb
 --------------------------------------------------------------------------------
     Tables (39):
       blake3_cid                   16,839
@@ -498,12 +498,12 @@ TOP TABLES BY ROW COUNT (across all databases)
   2. messages (social_graph)                  125,365
   3. likes (twitter)                           64,829
   4. like_urls (twitter)                       64,829
-  5. blake3_cid (basin-replay)                 16,839
-  6. file_sizes (basin-replay)                 16,841
-  7. largest_files (basin-replay)              16,839
+  5. blake3_cid (boris-replay)                 16,839
+  6. file_sizes (boris-replay)                 16,841
+  7. largest_files (boris-replay)              16,839
   8. tweet_mentions (twitter)                  16,661
   9. tweets (twitter)                          13,767
- 10. timeline (basin-replay)                    7,309
+ 10. timeline (boris-replay)                    7,309
 
 ================================================================================
 NOTABLE DATASET CHARACTERISTICS
@@ -520,7 +520,7 @@ NOTABLE DATASET CHARACTERISTICS
 • belief_revision.duckdb: ACSet-inspired schema modeling AGM belief revision
   postulates, epistemic entrenchment, and Grove sphere systems.
 
-• basin-replay.duckdb: Session replay infrastructure with Blake3 CIDs,
+• boris-replay.duckdb: Session replay infrastructure with Blake3 CIDs,
   Merkle trees, Catalan-Doppler analysis, and vivarium/warehouse topology.
 
 • social_graph.duckdb: 125K messages — largest message corpus by volume.

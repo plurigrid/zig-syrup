@@ -386,13 +386,75 @@ pub const Server = struct {
             return;
         }
 
-        // Fallback: count events only (no content logging — P1 security fix)
+        // Count events (no content logging — P1 security fix)
         switch (input.event_type) {
             .key => self.stats.key_events += 1,
-            .mouse_move => self.stats.mouse_events += 1,
-            .mouse_button => self.stats.mouse_events += 1,
-            .mouse_wheel => self.stats.mouse_events += 1,
+            .mouse_move, .mouse_button, .mouse_wheel => {
+                self.stats.mouse_events += 1;
+                // Generate SGR 1006 mouse sequence for the terminal
+                if (input.mouse_event) |mouse| {
+                    var sgr_buf: [32]u8 = undefined;
+                    const sgr_len = encodeSgrMouse(mouse, input.event_type, &sgr_buf);
+                    if (sgr_len > 0) {
+                        // Feed SGR mouse sequence to terminal via output broadcast
+                        // The hosted application reads this as VT input
+                        self.broadcastOutput(sgr_buf[0..sgr_len]) catch {};
+                    }
+                }
+            },
         }
+    }
+
+    /// Encode mouse event as SGR 1006 sequence: ESC [ < button ; col ; row M/m
+    fn encodeSgrMouse(mouse: InputMessage.MouseEvent, event_type: InputMessage.EventType, buf: *[32]u8) usize {
+        const button_num: u8 = switch (mouse.button) {
+            .left => 0,
+            .middle => 1,
+            .right => 2,
+            .wheel_up => 64,
+            .wheel_down => 65,
+        };
+        // Motion events add 32 to button number
+        const sgr_button = if (event_type == .mouse_move) button_num + 32 else button_num;
+        // SGR coordinates are 1-based
+        const col = @as(u16, mouse.x) + 1;
+        const row = @as(u16, mouse.y) + 1;
+        // Press = 'M', release would need separate event type; wheel is always press
+        const suffix: u8 = if (event_type == .mouse_wheel) 'M' else 'M';
+
+        // Format: ESC [ < button ; col ; row M
+        var pos: usize = 0;
+        buf[pos] = 0x1b; pos += 1; // ESC
+        buf[pos] = '[';  pos += 1;
+        buf[pos] = '<';  pos += 1;
+        pos += writeDecimal(buf[pos..], sgr_button);
+        buf[pos] = ';';  pos += 1;
+        pos += writeDecimal(buf[pos..], col);
+        buf[pos] = ';';  pos += 1;
+        pos += writeDecimal(buf[pos..], row);
+        buf[pos] = suffix; pos += 1;
+        return pos;
+    }
+
+    fn writeDecimal(buf: []u8, val: u16) usize {
+        if (val == 0) {
+            buf[0] = '0';
+            return 1;
+        }
+        var v = val;
+        var digits: [5]u8 = undefined;
+        var count: usize = 0;
+        while (v > 0) {
+            digits[count] = @intCast(v % 10 + '0');
+            v /= 10;
+            count += 1;
+        }
+        var i: usize = 0;
+        while (i < count) {
+            buf[i] = digits[count - 1 - i];
+            i += 1;
+        }
+        return count;
     }
 };
 

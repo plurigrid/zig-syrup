@@ -245,6 +245,12 @@ const tools = [_]Tool{
         .input_schema =
         \\{"type":"object","properties":{"market_id":{"type":"integer","description":"Qualia market ID from Aptos"},"hypothesis":{"type":"string","description":"The hypothesis being verified"}},"required":["market_id"]}
     },
+    .{
+        .name = "retrodiction_gate",
+        .description = "GF(3) retrodiction gate: evaluate a capability/policy request against agent history. Replaces OpenShell's manual operator TUI with automated fiber analysis. Returns approve/deny/contradict with diagnostics.",
+        .input_schema =
+        \\{"type":"object","properties":{"history":{"type":"array","items":{"type":"integer","enum":[-1,0,1]},"description":"Agent trit trajectory (history of access trits: -1=read_only, 0=full, +1=read_write)"},"cap_role":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability role trit"},"cap_mode":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability mode trit"},"cap_polarity":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability polarity trit"},"difficulty_threshold":{"type":"number","default":0,"description":"Max retrodiction difficulty (0=no limit)"}},"required":["history","cap_role","cap_mode","cap_polarity"]}
+    },
 };
 
 // ============================================================================
@@ -311,6 +317,95 @@ fn handleQualiaResolve(allocator: std.mem.Allocator, args: json.ObjectMap) !json
     return toolResult(allocator, text);
 }
 
+fn handleRetrodictionGate(allocator: std.mem.Allocator, args: json.ObjectMap) !json.Value {
+    const retro = @import("retrodiction");
+
+    // Parse history array
+    const history_val = args.get("history") orelse return toolError(allocator, "missing 'history'");
+    const history_arr = switch (history_val) {
+        .array => |a| a,
+        else => return toolError(allocator, "'history' must be an array of trits (-1, 0, +1)"),
+    };
+
+    if (history_arr.items.len > retro.MAX_TRAJECTORY_LEN) {
+        return toolError(allocator, "history too long (max 256)");
+    }
+
+    var trit_buf: [retro.MAX_TRAJECTORY_LEN]retro.Trit = undefined;
+    for (history_arr.items, 0..) |item, i| {
+        const v: i8 = switch (item) {
+            .integer => |n| @intCast(n),
+            else => return toolError(allocator, "history elements must be integers (-1, 0, +1)"),
+        };
+        trit_buf[i] = retro.Trit.fromInt(v) orelse return toolError(allocator, "history trits must be -1, 0, or +1");
+    }
+
+    // Parse capability trits
+    const role_val = args.get("cap_role") orelse return toolError(allocator, "missing 'cap_role'");
+    const mode_val = args.get("cap_mode") orelse return toolError(allocator, "missing 'cap_mode'");
+    const pol_val = args.get("cap_polarity") orelse return toolError(allocator, "missing 'cap_polarity'");
+
+    const role_i: i8 = switch (role_val) { .integer => |n| @intCast(n), else => return toolError(allocator, "cap_role must be integer") };
+    const mode_i: i8 = switch (mode_val) { .integer => |n| @intCast(n), else => return toolError(allocator, "cap_mode must be integer") };
+    const pol_i: i8 = switch (pol_val) { .integer => |n| @intCast(n), else => return toolError(allocator, "cap_polarity must be integer") };
+
+    const cap_role = retro.Trit.fromInt(role_i) orelse return toolError(allocator, "cap_role must be -1, 0, or +1");
+    const cap_mode = retro.Trit.fromInt(mode_i) orelse return toolError(allocator, "cap_mode must be -1, 0, or +1");
+    const cap_polarity = retro.Trit.fromInt(pol_i) orelse return toolError(allocator, "cap_polarity must be -1, 0, or +1");
+
+    // Parse difficulty threshold
+    const threshold: f64 = if (args.get("difficulty_threshold")) |dt| switch (dt) {
+        .float => |f| f,
+        .integer => |i| @floatFromInt(i),
+        else => 0.0,
+    } else 0.0;
+
+    const traj_len = history_arr.items.len;
+    const result = retro.retrodictionGate(.{
+        .agent_trajectory = .{ .trits = trit_buf[0..traj_len], .len = traj_len },
+        .cap_role = cap_role,
+        .cap_mode = cap_mode,
+        .cap_polarity = cap_polarity,
+    }, null, threshold);
+
+    const decision_str = switch (result.decision) {
+        .approve => "APPROVE",
+        .deny => "DENY",
+        .contradict => "CONTRADICT",
+    };
+    const tower_str = switch (result.tower_level) {
+        .gf3 => "GF(3)",
+        .gf9 => "GF(9)",
+        .gf27 => "GF(27)",
+    };
+
+    const text = try std.fmt.allocPrint(allocator,
+        \\Retrodiction Gate Decision: {s}
+        \\
+        \\  Trajectory length:     {d}
+        \\  Trajectory conserving: {s}
+        \\  Capability balanced:   {s}
+        \\  Extended conserving:   {s}
+        \\  Tower level:           {s}
+        \\  Difficulty:            {d:.4}
+        \\
+        \\  Mapping (OpenShell → GF(3)):
+        \\    cap_role     = access level    (-1=read_only, 0=full, +1=read_write)
+        \\    cap_mode     = enforcement     (-1=off, 0=audit, +1=enforce)
+        \\    cap_polarity = TLS mode        (-1=none, 0=passthrough, +1=terminate)
+    , .{
+        decision_str,
+        traj_len,
+        if (result.trajectory_conserving) "yes" else "NO",
+        if (result.capability_balanced) "yes" else "NO",
+        if (result.extended_conserving) "yes" else "no",
+        tower_str,
+        result.difficulty,
+    });
+
+    return toolResult(allocator, text);
+}
+
 fn handleToolsListResult(allocator: std.mem.Allocator) !json.Value {
     var tool_array = json.Array.init(allocator);
     for (tools) |tool| {
@@ -371,6 +466,8 @@ fn handleCallTool(allocator: std.mem.Allocator, params: json.ObjectMap) !json.Va
         return nurse.handleNurseDetect(allocator);
     } else if (std.mem.eql(u8, name, "qualia_resolve")) {
         return handleQualiaResolve(allocator, arguments);
+    } else if (std.mem.eql(u8, name, "retrodiction_gate")) {
+        return handleRetrodictionGate(allocator, arguments);
     } else {
         const msg = try std.fmt.allocPrint(allocator, "Tool '{s}' implementation pending", .{name});
         return toolResult(allocator, msg);
