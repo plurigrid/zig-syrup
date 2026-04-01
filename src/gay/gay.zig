@@ -1,0 +1,61 @@
+pub const splitmix = @import("splitmix.zig");
+pub const color = @import("color.zig");
+pub const swarm_triad = @import("swarm_triad.zig");
+pub const gaymc = @import("gaymc.zig");
+pub const propagator = @import("propagator.zig");
+pub const energy = @import("energy.zig");
+pub const concept_tensor = @import("concept_tensor.zig");
+pub const exo_mlx = @import("exo_mlx.zig");
+pub const fault_tolerant = @import("fault_tolerant.zig");
+pub const chaos_vibing = @import("chaos_vibing.zig");
+pub const tensor_parallel = @import("tensor_parallel.zig");
+pub const abductive = @import("abductive.zig");
+pub const sexp = @import("sexp.zig");
+pub const cognitive = @import("cognitive.zig");
+pub const verification = @import("verification.zig");
+pub const serialization = @import("serialization.zig");
+pub const worlds = @import("worlds.zig");
+pub const learnable = @import("learnable.zig");
+pub const categorical = @import("categorical.zig");
+pub const algebra = @import("algebra.zig");
+pub const abstractions = @import("abstractions.zig");
+pub const games = @import("games.zig");
+pub const experiments = @import("experiments.zig");
+pub const protocol = @import("protocol.zig");
+pub const parallel_advanced = @import("parallel_advanced.zig");
+pub const ecology = @import("ecology.zig");
+pub const misc = @import("misc.zig");
+pub const scientific_advanced = @import("scientific_advanced.zig");
+
+test {
+    comptime {
+        _ = splitmix;
+        _ = color;
+        _ = swarm_triad;
+        _ = gaymc;
+        _ = propagator;
+        _ = energy;
+        _ = concept_tensor;
+        _ = exo_mlx;
+        _ = fault_tolerant;
+        _ = chaos_vibing;
+        _ = tensor_parallel;
+        _ = abductive;
+        _ = sexp;
+        _ = cognitive;
+        _ = verification;
+        _ = serialization;
+        _ = worlds;
+        _ = learnable;
+        _ = categorical;
+        _ = algebra;
+        _ = abstractions;
+        _ = games;
+        _ = experiments;
+        _ = protocol;
+        _ = parallel_advanced;
+        _ = ecology;
+        _ = misc;
+        _ = scientific_advanced;
+    }
+}

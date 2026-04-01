@@ -3179,4 +3179,26 @@ pub fn build(b: *std.Build) void {
     const ibc_denom_verifier_tests = b.addTest(.{ .root_module = ibc_denom_verifier_test_mod });
     test_step.dependOn(&b.addRunArtifact(ibc_denom_verifier_tests).step);
 
+    // ========================================
+    // Gay root module (re-exports all 28 gay submodules)
+    // ========================================
+
+    _ = b.addModule("gay", .{
+        .root_source_file = b.path("src/gay/gay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const gay_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/gay/gay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const gay_tests = b.addTest(.{ .root_module = gay_test_mod });
+    const run_gay_tests = b.addRunArtifact(gay_tests);
+    test_step.dependOn(&run_gay_tests.step);
+
+    const test_gay_step = b.step("test-gay", "Run all 28 gay submodule tests");
+    test_gay_step.dependOn(&run_gay_tests.step);
+
 }
