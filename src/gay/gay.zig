@@ -26,6 +26,7 @@ pub const parallel_advanced = @import("parallel_advanced.zig");
 pub const ecology = @import("ecology.zig");
 pub const misc = @import("misc.zig");
 pub const scientific_advanced = @import("scientific_advanced.zig");
+pub const repl_advanced = @import("repl_advanced.zig");
 
 test {
     comptime {
@@ -57,5 +58,6 @@ test {
         _ = ecology;
         _ = misc;
         _ = scientific_advanced;
+        _ = repl_advanced;
     }
 }
