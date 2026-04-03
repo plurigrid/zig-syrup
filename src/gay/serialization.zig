@@ -14,7 +14,7 @@
 //   gay:fleet    — invader fleet
 
 const std = @import("std");
-const syrup = @import("../syrup.zig");
+const syrup = @import("syrup");
 const color_mod = @import("color.zig");
 const gaymc = @import("gaymc.zig");
 const propagator = @import("propagator.zig");
@@ -57,7 +57,7 @@ pub fn decodeColor(val: Value) !RGB {
 
 fn extractFloat(v: Value) ?f64 {
     return switch (v) {
-        .float64 => |f| f,
+        .float => |f| f,
         .float32 => |f| @as(f64, f),
         .integer => |i| @as(f64, @floatFromInt(i)),
         else => null,
@@ -162,8 +162,8 @@ pub fn decodePropValue(val: Value) !propagator.Value {
             return error.UnknownSymbol;
         },
         .integer => |v| return propagator.Value{ .integer = v },
-        .float64 => |v| return propagator.Value{ .float = v },
-        .boolean => |v| return propagator.Value{ .boolean = v },
+        .float => |v| return propagator.Value{ .float = v },
+        .bool => |v| return propagator.Value{ .boolean = v },
         .record => |rec| {
             if (rec.label.* != .symbol) return error.InvalidLabel;
             const tag = rec.label.symbol;
@@ -420,7 +420,6 @@ test "propagator value roundtrip - nothing" {
     const allocator = std.testing.allocator;
     const pv = propagator.Value{ .nothing = .{} };
     const val = try encodePropValue(pv, allocator);
-    _ = allocator;
     const decoded = try decodePropValue(val);
     try std.testing.expect(decoded.isNothing());
 }

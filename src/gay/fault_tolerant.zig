@@ -187,6 +187,7 @@ pub const FaultHistoryEntry = struct {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub const FaultInjector = struct {
+    allocator: Allocator,
     active_faults: std.ArrayList(Fault),
     history: std.ArrayList(FaultHistoryEntry),
     rng_state: u64,
@@ -194,21 +195,22 @@ pub const FaultInjector = struct {
 
     pub fn init(allocator: Allocator, seed: u64) FaultInjector {
         return .{
-            .active_faults = std.ArrayList(Fault).init(allocator),
-            .history = std.ArrayList(FaultHistoryEntry).init(allocator),
+            .allocator = allocator,
+            .active_faults = .{},
+            .history = .{},
             .rng_state = splitmix64(seed),
             .seq = 0,
         };
     }
 
     pub fn deinit(self: *FaultInjector) void {
-        self.active_faults.deinit();
-        self.history.deinit();
+        self.active_faults.deinit(self.allocator);
+        self.history.deinit(self.allocator);
     }
 
     pub fn inject(self: *FaultInjector, fault: Fault) !void {
-        try self.active_faults.append(fault);
-        try self.history.append(.{ .fault = fault, .action = .injected, .seq = self.seq });
+        try self.active_faults.append(self.allocator, fault);
+        try self.history.append(self.allocator, .{ .fault = fault, .action = .injected, .seq = self.seq });
         self.seq += 1;
     }
 
@@ -216,7 +218,7 @@ pub const FaultInjector = struct {
         for (self.active_faults.items, 0..) |f, i| {
             if (f.kind == fault.kind and f.target_device == fault.target_device) {
                 _ = self.active_faults.orderedRemove(i);
-                try self.history.append(.{ .fault = fault, .action = .healed, .seq = self.seq });
+                try self.history.append(self.allocator, .{ .fault = fault, .action = .healed, .seq = self.seq });
                 self.seq += 1;
                 return;
             }
@@ -225,7 +227,7 @@ pub const FaultInjector = struct {
 
     pub fn healAll(self: *FaultInjector) !void {
         for (self.active_faults.items) |f| {
-            try self.history.append(.{ .fault = f, .action = .healed, .seq = self.seq });
+            try self.history.append(self.allocator, .{ .fault = f, .action = .healed, .seq = self.seq });
             self.seq += 1;
         }
         self.active_faults.clearRetainingCapacity();
@@ -437,6 +439,7 @@ pub const ProofEntry = struct {
 };
 
 pub const BidirectionalTracker = struct {
+    allocator: Allocator,
     galois: GaloisConnection,
     seed: u64,
     forward_colors: std.AutoHashMap(TrackingKey, u32),
@@ -445,18 +448,19 @@ pub const BidirectionalTracker = struct {
 
     pub fn init(allocator: Allocator, seed: u64) BidirectionalTracker {
         return .{
+            .allocator = allocator,
             .galois = GaloisConnection.init(seed),
             .seed = seed,
             .forward_colors = std.AutoHashMap(TrackingKey, u32).init(allocator),
             .backward_colors = std.AutoHashMap(TrackingKey, u32).init(allocator),
-            .proof_log = std.ArrayList(ProofEntry).init(allocator),
+            .proof_log = .{},
         };
     }
 
     pub fn deinit(self: *BidirectionalTracker) void {
         self.forward_colors.deinit();
         self.backward_colors.deinit();
-        self.proof_log.deinit();
+        self.proof_log.deinit(self.allocator);
     }
 
     pub fn trackForward(self: *BidirectionalTracker, layer: u32, token: u32, dim: u32) !IndexedColor {
@@ -465,7 +469,7 @@ pub const BidirectionalTracker = struct {
         const key = TrackingKey{ .layer = layer, .token = token, .dim = dim };
         try self.forward_colors.put(key, color.index);
 
-        try self.proof_log.append(.{
+        try self.proof_log.append(self.allocator, .{
             .direction = .forward,
             .key = key,
             .color_idx = color.index,
@@ -487,7 +491,7 @@ pub const BidirectionalTracker = struct {
         else
             true;
 
-        try self.proof_log.append(.{
+        try self.proof_log.append(self.allocator, .{
             .direction = .backward,
             .key = key,
             .color_idx = color.index,

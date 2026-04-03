@@ -127,17 +127,18 @@ pub const Premise = struct {
 
 pub const SupportSet = struct {
     premises: std.ArrayList(*Premise),
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) SupportSet {
-        return .{ .premises = std.ArrayList(*Premise).init(allocator) };
+        return .{ .premises = .{}, .allocator = allocator };
     }
 
     pub fn deinit(self: *SupportSet) void {
-        self.premises.deinit();
+        self.premises.deinit(self.allocator);
     }
 
     pub fn add(self: *SupportSet, p: *Premise) void {
-        self.premises.append(p) catch {};
+        self.premises.append(self.allocator, p) catch {};
     }
 
     pub fn allIn(self: *const SupportSet) bool {
@@ -182,20 +183,22 @@ pub const PropagatorDef = struct {
     outputs: std.ArrayList(*Cell),
     activate: ActivateFn,
     color: u32,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, name: []const u8, activate: ActivateFn) PropagatorDef {
         return .{
             .name = name,
-            .inputs = std.ArrayList(*Cell).init(allocator),
-            .outputs = std.ArrayList(*Cell).init(allocator),
+            .inputs = .{},
+            .outputs = .{},
             .activate = activate,
             .color = chromaticHash(name),
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *PropagatorDef) void {
-        self.inputs.deinit();
-        self.outputs.deinit();
+        self.inputs.deinit(self.allocator);
+        self.outputs.deinit(self.allocator);
     }
 
     pub fn fire(self: *const PropagatorDef) void {
@@ -220,14 +223,14 @@ pub const Cell = struct {
             .name = name,
             .content = Value{ .nothing = .{} },
             .strongest = Value{ .nothing = .{} },
-            .neighbors = std.ArrayList(*PropagatorDef).init(allocator),
+            .neighbors = .{},
             .color = chromaticHash(name),
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Cell) void {
-        self.neighbors.deinit();
+        self.neighbors.deinit(self.allocator);
     }
 
     pub fn addContent(self: *Cell, increment: Value, scheduler: *Scheduler) void {
@@ -254,18 +257,18 @@ pub const Scheduler = struct {
 
     pub fn init(allocator: std.mem.Allocator) Scheduler {
         return .{
-            .queue = std.ArrayList(*PropagatorDef).init(allocator),
+            .queue = .{},
             .running = false,
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Scheduler) void {
-        self.queue.deinit();
+        self.queue.deinit(self.allocator);
     }
 
     pub fn alert(self: *Scheduler, p: *PropagatorDef) void {
-        self.queue.append(p) catch {};
+        self.queue.append(self.allocator, p) catch {};
     }
 
     pub fn run(self: *Scheduler) void {
@@ -369,11 +372,11 @@ fn installProp(
     const prop = alloc.create(PropagatorDef) catch @panic("OOM");
     prop.* = PropagatorDef.init(alloc, name, activate);
     for (inputs) |cell| {
-        prop.inputs.append(cell) catch {};
-        cell.neighbors.append(prop) catch {};
+        prop.inputs.append(alloc, cell) catch {};
+        cell.neighbors.append(cell.allocator, prop) catch {};
     }
     for (outputs) |cell| {
-        prop.outputs.append(cell) catch {};
+        prop.outputs.append(alloc, cell) catch {};
     }
     return prop;
 }
@@ -451,8 +454,8 @@ test "propagator activation" {
 
     const prop = pAdd(&a, &b, &sum, &sched);
     defer {
-        prop.inputs.deinit();
-        prop.outputs.deinit();
+        prop.inputs.deinit(alloc);
+        prop.outputs.deinit(alloc);
         alloc.destroy(prop);
     }
 
@@ -500,13 +503,13 @@ test "constraint propagation cAdd bidirectional" {
 
     // Clean up heap-allocated propagators
     for (a.neighbors.items) |p| {
-        p.inputs.deinit();
-        p.outputs.deinit();
+        p.inputs.deinit(alloc);
+        p.outputs.deinit(alloc);
         alloc.destroy(p);
     }
     for (x.neighbors.items) |p| {
-        p.inputs.deinit();
-        p.outputs.deinit();
+        p.inputs.deinit(alloc);
+        p.outputs.deinit(alloc);
         alloc.destroy(p);
     }
     // s and y share propagators already freed via x's neighbors;

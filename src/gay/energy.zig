@@ -27,7 +27,7 @@ pub const PowerSample = struct {
     package_power_w: f64,
     thermal: ThermalPressure,
 
-    pub fn format(self: PowerSample, comptime _: []const u8, _: fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: PowerSample, writer: anytype) !void {
         try writer.print("PowerSample(cpu={d:.2}W gpu={d:.2}W ane={d:.2}W pkg={d:.2}W thermal={s})", .{
             self.cpu_power_w,
             self.gpu_power_w,
@@ -52,7 +52,7 @@ pub const EnergyMeasurement = struct {
     joules_per_op: f64,
     ops_per_joule: f64,
 
-    pub fn format(self: EnergyMeasurement, comptime _: []const u8, _: fmt.FormatOptions, writer: anytype) !void {
+    pub fn format(self: EnergyMeasurement, writer: anytype) !void {
         try writer.print(
             "EnergyMeasurement:\n" ++
                 "  CPU Power:    {d:.2} W\n" ++
@@ -62,7 +62,7 @@ pub const EnergyMeasurement = struct {
                 "  Duration:     {d:.2} s\n" ++
                 "  Energy:       {d:.2} J\n" ++
                 "  Operations:   {d}\n" ++
-                "  Efficiency:   {d:.2e} ops/J\n",
+                "  Efficiency:   {e:.2} ops/J\n",
             .{
                 self.cpu_power_watts,
                 self.gpu_power_watts,
@@ -291,7 +291,7 @@ pub fn joulesPerBillionColors(measurement: EnergyMeasurement) f64 {
 test "EnergyMeasurement formatting" {
     const m = EnergyMeasurement.from_power(12.0, 6.0, 2.0, 20.0, 1.5, 1_000_000);
     var buf: [512]u8 = undefined;
-    const s = try fmt.bufPrint(&buf, "{}", .{m});
+    const s = try fmt.bufPrint(&buf, "{f}", .{m});
     try std.testing.expect(mem.indexOf(u8, s, "CPU Power:") != null);
     try std.testing.expect(mem.indexOf(u8, s, "Total Power:") != null);
     try std.testing.expect(mem.indexOf(u8, s, "ops/J") != null);

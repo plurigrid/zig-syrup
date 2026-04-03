@@ -195,7 +195,8 @@ pub const CausalChain = struct {
                 .hash_rotate => {
                     const bits: u6 = @truncate(fault.param & 63);
                     const v = self.steps[index];
-                    self.steps[index] = (v << bits) | (v >> (@as(u6, 64) -| bits));
+                    const rbits: u6 = @truncate((@as(u7, 64) -| @as(u7, bits)));
+                    self.steps[index] = (v << bits) | (v >> rbits);
                 },
                 .hash_xor_bomb => {
                     self.steps[index] ^= fault.param;

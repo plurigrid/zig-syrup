@@ -8,6 +8,8 @@
 const std = @import("std");
 const math = std.math;
 const splitmix = @import("splitmix.zig");
+
+const RGBf = struct { r: f64, g: f64, b: f64 };
 const Color = splitmix.Color;
 
 // ============================================================================
@@ -112,7 +114,7 @@ fn applyOkhslParams(params: *const OkhslParameters, h_raw: f64, s_raw: f64, l_ra
 }
 
 /// Differentiable HSL -> RGB (soft sector selection)
-fn hslToRgb(h: f64, s: f64, l: f64) struct { r: f64, g: f64, b: f64 } {
+fn hslToRgb(h: f64, s: f64, l: f64) RGBf {
     const h_norm = h / 360.0;
     const c = (1.0 - @abs(2.0 * l - 1.0)) * s;
     const h6 = h_norm * 6.0;
@@ -167,7 +169,7 @@ pub const LearnableOkhsl = struct {
     }
 
     /// Forward: seed -> RGB
-    pub fn forwardColor(self: *LearnableOkhsl, seed: f64) struct { r: f64, g: f64, b: f64 } {
+    pub fn forwardColor(self: *LearnableOkhsl, seed: f64) RGBf {
         const feats = seedToFeatures(seed);
         const proj = self.projection.project(feats.f1, feats.f2, feats.f3);
         const hsl = applyOkhslParams(&self.params, proj.h, proj.s, proj.l);
@@ -304,7 +306,7 @@ pub fn characteristicMorphism(gamut: GamutType, r: f64, g: f64, b: f64) GamutTru
 }
 
 /// Pullback: clamp color into gamut
-pub fn gamutPullback(gamut: GamutType, r: f64, g: f64, b: f64) struct { r: f64, g: f64, b: f64 } {
+pub fn gamutPullback(gamut: GamutType, r: f64, g: f64, b: f64) RGBf {
     const margin: f64 = switch (gamut) {
         .srgb => 0.0,
         .p3 => 0.1,
@@ -351,7 +353,7 @@ pub const LearnableGamutMap = struct {
     }
 
     /// Map color through learnable gamut compression
-    pub fn mapToGamut(self: *const LearnableGamutMap, r: f64, g: f64, b: f64) struct { r: f64, g: f64, b: f64 } {
+    pub fn mapToGamut(self: *const LearnableGamutMap, r: f64, g: f64, b: f64) RGBf {
         const gamma = self.params.compression_gamma;
         const cs = self.params.chroma_scale;
 

@@ -744,7 +744,7 @@ test "derangement stream" {
         if (p1[i] != p2[i]) same = false;
     }
     // Not guaranteed different but very likely
-    _ = same;
+    try std.testing.expect(!same);
 
     // nth access
     const p_nth = stream.nth(1);

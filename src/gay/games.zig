@@ -7,6 +7,36 @@ const splitmix = @import("splitmix.zig");
 const splitmix64 = splitmix.splitmix64;
 const GAY_SEED: u64 = splitmix.GAY_SEED;
 
+// BoundedArray was removed from std in Zig 0.15; local drop-in replacement.
+fn BoundedArray(comptime T: type, comptime buffer_capacity: usize) type {
+    return struct {
+        const Self = @This();
+        buffer: [buffer_capacity]T = undefined,
+        len: usize = 0,
+
+        pub fn slice(self: anytype) switch (@TypeOf(&self.buffer)) {
+            *[buffer_capacity]T => []T,
+            *const [buffer_capacity]T => []const T,
+            else => unreachable,
+        } {
+            return self.buffer[0..self.len];
+        }
+
+        pub fn append(self: *Self, item: T) error{Overflow}!void {
+            if (self.len >= buffer_capacity) return error.Overflow;
+            self.buffer[self.len] = item;
+            self.len += 1;
+        }
+
+        pub fn orderedRemove(self: *Self, index: usize) T {
+            const val = self.buffer[index];
+            std.mem.copyForwards(T, self.buffer[index..], self.buffer[index + 1 .. self.len]);
+            self.len -= 1;
+            return val;
+        }
+    };
+}
+
 // ============================================================================
 // Player & Facility (Coordination Model)
 // ============================================================================
@@ -22,14 +52,14 @@ pub const Player = struct {
 
 pub const Facility = struct {
     id: u32,
-    assigned_players: std.BoundedArray(u32, 256),
+    assigned_players: BoundedArray(u32, 256),
     scheduling_policy: SchedulingPolicy,
     delay_factor: f64,
 };
 
 pub const CoordinationModel = struct {
-    players: std.BoundedArray(Player, 256),
-    facilities: std.BoundedArray(Facility, 64),
+    players: BoundedArray(Player, 256),
+    facilities: BoundedArray(Facility, 64),
 
     pub fn init(n: u32, m: u32) CoordinationModel {
         var model: CoordinationModel = .{
@@ -253,8 +283,8 @@ pub const OpenGame = struct {
     }
 
     /// Find all Nash equilibria.
-    pub fn findNashEquilibria(self: *const OpenGame) std.BoundedArray([2]u32, 64) {
-        var result: std.BoundedArray([2]u32, 64) = .{};
+    pub fn findNashEquilibria(self: *const OpenGame) BoundedArray([2]u32, 64) {
+        var result: BoundedArray([2]u32, 64) = .{};
         for (0..self.n_strategies) |i| {
             for (0..self.n_strategies) |j| {
                 if (self.isNash(@intCast(i), @intCast(j))) {
@@ -380,11 +410,11 @@ pub const TensorNetwork = struct {
     const MAX_NODES = 32;
     const MAX_EDGES = 64;
 
-    nodes: std.BoundedArray(TracedMorphism, MAX_NODES),
+    nodes: BoundedArray(TracedMorphism, MAX_NODES),
     /// Edges: (from, to)
-    edges: std.BoundedArray([2]u8, MAX_EDGES),
+    edges: BoundedArray([2]u8, MAX_EDGES),
     /// Trace edges: node index
-    trace_edges: std.BoundedArray(u8, MAX_NODES),
+    trace_edges: BoundedArray(u8, MAX_NODES),
     fingerprint: u32,
     seed: u64,
 

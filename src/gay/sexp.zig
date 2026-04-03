@@ -147,8 +147,8 @@ pub const TokenizeError = error{
 };
 
 pub fn tokenize(input: []const u8, allocator: Allocator) TokenizeError![]Token {
-    var tokens = std.ArrayList(Token).init(allocator);
-    errdefer tokens.deinit();
+    var tokens: std.ArrayList(Token) = .{};
+    errdefer tokens.deinit(allocator);
 
     var i: usize = 0;
     while (i < input.len) {
@@ -168,25 +168,25 @@ pub fn tokenize(input: []const u8, allocator: Allocator) TokenizeError![]Token {
 
         // Single-char delimiters
         if (c == '(') {
-            try tokens.append(.{ .type = .lparen, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .lparen, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == ')') {
-            try tokens.append(.{ .type = .rparen, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .rparen, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == '[') {
-            try tokens.append(.{ .type = .lbracket, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .lbracket, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == ']') {
-            try tokens.append(.{ .type = .rbracket, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .rbracket, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == '{') {
-            try tokens.append(.{ .type = .lbrace, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .lbrace, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == '}') {
-            try tokens.append(.{ .type = .rbrace, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .rbrace, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == '\'') {
-            try tokens.append(.{ .type = .quote_mark, .text = input[i .. i + 1], .pos = i });
+            try tokens.append(allocator, .{ .type = .quote_mark, .text = input[i .. i + 1], .pos = i });
             i += 1;
         } else if (c == '"') {
             // String literal — we store the raw span including quotes for later unescape
@@ -198,13 +198,13 @@ pub fn tokenize(input: []const u8, allocator: Allocator) TokenizeError![]Token {
             }
             if (i >= input.len) return error.UnterminatedString;
             i += 1; // closing "
-            try tokens.append(.{ .type = .string, .text = input[start..i], .pos = start });
+            try tokens.append(allocator, .{ .type = .string, .text = input[start..i], .pos = start });
         } else if (c == ':') {
             // Keyword
             const start = i;
             i += 1;
             while (i < input.len and (std.ascii.isAlphanumeric(input[i]) or input[i] == '_' or input[i] == '-' or input[i] == '!' or input[i] == '?')) i += 1;
-            try tokens.append(.{ .type = .keyword, .text = input[start + 1 .. i], .pos = start });
+            try tokens.append(allocator, .{ .type = .keyword, .text = input[start + 1 .. i], .pos = start });
         } else if (std.ascii.isDigit(c) or (c == '-' and i + 1 < input.len and std.ascii.isDigit(input[i + 1]))) {
             // Number
             const start = i;
@@ -222,7 +222,7 @@ pub fn tokenize(input: []const u8, allocator: Allocator) TokenizeError![]Token {
                 }
             }
             const tt: TokenType = if (is_float) .number_float else .number_int;
-            try tokens.append(.{ .type = tt, .text = input[start..i], .pos = start });
+            try tokens.append(allocator, .{ .type = tt, .text = input[start..i], .pos = start });
         } else if (isSymbolStart(c)) {
             const start = i;
             while (i < input.len and isSymbolContinue(input[i])) i += 1;
@@ -235,13 +235,13 @@ pub fn tokenize(input: []const u8, allocator: Allocator) TokenizeError![]Token {
                 .nil
             else
                 .symbol;
-            try tokens.append(.{ .type = tt, .text = text, .pos = start });
+            try tokens.append(allocator, .{ .type = tt, .text = text, .pos = start });
         } else {
             return error.UnexpectedCharacter;
         }
     }
 
-    return tokens.toOwnedSlice();
+    return tokens.toOwnedSlice(allocator);
 }
 
 fn isSymbolStart(c: u8) bool {
@@ -280,41 +280,41 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
     switch (tok.type) {
         .lparen => {
             pos.* += 1;
-            var items = std.ArrayList(SExp).init(allocator);
+            var items: std.ArrayList(SExp) = .{};
             errdefer {
                 for (items.items) |item| item.deinit(allocator);
-                items.deinit();
+                items.deinit(allocator);
             }
             while (pos.* < tokens.len and tokens[pos.*].type != .rparen) {
-                try items.append(try parseSexp(tokens, pos, allocator));
+                try items.append(allocator, try parseSexp(tokens, pos, allocator));
             }
             if (pos.* >= tokens.len) return error.UnclosedParen;
             pos.* += 1;
-            return SExp{ .list = try items.toOwnedSlice() };
+            return SExp{ .list = try items.toOwnedSlice(allocator) };
         },
         .lbracket => {
             pos.* += 1;
-            var items = std.ArrayList(SExp).init(allocator);
+            var items: std.ArrayList(SExp) = .{};
             errdefer {
                 for (items.items) |item| item.deinit(allocator);
-                items.deinit();
+                items.deinit(allocator);
             }
             while (pos.* < tokens.len and tokens[pos.*].type != .rbracket) {
-                try items.append(try parseSexp(tokens, pos, allocator));
+                try items.append(allocator, try parseSexp(tokens, pos, allocator));
             }
             if (pos.* >= tokens.len) return error.UnclosedBracket;
             pos.* += 1;
-            return SExp{ .vector = try items.toOwnedSlice() };
+            return SExp{ .vector = try items.toOwnedSlice(allocator) };
         },
         .lbrace => {
             pos.* += 1;
-            var pairs = std.ArrayList(SExp.DictPair).init(allocator);
+            var pairs: std.ArrayList(SExp.DictPair) = .{};
             errdefer {
                 for (pairs.items) |pair| {
                     pair.key.deinit(allocator);
                     pair.value.deinit(allocator);
                 }
-                pairs.deinit();
+                pairs.deinit(allocator);
             }
             while (pos.* < tokens.len and tokens[pos.*].type != .rbrace) {
                 const key = try parseSexp(tokens, pos, allocator);
@@ -323,11 +323,11 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
                     return error.UnexpectedEof;
                 }
                 const val = try parseSexp(tokens, pos, allocator);
-                try pairs.append(.{ .key = key, .value = val });
+                try pairs.append(allocator, .{ .key = key, .value = val });
             }
             if (pos.* >= tokens.len) return error.UnclosedBrace;
             pos.* += 1;
-            return SExp{ .dict = try pairs.toOwnedSlice() };
+            return SExp{ .dict = try pairs.toOwnedSlice(allocator) };
         },
         .quote_mark => {
             pos.* += 1;
@@ -379,29 +379,29 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
 }
 
 fn unescapeString(raw: []const u8, allocator: Allocator) ![]u8 {
-    var buf = std.ArrayList(u8).init(allocator);
-    errdefer buf.deinit();
+    var buf: std.ArrayList(u8) = .{};
+    errdefer buf.deinit(allocator);
     var i: usize = 0;
     while (i < raw.len) {
         if (raw[i] == '\\' and i + 1 < raw.len) {
             i += 1;
             switch (raw[i]) {
-                'n' => try buf.append('\n'),
-                't' => try buf.append('\t'),
-                'e' => try buf.append(0x1b),
-                '"' => try buf.append('"'),
-                '\\' => try buf.append('\\'),
+                'n' => try buf.append(allocator, '\n'),
+                't' => try buf.append(allocator, '\t'),
+                'e' => try buf.append(allocator, 0x1b),
+                '"' => try buf.append(allocator, '"'),
+                '\\' => try buf.append(allocator, '\\'),
                 else => {
-                    try buf.append('\\');
-                    try buf.append(raw[i]);
+                    try buf.append(allocator, '\\');
+                    try buf.append(allocator, raw[i]);
                 },
             }
         } else {
-            try buf.append(raw[i]);
+            try buf.append(allocator, raw[i]);
         }
         i += 1;
     }
-    return buf.toOwnedSlice();
+    return buf.toOwnedSlice(allocator);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -409,72 +409,72 @@ fn unescapeString(raw: []const u8, allocator: Allocator) ![]u8 {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub fn print(sexp: SExp, allocator: Allocator) ![]u8 {
-    var buf = std.ArrayList(u8).init(allocator);
-    try printInto(sexp, &buf);
-    return buf.toOwnedSlice();
+    var buf: std.ArrayList(u8) = .{};
+    try printInto(sexp, &buf, allocator);
+    return buf.toOwnedSlice(allocator);
 }
 
-fn printInto(sexp: SExp, buf: *std.ArrayList(u8)) !void {
+fn printInto(sexp: SExp, buf: *std.ArrayList(u8), allocator: Allocator) !void {
     switch (sexp) {
-        .atom => |s| try buf.appendSlice(s),
+        .atom => |s| try buf.appendSlice(allocator, s),
         .number_int => |v| {
             var tmp: [32]u8 = undefined;
             const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-            try buf.appendSlice(s);
+            try buf.appendSlice(allocator, s);
         },
         .number_float => |v| {
             var tmp: [64]u8 = undefined;
             const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-            try buf.appendSlice(s);
+            try buf.appendSlice(allocator, s);
         },
         .string => |s| {
-            try buf.append('"');
+            try buf.append(allocator, '"');
             for (s) |c| {
                 switch (c) {
-                    '\n' => try buf.appendSlice("\\n"),
-                    '\t' => try buf.appendSlice("\\t"),
-                    '"' => try buf.appendSlice("\\\""),
-                    '\\' => try buf.appendSlice("\\\\"),
-                    else => try buf.append(c),
+                    '\n' => try buf.appendSlice(allocator, "\\n"),
+                    '\t' => try buf.appendSlice(allocator, "\\t"),
+                    '"' => try buf.appendSlice(allocator, "\\\""),
+                    '\\' => try buf.appendSlice(allocator, "\\\\"),
+                    else => try buf.append(allocator, c),
                 }
             }
-            try buf.append('"');
+            try buf.append(allocator, '"');
         },
         .keyword => |s| {
-            try buf.append(':');
-            try buf.appendSlice(s);
+            try buf.append(allocator, ':');
+            try buf.appendSlice(allocator, s);
         },
-        .boolean => |v| try buf.appendSlice(if (v) "true" else "false"),
-        .nil => try buf.appendSlice("nil"),
+        .boolean => |v| try buf.appendSlice(allocator, if (v) "true" else "false"),
+        .nil => try buf.appendSlice(allocator, "nil"),
         .list => |items| {
-            try buf.append('(');
+            try buf.append(allocator, '(');
             for (items, 0..) |item, idx| {
-                if (idx > 0) try buf.append(' ');
-                try printInto(item, buf);
+                if (idx > 0) try buf.append(allocator, ' ');
+                try printInto(item, buf, allocator);
             }
-            try buf.append(')');
+            try buf.append(allocator, ')');
         },
         .vector => |items| {
-            try buf.append('[');
+            try buf.append(allocator, '[');
             for (items, 0..) |item, idx| {
-                if (idx > 0) try buf.append(' ');
-                try printInto(item, buf);
+                if (idx > 0) try buf.append(allocator, ' ');
+                try printInto(item, buf, allocator);
             }
-            try buf.append(']');
+            try buf.append(allocator, ']');
         },
         .dict => |pairs| {
-            try buf.append('{');
+            try buf.append(allocator, '{');
             for (pairs, 0..) |pair, idx| {
-                if (idx > 0) try buf.append(' ');
-                try printInto(pair.key, buf);
-                try buf.append(' ');
-                try printInto(pair.value, buf);
+                if (idx > 0) try buf.append(allocator, ' ');
+                try printInto(pair.key, buf, allocator);
+                try buf.append(allocator, ' ');
+                try printInto(pair.value, buf, allocator);
             }
-            try buf.append('}');
+            try buf.append(allocator, '}');
         },
         .quote => |inner| {
-            try buf.append('\'');
-            try printInto(inner.*, buf);
+            try buf.append(allocator, '\'');
+            try printInto(inner.*, buf, allocator);
         },
     }
 }
@@ -496,13 +496,13 @@ const RAINBOW_COLORS = [_][]const u8{
 const RESET = "\x1b[0m";
 
 pub fn prettyPrint(sexp: SExp, allocator: Allocator) ![]u8 {
-    var buf = std.ArrayList(u8).init(allocator);
-    try prettyPrintInto(sexp, &buf, 0);
-    try buf.appendSlice(RESET);
-    return buf.toOwnedSlice();
+    var buf: std.ArrayList(u8) = .{};
+    try prettyPrintInto(sexp, &buf, 0, allocator);
+    try buf.appendSlice(allocator, RESET);
+    return buf.toOwnedSlice(allocator);
 }
 
-fn prettyPrintInto(sexp: SExp, buf: *std.ArrayList(u8), depth: usize) !void {
+fn prettyPrintInto(sexp: SExp, buf: *std.ArrayList(u8), depth: usize, allocator: Allocator) !void {
     const color = RAINBOW_COLORS[depth % RAINBOW_COLORS.len];
 
     switch (sexp) {
@@ -510,76 +510,76 @@ fn prettyPrintInto(sexp: SExp, buf: *std.ArrayList(u8), depth: usize) !void {
             // Color atom by its chromatic hash
             const hash = chromaticColorIndex(s);
             const atom_color = RAINBOW_COLORS[hash % RAINBOW_COLORS.len];
-            try buf.appendSlice(atom_color);
-            try buf.appendSlice(s);
+            try buf.appendSlice(allocator, atom_color);
+            try buf.appendSlice(allocator, s);
         },
         .number_int => |v| {
-            try buf.appendSlice("\x1b[38;5;51m"); // cyan for numbers
+            try buf.appendSlice(allocator, "\x1b[38;5;51m"); // cyan for numbers
             var tmp: [32]u8 = undefined;
             const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-            try buf.appendSlice(s);
+            try buf.appendSlice(allocator, s);
         },
         .number_float => |v| {
-            try buf.appendSlice("\x1b[38;5;51m");
+            try buf.appendSlice(allocator, "\x1b[38;5;51m");
             var tmp: [64]u8 = undefined;
             const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch unreachable;
-            try buf.appendSlice(s);
+            try buf.appendSlice(allocator, s);
         },
         .string => |s| {
-            try buf.appendSlice("\x1b[38;5;214m"); // warm orange for strings
-            try buf.append('"');
-            try buf.appendSlice(s);
-            try buf.append('"');
+            try buf.appendSlice(allocator, "\x1b[38;5;214m"); // warm orange for strings
+            try buf.append(allocator, '"');
+            try buf.appendSlice(allocator, s);
+            try buf.append(allocator, '"');
         },
         .keyword => |s| {
-            try buf.appendSlice("\x1b[38;5;169m"); // pink for keywords
-            try buf.append(':');
-            try buf.appendSlice(s);
+            try buf.appendSlice(allocator, "\x1b[38;5;169m"); // pink for keywords
+            try buf.append(allocator, ':');
+            try buf.appendSlice(allocator, s);
         },
         .boolean => |v| {
-            try buf.appendSlice("\x1b[38;5;118m"); // bright green for booleans
-            try buf.appendSlice(if (v) "true" else "false");
+            try buf.appendSlice(allocator, "\x1b[38;5;118m"); // bright green for booleans
+            try buf.appendSlice(allocator, if (v) "true" else "false");
         },
         .nil => {
-            try buf.appendSlice("\x1b[38;5;243m"); // gray for nil
-            try buf.appendSlice("nil");
+            try buf.appendSlice(allocator, "\x1b[38;5;243m"); // gray for nil
+            try buf.appendSlice(allocator, "nil");
         },
         .list => |items| {
-            try buf.appendSlice(color);
-            try buf.append('(');
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, '(');
             for (items, 0..) |item, idx| {
-                if (idx > 0) try buf.append(' ');
-                try prettyPrintInto(item, buf, depth + 1);
+                if (idx > 0) try buf.append(allocator, ' ');
+                try prettyPrintInto(item, buf, depth + 1, allocator);
             }
-            try buf.appendSlice(color);
-            try buf.append(')');
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, ')');
         },
         .vector => |items| {
-            try buf.appendSlice(color);
-            try buf.append('[');
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, '[');
             for (items, 0..) |item, idx| {
-                if (idx > 0) try buf.append(' ');
-                try prettyPrintInto(item, buf, depth + 1);
+                if (idx > 0) try buf.append(allocator, ' ');
+                try prettyPrintInto(item, buf, depth + 1, allocator);
             }
-            try buf.appendSlice(color);
-            try buf.append(']');
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, ']');
         },
         .dict => |pairs| {
-            try buf.appendSlice(color);
-            try buf.append('{');
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, '{');
             for (pairs, 0..) |pair, idx| {
-                if (idx > 0) try buf.append(' ');
-                try prettyPrintInto(pair.key, buf, depth + 1);
-                try buf.append(' ');
-                try prettyPrintInto(pair.value, buf, depth + 1);
+                if (idx > 0) try buf.append(allocator, ' ');
+                try prettyPrintInto(pair.key, buf, depth + 1, allocator);
+                try buf.append(allocator, ' ');
+                try prettyPrintInto(pair.value, buf, depth + 1, allocator);
             }
-            try buf.appendSlice(color);
-            try buf.append('}');
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, '}');
         },
         .quote => |inner| {
-            try buf.appendSlice(color);
-            try buf.append('\'');
-            try prettyPrintInto(inner.*, buf, depth + 1);
+            try buf.appendSlice(allocator, color);
+            try buf.append(allocator, '\'');
+            try prettyPrintInto(inner.*, buf, depth + 1, allocator);
         },
     }
 }

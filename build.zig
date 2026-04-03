@@ -3180,20 +3180,136 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(ibc_denom_verifier_tests).step);
 
     // ========================================
+    // DID modules (first DID implementations in Zig)
+    // ========================================
+
+    // did:key — W3C did:key method (Ed25519, base58btc, multicodec)
+    const did_key_mod = b.addModule("did_key", .{
+        .root_source_file = b.path("src/did_key.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = did_key_mod;
+
+    const did_key_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/did_key.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const did_key_tests = b.addTest(.{ .root_module = did_key_test_mod });
+    const run_did_key_tests = b.addRunArtifact(did_key_tests);
+    test_step.dependOn(&run_did_key_tests.step);
+
+    // did:web — Domain-linked DID method
+    const did_web_mod = b.addModule("did_web", .{
+        .root_source_file = b.path("src/did_web.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = did_web_mod;
+
+    const did_web_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/did_web.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const did_web_tests = b.addTest(.{ .root_module = did_web_test_mod });
+    const run_did_web_tests = b.addRunArtifact(did_web_tests);
+    test_step.dependOn(&run_did_web_tests.step);
+
+    // did:pkh — Public Key Hash (blockchain address) DID method
+    const did_pkh_mod = b.addModule("did_pkh", .{
+        .root_source_file = b.path("src/did_pkh.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = did_pkh_mod;
+
+    const did_pkh_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/did_pkh.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const did_pkh_tests = b.addTest(.{ .root_module = did_pkh_test_mod });
+    const run_did_pkh_tests = b.addRunArtifact(did_pkh_tests);
+    test_step.dependOn(&run_did_pkh_tests.step);
+
+    // did:tdw — Trust DID Web (versioned did:web)
+    const did_tdw_mod = b.addModule("did_tdw", .{
+        .root_source_file = b.path("src/did_tdw.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = did_tdw_mod;
+
+    const did_tdw_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/did_tdw.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const did_tdw_tests = b.addTest(.{ .root_module = did_tdw_test_mod });
+    const run_did_tdw_tests = b.addRunArtifact(did_tdw_tests);
+    test_step.dependOn(&run_did_tdw_tests.step);
+
+    // did:gay — Behavioral Identity DID (bridge module)
+    const did_gay_mod = b.addModule("did_gay", .{
+        .root_source_file = b.path("src/did_gay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = did_gay_mod;
+
+    const did_gay_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/did_gay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const did_gay_tests = b.addTest(.{ .root_module = did_gay_test_mod });
+    const run_did_gay_tests = b.addRunArtifact(did_gay_tests);
+    test_step.dependOn(&run_did_gay_tests.step);
+
+    // did_seasons — Kuramoto oscillator + HMM for DID ecosystem dynamics
+    const did_seasons_mod = b.addModule("did_seasons", .{
+        .root_source_file = b.path("src/did_seasons.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = did_seasons_mod;
+
+    const did_seasons_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/did_seasons.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const did_seasons_tests = b.addTest(.{ .root_module = did_seasons_test_mod });
+    const run_did_seasons_tests = b.addRunArtifact(did_seasons_tests);
+    test_step.dependOn(&run_did_seasons_tests.step);
+
+    const test_did_step = b.step("test-did", "Run all DID module tests");
+    test_did_step.dependOn(&run_did_key_tests.step);
+    test_did_step.dependOn(&run_did_web_tests.step);
+    test_did_step.dependOn(&run_did_pkh_tests.step);
+    test_did_step.dependOn(&run_did_tdw_tests.step);
+    test_did_step.dependOn(&run_did_gay_tests.step);
+    test_did_step.dependOn(&run_did_seasons_tests.step);
+
+    // ========================================
     // Gay root module (re-exports all 28 gay submodules)
     // ========================================
 
-    _ = b.addModule("gay", .{
+    const gay_module = b.addModule("gay", .{
         .root_source_file = b.path("src/gay/gay.zig"),
         .target = target,
         .optimize = optimize,
     });
+    gay_module.addImport("syrup", syrup_mod);
 
     const gay_test_mod = b.createModule(.{
         .root_source_file = b.path("src/gay/gay.zig"),
         .target = target,
         .optimize = optimize,
     });
+    gay_test_mod.addImport("syrup", syrup_mod);
     const gay_tests = b.addTest(.{ .root_module = gay_test_mod });
     const run_gay_tests = b.addRunArtifact(gay_tests);
     test_step.dependOn(&run_gay_tests.step);

@@ -7,6 +7,29 @@ const splitmix = @import("splitmix.zig");
 const splitmix64 = splitmix.splitmix64;
 const GAY_SEED: u64 = splitmix.GAY_SEED;
 
+// BoundedArray was removed from std in Zig 0.15; local drop-in replacement.
+fn BoundedArray(comptime T: type, comptime buffer_capacity: usize) type {
+    return struct {
+        const Self = @This();
+        buffer: [buffer_capacity]T = undefined,
+        len: usize = 0,
+
+        pub fn slice(self: anytype) switch (@TypeOf(&self.buffer)) {
+            *[buffer_capacity]T => []T,
+            *const [buffer_capacity]T => []const T,
+            else => unreachable,
+        } {
+            return self.buffer[0..self.len];
+        }
+
+        pub fn append(self: *Self, item: T) error{Overflow}!void {
+            if (self.len >= buffer_capacity) return error.Overflow;
+            self.buffer[self.len] = item;
+            self.len += 1;
+        }
+    };
+}
+
 // ============================================================================
 // World
 // ============================================================================
@@ -30,7 +53,7 @@ pub const World = struct {
 pub const KripkeFrame = struct {
     const MAX_WORLDS = 64;
 
-    worlds: std.BoundedArray(World, MAX_WORLDS),
+    worlds: BoundedArray(World, MAX_WORLDS),
     reflexive: bool,
     symmetric: bool,
     transitive: bool,

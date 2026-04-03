@@ -52,6 +52,14 @@ pub const Trit = enum(i8) {
             .plus => .minus,
         };
     }
+
+    pub fn name(self: Trit) []const u8 {
+        return switch (self) {
+            .minus => "MINUS",
+            .zero => "ERGODIC",
+            .plus => "PLUS",
+        };
+    }
 };
 
 /// Three-valued oracle result (mirrors propagator.CellValue)
@@ -117,7 +125,7 @@ pub const LTS = struct {
         for (self.transitions) |t| {
             try label_set.put(t.label, {});
         }
-        var result = std.ArrayList(u64).init(allocator);
+        var result = std.array_list.AlignedManaged(u64, null).init(allocator);
         var iter = label_set.keyIterator();
         while (iter.next()) |k| {
             try result.append(k.*);
@@ -155,20 +163,17 @@ pub const IdentityClaim = union(enum) {
     trit_trajectory: []const Trit,
     /// Entra Service Principal (JSON)
     entra_principal: []const u8,
+    /// did:key public key (32 bytes Ed25519)
+    did_key_pubkey: []const u8,
 };
 
 // ============================================================================
 // CAPABILITY HASHING
 // ============================================================================
 
-/// SplitMix64 hash for capability names → u64 labels.
-/// Deterministic, fast, matches Gay.jl convention.
-fn splitMix64(seed: u64) u64 {
-    var z = seed +% 0x9e3779b97f4a7c15;
-    z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
-    z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
-    return z ^ (z >> 31);
-}
+/// SplitMix64 — canonical import from gay/splitmix.zig (matches Gay.jl seed 1069)
+const splitmix = @import("gay/splitmix.zig");
+const splitMix64 = splitmix.splitmix64;
 
 /// Hash a capability string to a u64 label
 pub fn hashCapability(name: []const u8) u64 {
@@ -247,7 +252,7 @@ fn extractJsonArrayAsHashes(allocator: Allocator, json_bytes: []const u8, field_
     const arr_val = root.object.get(field_name) orelse return allocator.alloc(u64, 0);
     if (arr_val != .array) return allocator.alloc(u64, 0);
 
-    var hashes = std.ArrayList(u64).init(allocator);
+    var hashes = std.array_list.AlignedManaged(u64, null).init(allocator);
     for (arr_val.array.items) |item| {
         switch (item) {
             .string => |s| try hashes.append(hashCapability(s)),
@@ -487,7 +492,8 @@ pub fn checkBisimulation(
 
     // Build adjacency: for each (state, label), which states can we reach?
     // State indices: LTS A = [0, n_a), LTS B = [n_a, n_a+n_b)
-    const Adj = std.AutoHashMap(struct { state: usize, label: u64 }, std.ArrayList(usize));
+    const AdjKey = struct { state: usize, label: u64 };
+    const Adj = std.AutoHashMap(AdjKey, std.array_list.AlignedManaged(usize, null));
     var adj = Adj.init(allocator);
     defer {
         var it = adj.valueIterator();
@@ -496,18 +502,18 @@ pub fn checkBisimulation(
     }
 
     for (lts_a.transitions) |t| {
-        const key = .{ .state = t.from, .label = t.label };
+        const key = AdjKey{ .state = t.from, .label = t.label };
         const entry = try adj.getOrPut(key);
         if (!entry.found_existing) {
-            entry.value_ptr.* = std.ArrayList(usize).init(allocator);
+            entry.value_ptr.* = std.array_list.AlignedManaged(usize, null).init(allocator);
         }
         try entry.value_ptr.append(t.to);
     }
     for (lts_b.transitions) |t| {
-        const key = .{ .state = t.from + n_a, .label = t.label };
+        const key = AdjKey{ .state = t.from + n_a, .label = t.label };
         const entry = try adj.getOrPut(key);
         if (!entry.found_existing) {
-            entry.value_ptr.* = std.ArrayList(usize).init(allocator);
+            entry.value_ptr.* = std.array_list.AlignedManaged(usize, null).init(allocator);
         }
         try entry.value_ptr.append(t.to + n_a);
     }
@@ -549,7 +555,7 @@ pub fn checkBisimulation(
 
             // Group states by (current_block, set_of_target_blocks_for_this_label)
             // Two states that reach different block sets must be split
-            var signatures = std.AutoHashMap(usize, std.ArrayList(usize)).init(allocator);
+            var signatures = std.AutoHashMap(usize, std.array_list.AlignedManaged(usize, null)).init(allocator);
             defer {
                 var sig_it = signatures.valueIterator();
                 while (sig_it.next()) |v| v.deinit();
@@ -557,10 +563,10 @@ pub fn checkBisimulation(
             }
 
             for (0..n_total) |state| {
-                const key = .{ .state = state, .label = label };
+                const key = AdjKey{ .state = state, .label = label };
                 const target_blocks = if (adj.get(key)) |succs| blk: {
                     // Compute a signature from sorted target blocks
-                    var blocks = std.ArrayList(usize).init(allocator);
+                    var blocks = std.array_list.AlignedManaged(usize, null).init(allocator);
                     for (succs.items) |succ| {
                         try blocks.append(partition[succ]);
                     }
@@ -568,32 +574,23 @@ pub fn checkBisimulation(
                     break :blk blocks;
                 } else blk: {
                     // No transition with this label → empty signature
-                    break :blk std.ArrayList(usize).init(allocator);
+                    break :blk std.array_list.AlignedManaged(usize, null).init(allocator);
                 };
 
-                // Encode signature as a hash for grouping
-                var sig_hash: u64 = partition[state];
-                sig_hash = sig_hash *% 31 +% @as(u64, @intCast(target_blocks.items.len));
-                for (target_blocks.items) |tb| {
-                    sig_hash = sig_hash *% 31 +% @as(u64, @intCast(tb));
-                }
                 target_blocks.deinit();
 
                 const sig_entry = try signatures.getOrPut(partition[state]);
                 if (!sig_entry.found_existing) {
-                    sig_entry.value_ptr.* = std.ArrayList(usize).init(allocator);
+                    sig_entry.value_ptr.* = std.array_list.AlignedManaged(usize, null).init(allocator);
                 }
                 try sig_entry.value_ptr.append(state);
-
-                // Check if this state's signature differs from others in its block
-                _ = sig_hash;
             }
         }
 
         // Simple refinement: for each block, check all pairs
         // If states in the same block have different transition targets for any label,
         // split them into different blocks
-        var block_members = std.AutoHashMap(usize, std.ArrayList(usize)).init(allocator);
+        var block_members = std.AutoHashMap(usize, std.array_list.AlignedManaged(usize, null)).init(allocator);
         defer {
             var bm_it = block_members.valueIterator();
             while (bm_it.next()) |v| v.deinit();
@@ -603,7 +600,7 @@ pub fn checkBisimulation(
         for (0..n_total) |state| {
             const entry = try block_members.getOrPut(partition[state]);
             if (!entry.found_existing) {
-                entry.value_ptr.* = std.ArrayList(usize).init(allocator);
+                entry.value_ptr.* = std.array_list.AlignedManaged(usize, null).init(allocator);
             }
             try entry.value_ptr.append(state);
         }
@@ -622,8 +619,8 @@ pub fn checkBisimulation(
                 var lbl_iter = all_labels.keyIterator();
                 while (lbl_iter.next()) |lbl_ptr| {
                     const lbl = lbl_ptr.*;
-                    const ref_key = .{ .state = ref, .label = lbl };
-                    const other_key = .{ .state = other, .label = lbl };
+                    const ref_key = AdjKey{ .state = ref, .label = lbl };
+                    const other_key = AdjKey{ .state = other, .label = lbl };
 
                     const ref_succs = if (adj.get(ref_key)) |s| s.items else &[_]usize{};
                     const other_succs = if (adj.get(other_key)) |s| s.items else &[_]usize{};
@@ -672,8 +669,8 @@ pub fn checkBisimulation(
     var label_iter2 = all_labels.keyIterator();
     while (label_iter2.next()) |lbl_ptr| {
         const lbl = lbl_ptr.*;
-        const a_key = .{ .state = init_a, .label = lbl };
-        const b_key = .{ .state = init_b, .label = lbl };
+        const a_key = AdjKey{ .state = init_a, .label = lbl };
+        const b_key = AdjKey{ .state = init_b, .label = lbl };
 
         const a_has = adj.contains(a_key);
         const b_has = adj.contains(b_key);
@@ -737,6 +734,20 @@ fn localizeClaim(allocator: Allocator, claim: IdentityClaim) !LTS {
         .did_document => |j| didDocumentToLTS(allocator, j),
         .mcp_descriptor => |j| mcpDescriptorToLTS(allocator, j),
         .entra_principal => |j| agentCardToLTS(allocator, j), // Same shape for now
+        .did_key_pubkey => |pk| blk: {
+            // Bridge did:key → trit trajectory via GF(3) byte mapping
+            if (pk.len < 32) break :blk tritTrajectoryToLTS(allocator, &.{.zero});
+            var traj: [32]Trit = undefined;
+            for (pk[0..32], 0..) |byte, i| {
+                traj[i] = switch (@mod(byte, 3)) {
+                    0 => .zero,
+                    1 => .plus,
+                    2 => .minus,
+                    else => unreachable,
+                };
+            }
+            break :blk tritTrajectoryToLTS(allocator, &traj);
+        },
     };
 }
 
@@ -884,6 +895,33 @@ test "oracle non-equivalence across protocols" {
     );
 
     // Different capabilities should yield non-equivalent
+    try std.testing.expect(result.isNonEquivalent());
+}
+
+test "did:key pubkey reflexivity via oracle" {
+    const allocator = std.testing.allocator;
+    const pubkey = [_]u8{0x42} ** 32;
+    const claim = IdentityClaim{ .did_key_pubkey = &pubkey };
+    try std.testing.expect(try verifyReflexivity(allocator, claim));
+}
+
+test "did:key pubkey to LTS produces 32 states" {
+    const allocator = std.testing.allocator;
+    const pubkey = [_]u8{0x69} ** 32;
+    const lts = try localizeClaim(allocator, .{ .did_key_pubkey = &pubkey });
+    defer lts.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 32), lts.states.len);
+}
+
+test "different did:key pubkeys are non-equivalent" {
+    const allocator = std.testing.allocator;
+    const pk_a = [_]u8{0x00} ** 32;
+    const pk_b = [_]u8{0x01} ** 32;
+    const result = try oracle(
+        allocator,
+        .{ .did_key_pubkey = &pk_a },
+        .{ .did_key_pubkey = &pk_b },
+    );
     try std.testing.expect(result.isNonEquivalent());
 }
 

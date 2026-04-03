@@ -178,8 +178,8 @@ pub fn abduceInvader(
     search_end: u64,
     top_k: usize,
 ) ![]AbductiveHypothesis {
-    var list = std.ArrayList(AbductiveHypothesis).init(allocator);
-    defer list.deinit();
+    var list: std.ArrayList(AbductiveHypothesis) = .{};
+    defer list.deinit(allocator);
 
     var id = search_start;
     while (id <= search_end) : (id += 1) {
@@ -188,7 +188,7 @@ pub fn abduceInvader(
         const dist = colorDistance(observed, sim.world);
         const confidence = 1.0 / (1.0 + dist);
 
-        try list.append(.{
+        try list.append(allocator, .{
             .id = sim.id,
             .seed = seed,
             .derangement_idx = sim.derangement,
@@ -284,32 +284,34 @@ pub fn testAllProperties(id: u64, seed: u64) bool {
 // ============================================================================
 
 pub const WorldNavigator = struct {
+    allocator: std.mem.Allocator,
     current_id: u64,
     seed: u64,
     history: std.ArrayList(u64),
 
     pub fn init(allocator: std.mem.Allocator, seed: u64) WorldNavigator {
         return .{
+            .allocator = allocator,
             .current_id = 1,
             .seed = seed,
-            .history = std.ArrayList(u64).init(allocator),
+            .history = .{},
         };
     }
 
     pub fn deinit(self: *WorldNavigator) void {
-        self.history.deinit();
+        self.history.deinit(self.allocator);
     }
 
     /// Teleport to a specific invader's world. Records history.
     pub fn teleport(self: *WorldNavigator, id: u64) !TeleportationResult {
-        try self.history.append(self.current_id);
+        try self.history.append(self.allocator, self.current_id);
         self.current_id = id;
         return self.currentWorld();
     }
 
     /// Return to previous world.
     pub fn back(self: *WorldNavigator) !TeleportationResult {
-        self.current_id = self.history.pop();
+        self.current_id = self.history.pop().?;
         return self.currentWorld();
     }
 

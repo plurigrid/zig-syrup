@@ -78,13 +78,13 @@ pub const GayMCContext = struct {
             .checkpoint_count = 0,
             .worker_id = worker_id,
             .seed = seed,
-            .color_history = std.ArrayList(Color).init(allocator),
+            .color_history = .{},
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *GayMCContext) void {
-        self.color_history.deinit();
+        self.color_history.deinit(self.allocator);
     }
 
     // Split the RNG: advance state deterministically
@@ -109,7 +109,7 @@ pub const GayMCContext = struct {
         self.sweep_count += 1;
         const new_state = self.split();
         const color = colorFromState(new_state);
-        self.color_history.append(color) catch {};
+        self.color_history.append(self.allocator, color) catch {};
         return .{ .state = new_state, .color = color };
     }
 
@@ -121,7 +121,7 @@ pub const GayMCContext = struct {
         self.state ^= name_hash;
         const new_state = self.split();
         const color = colorFromState(new_state);
-        self.color_history.append(color) catch {};
+        self.color_history.append(self.allocator, color) catch {};
         return .{ .state = new_state, .color = color };
     }
 
@@ -195,7 +195,7 @@ pub const GayMCContext = struct {
         const safe_u = if (u == 0.0) 1e-300 else u;
         const value = -@log(safe_u) / lambda;
         const color = colorFromState(self.state);
-        self.color_history.append(color) catch {};
+        self.color_history.append(self.allocator, color) catch {};
         return .{ .value = value, .color = color };
     }
 
@@ -204,19 +204,19 @@ pub const GayMCContext = struct {
         const u = self.uniform01();
         const value = x0 + gamma * @tan(math.pi * (u - 0.5));
         const color = colorFromState(self.state);
-        self.color_history.append(color) catch {};
+        self.color_history.append(self.allocator, color) catch {};
         return .{ .value = value, .color = color };
     }
 
     /// Gaussian distribution via Box-Muller transform
     pub fn sampleGaussian(self: *GayMCContext, mu: f64, sigma: f64) struct { value: f64, color: Color } {
-        const u1 = self.uniform01();
-        const u2 = self.uniform01();
-        const safe_u1 = if (u1 == 0.0) 1e-300 else u1;
-        const z = @sqrt(-2.0 * @log(safe_u1)) * @cos(2.0 * math.pi * u2);
+        const unif1 = self.uniform01();
+        const unif2 = self.uniform01();
+        const safe_u1 = if (unif1 == 0.0) 1e-300 else unif1;
+        const z = @sqrt(-2.0 * @log(safe_u1)) * @cos(2.0 * math.pi * unif2);
         const value = mu + sigma * z;
         const color = colorFromState(self.state);
-        self.color_history.append(color) catch {};
+        self.color_history.append(self.allocator, color) catch {};
         return .{ .value = value, .color = color };
     }
 
@@ -242,7 +242,7 @@ pub const GayMCContext = struct {
         const value = if (accepted) proposal else current;
 
         const color = colorFromState(self.state);
-        self.color_history.append(color) catch {};
+        self.color_history.append(self.allocator, color) catch {};
         return .{ .value = value, .accepted = accepted, .color = color };
     }
 };

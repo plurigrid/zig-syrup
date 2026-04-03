@@ -8,10 +8,27 @@
 //! wasm32-freestanding compatible. No allocator in hot path (except agent registry).
 
 const std = @import("std");
-const splitmix = @import("../splitmix_trit.zig");
+const splitmix = @import("splitmix.zig");
 
-const SplitMix64 = splitmix.SplitMix64;
-const Trit = splitmix.Trit;
+const SplitMix64 = struct {
+    state: u64,
+    pub fn init(seed: u64) SplitMix64 {
+        return .{ .state = seed };
+    }
+    pub fn next(self: *SplitMix64) u64 {
+        self.state +%= splitmix.GOLDEN;
+        var x = self.state;
+        x = (x ^ (x >> 30)) *% splitmix.MIX1;
+        x = (x ^ (x >> 27)) *% splitmix.MIX2;
+        return x ^ (x >> 31);
+    }
+};
+
+const Trit = enum(i2) {
+    minus = -1,
+    ergodic = 0,
+    plus = 1,
+};
 
 // ============================================================================
 // Constants
@@ -229,29 +246,31 @@ pub const SentinelMonitor = struct {
     agents: std.ArrayList(SwarmAgent),
     split_count: u64,
     file_op_count: u64,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) SentinelMonitor {
         return .{
-            .agents = std.ArrayList(SwarmAgent).init(allocator),
+            .agents = .{},
             .split_count = 0,
             .file_op_count = 0,
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *SentinelMonitor) void {
-        self.agents.deinit();
+        self.agents.deinit(self.allocator);
     }
 
     /// Register an agent for monitoring.
     pub fn registerAgent(self: *SentinelMonitor, agent: SwarmAgent) !void {
-        try self.agents.append(agent);
+        try self.agents.append(self.allocator, agent);
     }
 
     /// Register all three agents of a triad.
     pub fn registerTriad(self: *SentinelMonitor, triad: *const Triad) !void {
-        try self.agents.append(triad.minus);
-        try self.agents.append(triad.ergodic);
-        try self.agents.append(triad.plus);
+        try self.agents.append(self.allocator, triad.minus);
+        try self.agents.append(self.allocator, triad.ergodic);
+        try self.agents.append(self.allocator, triad.plus);
         self.split_count += 1;
     }
 

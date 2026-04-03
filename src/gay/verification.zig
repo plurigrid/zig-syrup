@@ -174,6 +174,7 @@ pub const StreamingVerifier = struct {
     hidden_dim: u32,
     chunks_pushed: u32,
     running_fp: u32,
+    allocator: std.mem.Allocator,
     chunk_fps: std.ArrayList(u32),
     expected_chunk_fps: std.ArrayList(u32),
     verified_chunks: u32,
@@ -181,21 +182,22 @@ pub const StreamingVerifier = struct {
 
     pub fn init(allocator: std.mem.Allocator, seed: u64, n_layers: u32, hidden_dim: u32) StreamingVerifier {
         return .{
+            .allocator = allocator,
             .seed = seed,
             .n_layers = n_layers,
             .hidden_dim = hidden_dim,
             .chunks_pushed = 0,
             .running_fp = 0,
-            .chunk_fps = std.ArrayList(u32).init(allocator),
-            .expected_chunk_fps = std.ArrayList(u32).init(allocator),
+            .chunk_fps = .{},
+            .expected_chunk_fps = .{},
             .verified_chunks = 0,
             .all_verified = true,
         };
     }
 
     pub fn deinit(self: *StreamingVerifier) void {
-        self.chunk_fps.deinit();
-        self.expected_chunk_fps.deinit();
+        self.chunk_fps.deinit(self.allocator);
+        self.expected_chunk_fps.deinit(self.allocator);
     }
 
     /// PUSH: Process a chunk of tokens.
@@ -219,14 +221,14 @@ pub const StreamingVerifier = struct {
 
         self.chunks_pushed += 1;
         self.running_fp ^= chunk_fp;
-        try self.chunk_fps.append(chunk_fp);
+        try self.chunk_fps.append(self.allocator, chunk_fp);
         return chunk_fp;
     }
 
     /// Set expected fingerprint for a chunk.
     pub fn setExpected(self: *StreamingVerifier, chunk_idx: usize, expected_fp: u32) !void {
         while (self.expected_chunk_fps.items.len <= chunk_idx) {
-            try self.expected_chunk_fps.append(0);
+            try self.expected_chunk_fps.append(self.allocator, 0);
         }
         self.expected_chunk_fps.items[chunk_idx] = expected_fp;
     }

@@ -342,13 +342,11 @@ pub const ChromaticEvent = struct {
         var h = sm64(seed ^ @as(u64, @intFromFloat(@round(t * 1000))) ^ @as(u64, i));
         const r_raw: f64 = @as(f64, @floatFromInt(h % 256)) / 255.0;
         h = sm64(h);
-        var g_raw: f64 = @as(f64, @floatFromInt(h % 256)) / 255.0;
+        const g_raw: f64 = @as(f64, @floatFromInt(h % 256)) / 255.0;
         h = sm64(h);
-        var b_raw: f64 = @as(f64, @floatFromInt(h % 256)) / 255.0;
 
         var r = r_raw;
         var g = g_raw;
-        _ = b_raw;
         if (accepted) {
             g = @min(1.0, g_raw + 0.3);
         } else {

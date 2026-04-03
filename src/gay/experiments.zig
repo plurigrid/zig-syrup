@@ -691,7 +691,7 @@ pub fn ultrametricXorDistance(a: u64, b: u64) f64 {
     const x = a ^ b;
     if (x == 0) return 0.0;
     // Ultrametric: d(a,b) = 2^(-leading zeros)
-    const lz: u6 = @clz(x);
+    const lz: u7 = @clz(x);
     return @exp2(-@as(f64, @floatFromInt(lz)));
 }
 
@@ -818,10 +818,10 @@ pub const SeedTriplet = struct {
     colors: [3]Color,
     emergent_color: Color,
 
-    pub fn init(base_seed: u64, i1: u64, i2: u64, i3: u64) SeedTriplet {
-        const s1 = mix64(base_seed ^ i1);
-        const s2 = mix64(base_seed ^ i2);
-        const s3 = mix64(base_seed ^ i3);
+    pub fn init(base_seed: u64, idx1: u64, idx2: u64, idx3: u64) SeedTriplet {
+        const s1 = mix64(base_seed ^ idx1);
+        const s2 = mix64(base_seed ^ idx2);
+        const s3 = mix64(base_seed ^ idx3);
         const xc = s1 ^ s2 ^ s3;
         return .{
             .seeds = .{ s1, s2, s3 },
@@ -844,10 +844,10 @@ pub const SeedTriplet = struct {
 pub fn generate69Triplets(base_seed: u64) [23]SeedTriplet {
     var triplets: [23]SeedTriplet = undefined;
     for (0..23) |t| {
-        const i1 = @as(u64, t * 3 + 1);
-        const i2 = @as(u64, t * 3 + 2);
-        const i3 = @as(u64, t * 3 + 3);
-        triplets[t] = SeedTriplet.init(base_seed, i1, i2, i3);
+        const idx1 = @as(u64, t * 3 + 1);
+        const idx2 = @as(u64, t * 3 + 2);
+        const idx3 = @as(u64, t * 3 + 3);
+        triplets[t] = SeedTriplet.init(base_seed, idx1, idx2, idx3);
     }
     return triplets;
 }

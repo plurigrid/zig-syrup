@@ -78,7 +78,7 @@ fn hashColor(seed: u64, extra: u64) Color {
     return .{ .r = r, .g = g, .b = b };
 }
 
-fn countOnes(x: u64) u6 {
+fn countOnes(x: u64) u7 {
     return @popCount(x);
 }
 
@@ -551,9 +551,11 @@ pub const StackifiedBrush = struct {
         return self.action_matrix[g % self.group_order][c % self.n_colors];
     }
 
+    const OrbitResult = struct { members: [MAX_COLORS]usize, len: usize };
+
     /// Find orbit of color c under group action
-    pub fn equivalenceClass(self: *const StackifiedBrush, c: usize) struct { members: [MAX_COLORS]usize, len: usize } {
-        var result: struct { members: [MAX_COLORS]usize, len: usize } = .{
+    pub fn equivalenceClass(self: *const StackifiedBrush, c: usize) OrbitResult {
+        var result: OrbitResult = .{
             .members = [_]usize{0} ** MAX_COLORS,
             .len = 0,
         };

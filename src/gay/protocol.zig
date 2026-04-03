@@ -7,6 +7,36 @@ const splitmix = @import("splitmix.zig");
 const splitmix64 = splitmix.splitmix64;
 const GAY_SEED: u64 = splitmix.GAY_SEED;
 
+// BoundedArray was removed from std in Zig 0.15; local drop-in replacement.
+fn BoundedArray(comptime T: type, comptime buffer_capacity: usize) type {
+    return struct {
+        const Self = @This();
+        buffer: [buffer_capacity]T = undefined,
+        len: usize = 0,
+
+        pub fn slice(self: anytype) switch (@TypeOf(&self.buffer)) {
+            *[buffer_capacity]T => []T,
+            *const [buffer_capacity]T => []const T,
+            else => unreachable,
+        } {
+            return self.buffer[0..self.len];
+        }
+
+        pub fn append(self: *Self, item: T) error{Overflow}!void {
+            if (self.len >= buffer_capacity) return error.Overflow;
+            self.buffer[self.len] = item;
+            self.len += 1;
+        }
+
+        pub fn orderedRemove(self: *Self, index: usize) T {
+            const val = self.buffer[index];
+            std.mem.copyForwards(T, self.buffer[index..], self.buffer[index + 1 .. self.len]);
+            self.len -= 1;
+            return val;
+        }
+    };
+}
+
 // ============================================================================
 // Color helpers
 // ============================================================================
@@ -51,7 +81,7 @@ pub const QUICPath = struct {
     probes_sent: u32,
     probes_received: u32,
     color: RGB,
-    pending_nonces: std.BoundedArray(u64, 64),
+    pending_nonces: BoundedArray(u64, 64),
 };
 
 pub const QUICConnection = struct {
@@ -61,7 +91,7 @@ pub const QUICConnection = struct {
     connection_id: u64,
     seed: u64,
     paths: [MAX_PATHS]?QUICPath,
-    probe_history: std.BoundedArray(QUICPathProbe, MAX_HISTORY),
+    probe_history: BoundedArray(QUICPathProbe, MAX_HISTORY),
     color: RGB,
 
     pub fn init(connection_id: u64, seed: u64) QUICConnection {

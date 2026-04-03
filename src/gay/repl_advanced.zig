@@ -299,28 +299,30 @@ pub const TestTracker = struct {
     metrics: std.ArrayList(TrackedMetric),
     total_colors: u64,
     total_iterations: u64,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, seed: u64) TestTracker {
         return .{
             .seed = seed,
-            .tests = std.ArrayList(TrackedTest).init(allocator),
-            .violations = std.ArrayList(TrackedViolation).init(allocator),
-            .metrics = std.ArrayList(TrackedMetric).init(allocator),
+            .tests = .{},
+            .violations = .{},
+            .metrics = .{},
             .total_colors = 0,
             .total_iterations = 0,
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *TestTracker) void {
-        self.tests.deinit();
-        self.violations.deinit();
-        self.metrics.deinit();
+        self.tests.deinit(self.allocator);
+        self.violations.deinit(self.allocator);
+        self.metrics.deinit(self.allocator);
     }
 
     pub fn track(self: *TestTracker, name_hash: u64, result: TestResult, duration_ns: u64, iterations: u32) !void {
         const fp = @as(u32, @truncate(splitmix64(name_hash ^ self.seed)));
         const color = hashColor(name_hash, self.seed);
-        try self.tests.append(.{
+        try self.tests.append(self.allocator, .{
             .name_hash = name_hash,
             .result = result,
             .duration_ns = duration_ns,
@@ -334,7 +336,7 @@ pub const TestTracker = struct {
 
     pub fn trackViolation(self: *TestTracker, vtype: ViolationType, desc_hash: u64) !void {
         const fp = @as(u32, @truncate(splitmix64(desc_hash ^ self.seed)));
-        try self.violations.append(.{
+        try self.violations.append(self.allocator, .{
             .violation_type = vtype,
             .description_hash = desc_hash,
             .timestamp = std.time.milliTimestamp(),
@@ -344,7 +346,7 @@ pub const TestTracker = struct {
     }
 
     pub fn trackMetric(self: *TestTracker, name_hash: u64, value: f64) !void {
-        try self.metrics.append(.{
+        try self.metrics.append(self.allocator, .{
             .name_hash = name_hash,
             .value = value,
             .timestamp = std.time.milliTimestamp(),
@@ -376,28 +378,30 @@ pub const FindingsSet = struct {
     findings: std.ArrayList(Finding),
     combined_fingerprint: u32,
     thread_count: u32,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) FindingsSet {
         return .{
-            .findings = std.ArrayList(Finding).init(allocator),
+            .findings = .{},
             .combined_fingerprint = 0,
             .thread_count = 0,
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *FindingsSet) void {
-        self.findings.deinit();
+        self.findings.deinit(self.allocator);
     }
 
     /// Monoid operation: combine two findings sets (XOR).
     pub fn merge(self: *FindingsSet, other: *const FindingsSet) !void {
-        try self.findings.appendSlice(other.findings.items);
+        try self.findings.appendSlice(self.allocator, other.findings.items);
         self.combined_fingerprint ^= other.combined_fingerprint;
         self.thread_count += other.thread_count;
     }
 
     pub fn addFinding(self: *FindingsSet, finding: Finding) !void {
-        try self.findings.append(finding);
+        try self.findings.append(self.allocator, finding);
         self.combined_fingerprint ^= finding.fingerprint;
         self.thread_count += 1;
     }
@@ -733,23 +737,25 @@ pub const ThreadGenealogy = struct {
     threads: std.ArrayList(AmpThread),
     combined_fingerprint: u32,
     root_hash: u64,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, root: AmpThread) !ThreadGenealogy {
-        var threads = std.ArrayList(AmpThread).init(allocator);
-        try threads.append(root);
+        var threads: std.ArrayList(AmpThread) = .{};
+        try threads.append(allocator, root);
         return .{
             .threads = threads,
             .combined_fingerprint = root.attestation,
             .root_hash = root.id_hash,
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *ThreadGenealogy) void {
-        self.threads.deinit();
+        self.threads.deinit(self.allocator);
     }
 
     pub fn addThread(self: *ThreadGenealogy, thread: AmpThread) !void {
-        try self.threads.append(thread);
+        try self.threads.append(self.allocator, thread);
         self.combined_fingerprint ^= thread.attestation;
     }
 
