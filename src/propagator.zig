@@ -205,6 +205,42 @@ pub fn neurofeedback_gate(args: []const ?f32) ?f32 {
 }
 
 // =============================================================================
+// Substrate Witness Gate
+// =============================================================================
+
+/// Result of a three-substrate witness comparison (tree-walk vs interaction net).
+/// Maps to the CellValue lattice: agreement → Value, disagreement → Contradiction.
+pub const SubstrateWitness = struct {
+    tree_walk_answer: bool,
+    inet_answer: bool,
+    both_halted: bool,
+    inet_trit_balanced: bool,
+
+    pub fn agrees(self: SubstrateWitness) bool {
+        return self.tree_walk_answer == self.inet_answer;
+    }
+};
+
+/// Witness gate: args[0] = tree-walk result (1.0=true, 0.0=false),
+/// args[1] = inet result, args[2] = trit sum from EEG epoch.
+/// Returns the trit sum if substrates agree, null (forcing contradiction
+/// via lattice merge on the output cell) if they disagree.
+pub fn witness_gate(args: []const ?f32) ?f32 {
+    const tw = args[0] orelse return null;
+    const inet = args[1] orelse return null;
+    const trit_sum = args[2] orelse return null;
+
+    const tw_bool = tw > 0.5;
+    const inet_bool = inet > 0.5;
+
+    if (tw_bool == inet_bool) {
+        return trit_sum;
+    } else {
+        return null; // Substrates disagree — propagator produces nothing
+    }
+}
+
+// =============================================================================
 // Spatial Propagator Functions
 // =============================================================================
 
@@ -367,4 +403,60 @@ test "focus_brightness mapping" {
     try std.testing.expectEqual(@as(?f32, 1.0), focus_brightness(&.{1.0}));
     try std.testing.expectEqual(@as(?f32, 0.6), focus_brightness(&.{0.0}));
     try std.testing.expectApproxEqAbs(@as(f32, 0.8), focus_brightness(&.{0.5}).?, 0.001);
+}
+
+test "witness_gate substrates agree" {
+    // Both say true (1.0), trit sum = 5.0 → passes through
+    const result = witness_gate(&.{ 1.0, 1.0, 5.0 });
+    try std.testing.expectEqual(@as(?f32, 5.0), result);
+}
+
+test "witness_gate substrates disagree" {
+    // tree-walk=true, inet=false → null (Church-Turing divergence)
+    const result = witness_gate(&.{ 1.0, 0.0, 5.0 });
+    try std.testing.expect(result == null);
+}
+
+test "witness_gate with lattice cell contradiction" {
+    const allocator = std.testing.allocator;
+    const LCell = Cell(f32, latticeMerge(f32));
+
+    // Simulate: tree-walk says trit_sum=5, inet says trit_sum=3
+    var tw_cell = LCell.init(allocator, "tree_walk");
+    defer tw_cell.deinit();
+    var inet_cell = LCell.init(allocator, "inet");
+    defer inet_cell.deinit();
+
+    try tw_cell.set_content(5.0);
+    try inet_cell.set_content(5.0);
+
+    // Same value: no contradiction
+    try std.testing.expect(!tw_cell.get_cell_value().isContradiction());
+
+    // Different substrate answers merge to contradiction
+    var merged_cell = LCell.init(allocator, "merged");
+    defer merged_cell.deinit();
+    try merged_cell.set_content(5.0); // tree-walk says 5
+    try merged_cell.set_content(3.0); // inet says 3
+    try std.testing.expect(merged_cell.get_cell_value().isContradiction());
+}
+
+test "SubstrateWitness agrees" {
+    const w = SubstrateWitness{
+        .tree_walk_answer = true,
+        .inet_answer = true,
+        .both_halted = true,
+        .inet_trit_balanced = true,
+    };
+    try std.testing.expect(w.agrees());
+}
+
+test "SubstrateWitness disagrees" {
+    const w = SubstrateWitness{
+        .tree_walk_answer = true,
+        .inet_answer = false,
+        .both_halted = true,
+        .inet_trit_balanced = true,
+    };
+    try std.testing.expect(!w.agrees());
 }

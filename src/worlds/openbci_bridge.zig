@@ -73,6 +73,35 @@ pub const EEGSample = struct {
     accel: ?[3]f32,
     /// Sample number (for synchronization)
     sample_num: u32,
+    /// Glimpse timestamp (141,120,000 ticks/s). Null if not glimpse-stamped.
+    glimpse_tick: ?u64 = null,
+};
+
+/// Trit classification for a single EEG channel within an epoch.
+pub const ChannelTrit = enum(i2) {
+    rail = -1, // Saturated (|uV| > 90000)
+    clean = 0, // Normal range
+    flicker = 1, // High variance (std > 50000 uV)
+};
+
+/// Per-epoch substrate witness result, matching nanoclj semi-decide output.
+pub const EpochWitness = struct {
+    /// Glimpse tick at epoch start
+    epoch_start_glimpse: u64,
+    /// Per-channel trit classifications
+    channel_trits: [EEGChannel.CYTON_COUNT]ChannelTrit,
+    /// Sum of trits
+    trit_sum: i8,
+    /// Tree-walk substrate answer
+    tree_walk_answer: bool,
+    /// Interaction net substrate answer
+    inet_answer: bool,
+    /// Whether inet reduction preserved GF(3) trit balance
+    inet_trit_balanced: bool,
+
+    pub fn substratesAgree(self: EpochWitness) bool {
+        return self.tree_walk_answer == self.inet_answer;
+    }
 };
 
 /// Processed brain state
@@ -604,4 +633,48 @@ test "neurofeedback reward" {
     
     const reward = nf.calculateReward(state);
     try testing.expect(reward > 0.9); // Should be close to 1.0 for exact match
+}
+
+test "glimpse-stamped EEG sample" {
+    const sample = EEGSample{
+        .timestamp = 1000,
+        .channels = .{0} ** EEGChannel.COUNT,
+        .accel = null,
+        .sample_num = 0,
+        .glimpse_tick = 564_480, // Second sample at 250 Hz
+    };
+    try testing.expectEqual(@as(?u64, 564_480), sample.glimpse_tick);
+}
+
+test "channel trit classification" {
+    // Rail: saturated channel
+    try testing.expectEqual(@as(i2, -1), @intFromEnum(ChannelTrit.rail));
+    // Clean: normal
+    try testing.expectEqual(@as(i2, 0), @intFromEnum(ChannelTrit.clean));
+    // Flicker: high variance
+    try testing.expectEqual(@as(i2, 1), @intFromEnum(ChannelTrit.flicker));
+}
+
+test "epoch witness substrate agreement" {
+    // Real Cyton pattern: [+1 0 +1 +1 +1 +1 +1 -1] sum=+5
+    const w = EpochWitness{
+        .epoch_start_glimpse = 0,
+        .channel_trits = .{ .flicker, .clean, .flicker, .flicker, .flicker, .flicker, .flicker, .rail },
+        .trit_sum = 5,
+        .tree_walk_answer = true,
+        .inet_answer = false,
+        .inet_trit_balanced = true,
+    };
+    try testing.expect(!w.substratesAgree());
+
+    // When both agree
+    const w2 = EpochWitness{
+        .epoch_start_glimpse = 141_120_000,
+        .channel_trits = .{.clean} ** 8,
+        .trit_sum = 0,
+        .tree_walk_answer = true,
+        .inet_answer = true,
+        .inet_trit_balanced = true,
+    };
+    try testing.expect(w2.substratesAgree());
 }
