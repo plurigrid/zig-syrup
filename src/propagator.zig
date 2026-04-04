@@ -293,6 +293,48 @@ pub fn classifier_gate(args: []const ?f32) ?f32 {
     }
 }
 
+/// Epochal time witness: encodes Hickey/Fogus model where identity is a
+/// succession of immutable values, and the transition function f(old)->new
+/// is itself substrate-dependent. Each epoch is a value; the identity is
+/// the recording session; perception is the substrate's readback.
+pub const EpochalWitness = struct {
+    epoch: u32,
+    glimpse_start: u64, // ticks at epoch start (564,480 per sample @ 250Hz)
+    trit_sum: i8, // sum of per-channel trits for this epoch
+    substrate: SubstrateWitness, // four-substrate comparison
+    classifier: ?ClassifierWitness, // null if classifiers agree
+
+    /// The epoch is well-posed if all substrates and classifiers agree.
+    pub fn isWellPosed(self: EpochalWitness) bool {
+        if (!self.substrate.agrees()) return false;
+        if (self.classifier) |c| return c.agrees();
+        return true;
+    }
+
+    /// Count the number of distinct ill-posedness sources.
+    pub fn illPosedCount(self: EpochalWitness) u8 {
+        var n: u8 = 0;
+        if (!self.substrate.agrees()) n += 1; // Church-Turing divergence
+        if (self.classifier) |c| {
+            if (!c.agrees()) n += 1; // Classifier divergence
+        }
+        return n;
+    }
+};
+
+/// Epochal gate: args[0] = epoch trit sum, args[1] = substrate agreement (1/0),
+/// args[2] = classifier agreement (1/0). Returns trit sum only if both agree.
+pub fn epochal_gate(args: []const ?f32) ?f32 {
+    const trit_sum = args[0] orelse return null;
+    const substrate_ok = args[1] orelse return null;
+    const classifier_ok = args[2] orelse return null;
+
+    if (substrate_ok > 0.5 and classifier_ok > 0.5) {
+        return trit_sum;
+    }
+    return null; // ill-posed epoch: at least one divergence source
+}
+
 // =============================================================================
 // Spatial Propagator Functions
 // =============================================================================
@@ -554,4 +596,64 @@ test "classifier_gate diverges" {
     const args = [_]?f32{ 0.0, 1.0 };
     const result = classifier_gate(&args);
     try std.testing.expect(result == null);
+}
+
+test "EpochalWitness well-posed" {
+    const ew = EpochalWitness{
+        .epoch = 5,
+        .glimpse_start = 5 * 250 * 564_480,
+        .trit_sum = 5,
+        .substrate = .{
+            .tree_walk_answer = true,
+            .inet_answer = true,
+            .lokke_answer = true,
+            .both_halted = true,
+            .inet_trit_balanced = true,
+        },
+        .classifier = null, // classifiers agree (no divergence)
+    };
+    try std.testing.expect(ew.isWellPosed());
+    try std.testing.expectEqual(@as(u8, 0), ew.illPosedCount());
+}
+
+test "EpochalWitness double ill-posed (E15)" {
+    // Epoch 15: Church-Turing divergence + classifier divergence
+    const ew = EpochalWitness{
+        .epoch = 15,
+        .glimpse_start = 15 * 250 * 564_480,
+        .trit_sum = 4,
+        .substrate = .{
+            .tree_walk_answer = true,
+            .inet_answer = false, // inet diverges
+            .lokke_answer = true,
+            .both_halted = true,
+            .inet_trit_balanced = true,
+        },
+        .classifier = .{
+            .channel = 7,
+            .range_trit = 0, // range says clean
+            .stddev_trit = 1, // stddev says flicker
+        },
+    };
+    try std.testing.expect(!ew.isWellPosed());
+    try std.testing.expectEqual(@as(u8, 2), ew.illPosedCount());
+}
+
+test "epochal_gate well-posed passes" {
+    const args = [_]?f32{ 5.0, 1.0, 1.0 };
+    const result = epochal_gate(&args);
+    try std.testing.expect(result != null);
+    try std.testing.expectEqual(@as(f32, 5.0), result.?);
+}
+
+test "epochal_gate ill-posed blocks" {
+    // substrate disagrees
+    const args1 = [_]?f32{ 5.0, 0.0, 1.0 };
+    try std.testing.expect(epochal_gate(&args1) == null);
+    // classifier disagrees
+    const args2 = [_]?f32{ 4.0, 1.0, 0.0 };
+    try std.testing.expect(epochal_gate(&args2) == null);
+    // both disagree
+    const args3 = [_]?f32{ 4.0, 0.0, 0.0 };
+    try std.testing.expect(epochal_gate(&args3) == null);
 }

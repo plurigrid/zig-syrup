@@ -810,3 +810,80 @@ test "19. classifier substrate divergence on channel 7 epoch 15" {
     try cell.set_content(5.0);
     try std.testing.expect(cell.get_cell_value().isContradiction());
 }
+
+// ============================================================================
+// TEST 20: Epochal time model — 29 epochs with ill-posedness classification
+// Hickey/Fogus: identity = series of immutable values; perception = snapshot
+// ============================================================================
+test "20. epochal time witness — 29 Cyton epochs with ill-posedness" {
+    const glimpse = @import("glimpse");
+    const TICKS_PER_SAMPLE = glimpse.TICKS_PER_SECOND / 250;
+
+    // Build 29 epochal witnesses from real Cyton patterns
+    const EPOCHS = 29;
+    var witnesses: [EPOCHS]propagator.EpochalWitness = undefined;
+    for (0..EPOCHS) |ep| {
+        const epoch: u32 = @intCast(ep);
+        // All epochs: inet diverges from tree-walk/lokke (Church-Turing)
+        const substrate = propagator.SubstrateWitness{
+            .tree_walk_answer = true,
+            .inet_answer = false,
+            .lokke_answer = true,
+            .both_halted = true,
+            .inet_trit_balanced = true,
+        };
+
+        // Epochs 15-19: Ch7 classifier divergence (range=0, stddev=1)
+        const classifier: ?propagator.ClassifierWitness = if (ep >= 15 and ep <= 19)
+            .{ .channel = 7, .range_trit = 0, .stddev_trit = 1 }
+        else
+            null;
+
+        // Trit sums: E0-E1 sum=3, E15-E19 sum=4, rest sum=5
+        const trit_sum: i8 = if (ep <= 1) 3 else if (ep >= 15 and ep <= 19) 4 else 5;
+
+        witnesses[ep] = .{
+            .epoch = epoch,
+            .glimpse_start = @as(u64, ep) * 250 * TICKS_PER_SAMPLE,
+            .trit_sum = trit_sum,
+            .substrate = substrate,
+            .classifier = classifier,
+        };
+    }
+
+    // Count ill-posedness sources across all epochs
+    var well_posed: u32 = 0;
+    var single_ill: u32 = 0; // Church-Turing only
+    var double_ill: u32 = 0; // Church-Turing + classifier
+    for (witnesses) |w| {
+        const count = w.illPosedCount();
+        if (count == 0) {
+            well_posed += 1;
+        } else if (count == 1) {
+            single_ill += 1;
+        } else {
+            double_ill += 1;
+        }
+    }
+
+    // All 29 epochs have at least Church-Turing divergence
+    try std.testing.expectEqual(@as(u32, 0), well_posed);
+    // 24 epochs: only Church-Turing (E0-E14, E20-E28)
+    try std.testing.expectEqual(@as(u32, 24), single_ill);
+    // 5 epochs: double ill-posedness (E15-E19: CT + classifier)
+    try std.testing.expectEqual(@as(u32, 5), double_ill);
+
+    // Verify glimpse timeline: last epoch starts at expected tick
+    const last = witnesses[28];
+    try std.testing.expectEqual(@as(u64, 28 * 250 * TICKS_PER_SAMPLE), last.glimpse_start);
+
+    // Epochal gate: well-posed epochs would pass, ill-posed block
+    // All 29 are ill-posed (substrate disagrees), so all return null
+    for (witnesses) |w| {
+        const sub_ok: f32 = if (w.substrate.agrees()) 1.0 else 0.0;
+        const cls_ok: f32 = if (w.classifier) |c| (if (c.agrees()) @as(f32, 1.0) else @as(f32, 0.0)) else 1.0;
+        const args = [_]?f32{ @as(f32, @floatFromInt(w.trit_sum)), sub_ok, cls_ok };
+        const result = propagator.epochal_gate(&args);
+        try std.testing.expect(result == null); // all ill-posed
+    }
+}
