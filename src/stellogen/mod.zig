@@ -58,7 +58,8 @@ pub fn compile(allocator: std.mem.Allocator, source: []const u8) ![]const u8 {
     var compiler = try Compiler.init(allocator);
     defer compiler.deinit();
 
-    return compiler.compileProgram(program);
+    const raw = try compiler.compileProgram(program);
+    return try allocator.dupe(u8, raw);
 }
 
 /// Parse and execute Stellogen source (interpreted mode)
@@ -109,11 +110,12 @@ pub fn isOk(result: Constellation) bool {
 // ============================================================================
 
 test "compile simple program" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const source = "(def nat {[(+nat z)] [(-nat X) (+nat (s X))]})";
 
     const wasm = try compile(allocator, source);
-    defer allocator.free(wasm);
 
     // Check WASM magic
     try std.testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x61, 0x73, 0x6D }, wasm[0..4]);

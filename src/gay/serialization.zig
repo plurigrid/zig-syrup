@@ -202,7 +202,8 @@ pub fn encodeCellState(cs: CellState, allocator: Allocator) !Value {
     const label = try allocator.create(Value);
     label.* = Value.fromSymbol("gay:cell");
     const fields = try allocator.alloc(Value, 3);
-    fields[0] = Value.fromString(cs.name);
+    const name_dupe = try allocator.dupe(u8, cs.name);
+    fields[0] = Value.fromString(name_dupe);
     fields[1] = try encodePropValue(cs.value, allocator);
     fields[2] = Value.fromInteger(@as(i64, @intCast(cs.color)));
     return Value.fromRecord(label, fields);
@@ -254,9 +255,9 @@ pub fn encodePalette(palette: ColorPalette, allocator: Allocator) !Value {
     }
 
     const fields = try allocator.alloc(Value, 4);
-    fields[0] = Value.fromString(palette.name);
+    fields[0] = Value.fromString(try allocator.dupe(u8, palette.name));
     fields[1] = Value.fromInteger(@as(i64, @intCast(palette.seed)));
-    fields[2] = Value.fromString(palette.colorspace);
+    fields[2] = Value.fromString(try allocator.dupe(u8, palette.colorspace));
     fields[3] = Value.fromList(color_vals);
 
     return Value.fromRecord(label, fields);
