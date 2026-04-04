@@ -873,10 +873,9 @@ fn countFlipPrimes(n: u32) struct { index: u32, total: u32 } {
     var count: u32 = 0;
     var index: u32 = 0;
     var found = false;
-    // Sieve-free: just check each prime up to n
     var p: u32 = 2;
     while (p <= n) : (p += 1) {
-        if (mobius(@intCast(p)) != -1) continue; // not prime (μ(p)=-1 iff prime)
+        if (!isPrime(p)) continue;
         if (mertensTrit(p - 1) == -1 and mertensTrit(p) == 1) {
             if (p == n) {
                 index = count;
@@ -932,8 +931,8 @@ test "mertens at canonical seed" {
     try testing.expectEqual(@as(i8, -1), boundary.exclusive_trit);
     try testing.expectEqual(@as(i8, 1), boundary.inclusive_trit);
 
-    // 1069 is the 120th Π→Σ flip prime (0-indexed)
-    try testing.expectEqual(@as(u32, 120), boundary.flip_index);
+    // 1069 is the 69th Π→Σ flip prime (0-indexed)
+    try testing.expectEqual(@as(u32, 69), boundary.flip_index);
 }
 
 test "prime realizers" {
