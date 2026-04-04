@@ -1242,6 +1242,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Arithmetical hierarchy (Σ/Π/Δ classification, morphism detection)
+    const arithmetical_mod = b.addModule("arithmetical", .{
+        .root_source_file = b.path("src/arithmetical.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    arithmetical_mod.addImport("propagator", propagator_mod);
+
     // Color Bandwidth module (CIEDE2000 perceptual channel capacity)
     const color_bandwidth_mod = b.addModule("color_bandwidth", .{
         .root_source_file = b.path("src/color_bandwidth.zig"),
@@ -1249,6 +1257,19 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     _ = color_bandwidth_mod;
+
+    const arithmetical_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/arithmetical.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "propagator", .module = propagator_mod },
+        },
+    });
+    const arithmetical_tests = b.addTest(.{ .root_module = arithmetical_test_mod });
+    const run_arithmetical_tests = b.addRunArtifact(arithmetical_tests);
+    const test_arithmetical_step = b.step("test-arithmetical", "Run arithmetical hierarchy tests");
+    test_arithmetical_step.dependOn(&run_arithmetical_tests.step);
 
     const color_bandwidth_test_mod = b.createModule(.{
         .root_source_file = b.path("src/color_bandwidth.zig"),
