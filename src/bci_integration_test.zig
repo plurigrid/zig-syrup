@@ -833,11 +833,11 @@ test "20. epochal time witness — 29 Cyton epochs with ill-posedness" {
             .inet_trit_balanced = true,
         };
 
-        // Epochs 15-19: Ch7 classifier divergence (range=0, stddev=1)
-        const classifier: ?propagator.ClassifierWitness = if (ep >= 15 and ep <= 19)
-            .{ .channel = 7, .range_trit = 0, .stddev_trit = 1 }
-        else
-            null;
+        // ALL epochs: Ch2 classifier divergence (range=-1 rail, stddev=+1 flicker)
+        // Lokke epochal witness confirmed: range vs stddev disagree on Ch2
+        // in every epoch. Ch6/Ch7 diverge in some epochs too.
+        const classifier: ?propagator.ClassifierWitness =
+            .{ .channel = 2, .range_trit = -1, .stddev_trit = 1 };
 
         // Trit sums: E0-E1 sum=3, E15-E19 sum=4, rest sum=5
         const trit_sum: i8 = if (ep <= 1) 3 else if (ep >= 15 and ep <= 19) 4 else 5;
@@ -868,10 +868,10 @@ test "20. epochal time witness — 29 Cyton epochs with ill-posedness" {
 
     // All 29 epochs have at least Church-Turing divergence
     try std.testing.expectEqual(@as(u32, 0), well_posed);
-    // 24 epochs: only Church-Turing (E0-E14, E20-E28)
-    try std.testing.expectEqual(@as(u32, 24), single_ill);
-    // 5 epochs: double ill-posedness (E15-E19: CT + classifier)
-    try std.testing.expectEqual(@as(u32, 5), double_ill);
+    // 0 single: Lokke revealed Ch2 diverges in ALL epochs, not just E15-E19
+    try std.testing.expectEqual(@as(u32, 0), single_ill);
+    // All 29 double ill-posed: Church-Turing + classifier (Ch2 range/stddev)
+    try std.testing.expectEqual(@as(u32, 29), double_ill);
 
     // Verify glimpse timeline: last epoch starts at expected tick
     const last = witnesses[28];
