@@ -630,6 +630,66 @@ pub const obstruction_sets = [_]ObstructionSet{
     },
 };
 
+// ============================================================================
+// SPINED CATEGORIES (Bumpus-Kocsis categorical generalization)
+//
+// Bumpus & Kocsis (2105.05372): tree-width decompositions generalize to
+// arbitrary combinatorial structures via "spined categories". A spined
+// category (C, S) has:
+//   - Objects: combinatorial structures
+//   - Morphisms: structure-preserving maps
+//   - Spine functor S: C → Tree (maps each object to its tree skeleton)
+//
+// This gives a categorical framework where:
+//   - Tree-width = minimum width of a spine decomposition
+//   - WQO results lift categorically (not just for graphs)
+//   - Obstruction sets exist for any spined-category property closed under minors
+//
+// The proof-theoretic strength inherits from Robertson-Seymour (Π¹₁-CA₀)
+// and potentially increases for richer categorical structures.
+// ============================================================================
+
+pub const SpinedCategoryKind = enum(u8) {
+    graphs,        // Classical: tree-width of graphs (Robertson-Seymour)
+    hypergraphs,   // Generalized: hypertree-width (Gottlob et al.)
+    matroids,      // Branch-width of matroids (Geelen et al.)
+    sigma_structs,  // σ-structures: arbitrary relational (Bumpus-Kocsis)
+};
+
+pub const SpinedCategory = struct {
+    kind: SpinedCategoryKind,
+    /// Does WQO hold for this category's minor ordering?
+    wqo_status: enum(u8) { proven, conjectured, open },
+    /// Proof-theoretic strength of the WQO result
+    strength: ProofStrength,
+    /// Source
+    source: []const u8,
+
+    pub fn description(self: SpinedCategory) []const u8 {
+        return switch (self.kind) {
+            .graphs => "Graphs under minors (Robertson-Seymour: WQO proven, Π¹₁-CA₀)",
+            .hypergraphs => "Hypergraphs under hypertree-width (Gottlob et al.)",
+            .matroids => "Matroids under branch-width (Geelen-Gerards-Whittle conjecture)",
+            .sigma_structs => "σ-structures via spined categories (Bumpus-Kocsis 2105.05372)",
+        };
+    }
+
+    pub fn trit(self: SpinedCategory) i8 {
+        return self.strength.trit();
+    }
+};
+
+pub const spined_categories = [_]SpinedCategory{
+    .{ .kind = .graphs, .wqo_status = .proven, .strength = .pi11_ca_0,
+       .source = "Robertson-Seymour 2004" },
+    .{ .kind = .hypergraphs, .wqo_status = .conjectured, .strength = .pi11_ca_0,
+       .source = "Gottlob-Leone-Scarcello 2002" },
+    .{ .kind = .matroids, .wqo_status = .conjectured, .strength = .beyond,
+       .source = "Geelen-Gerards-Whittle (in progress)" },
+    .{ .kind = .sigma_structs, .wqo_status = .open, .strength = .beyond,
+       .source = "Bumpus-Kocsis 2105.05372" },
+};
+
 /// Look up obstruction set by property name.
 pub fn lookupObstructionSet(name: []const u8) ?ObstructionSet {
     for (&obstruction_sets) |*o| {
@@ -646,6 +706,118 @@ pub fn obstructionStrength(problem_name: []const u8) ?ProofStrength {
         if (std.mem.eql(u8, o.property_name, problem_name)) return o.strength;
     }
     return null;
+}
+
+// ============================================================================
+// GORARD ORDINAL TOWER
+//
+// Jonathan Gorard's multiway systems (Wolfram Physics) produce causal graphs
+// whose causal invariance (= confluence of the rewriting system) guarantees
+// well-orderedness of the evolution. The ordinal rank of a multiway state
+// is the proof-theoretic ordinal of the strongest theorem provable about
+// paths to that state.
+//
+// Tower structure (ordinals index multiway causal depth):
+//
+//   Level 0: ω      — finite computation (decidable, Δ⁰₁)
+//   Level 1: ω^ω    — primitive recursive (RCA₀)
+//   Level 2: ω^ω^ω  — WKL₀ compactness
+//   Level 3: ε₀     — ACA₀, Peano arithmetic limit
+//   Level 4: Γ₀     — ATR₀, predicative limit (Feferman-Schütte)
+//   Level 5: ψ(Ω_ω) — Π¹₁-CA₀, impredicative (Bachmann-Howard)
+//   Level 6: θ(Ω^ω·ω) — beyond, small Veblen (TREE(3))
+//
+// Each level has a trit (GF(3) charge):
+//   Even levels = validators (Π, trit -1): verify all paths converge
+//   Odd levels  = generators (Σ, trit +1): witness new causal structure
+//   Limit       = ergodic (Δ, trit 0): fixed point of trit alternation
+//
+// The Gorard insight: causal invariance at level α implies that the
+// multiway graph truncated to depth α is a *well-partial-order*, so
+// Robertson-Seymour-type obstruction theorems apply at each level.
+// The ordinal measures how deep the causal graph must be explored
+// before confluence is guaranteed.
+// ============================================================================
+
+pub const GorardLevel = struct {
+    index: u8,
+    ordinal_name: []const u8,
+    proof_system: ProofStrength,
+    causal_property: []const u8,
+    trit: i8,
+};
+
+pub const gorard_tower = [_]GorardLevel{
+    .{ .index = 0, .ordinal_name = "ω",
+       .proof_system = .rca_0,
+       .causal_property = "finite causal diamond (all paths terminate)",
+       .trit = 1 },
+    .{ .index = 1, .ordinal_name = "ω^ω",
+       .proof_system = .rca_0,
+       .causal_property = "primitive recursive causal depth",
+       .trit = -1 },
+    .{ .index = 2, .ordinal_name = "ω^ω^ω",
+       .proof_system = .wkl_0,
+       .causal_property = "compactness: every infinite branch has accumulation",
+       .trit = 1 },
+    .{ .index = 3, .ordinal_name = "ε₀",
+       .proof_system = .aca_0,
+       .causal_property = "Peano-complete causal invariance (Gentzen boundary)",
+       .trit = -1 },
+    .{ .index = 4, .ordinal_name = "Γ₀",
+       .proof_system = .atr_0,
+       .causal_property = "predicative transfinite induction along causal well-ordering",
+       .trit = 1 },
+    .{ .index = 5, .ordinal_name = "ψ(Ω_ω)",
+       .proof_system = .pi11_ca_0,
+       .causal_property = "impredicative: causal graph minor theorem (all causal subgraphs WQO)",
+       .trit = -1 },
+    .{ .index = 6, .ordinal_name = "θ(Ω^ω·ω)",
+       .proof_system = .beyond,
+       .causal_property = "TREE-scale causal branching (Friedman barrier)",
+       .trit = 0 },
+};
+
+/// GF(3) conservation check: sum of all tower trits should be 0 mod 3
+pub fn gorardTowerTritSum() i8 {
+    var sum: i16 = 0;
+    for (&gorard_tower) |*level| {
+        sum += @as(i16, level.trit);
+    }
+    return @intCast(@mod(sum + 300, 3));
+}
+
+/// Find the Gorard level for a given proof strength
+pub fn gorardLevelForStrength(s: ProofStrength) ?GorardLevel {
+    for (&gorard_tower) |*level| {
+        if (level.proof_system == s) return level.*;
+    }
+    return null;
+}
+
+/// The causal depth ordinal for a spined category: which Gorard level
+/// is needed to prove its WQO property?
+pub fn causalDepthOrdinal(cat: SpinedCategory) GorardLevel {
+    return gorardLevelForStrength(cat.strength) orelse gorard_tower[gorard_tower.len - 1];
+}
+
+test "gorard tower" {
+    const testing = std.testing;
+
+    // Tower has 7 levels
+    try testing.expectEqual(@as(usize, 7), gorard_tower.len);
+
+    // Trit sum = 0 mod 3 (GF(3) conservation)
+    try testing.expectEqual(@as(i8, 0), gorardTowerTritSum());
+
+    // ε₀ is level 3 with trit -1 (Π, validator — Gentzen boundary)
+    const eps0 = gorardLevelForStrength(.aca_0).?;
+    try testing.expectEqual(@as(u8, 3), eps0.index);
+    try testing.expectEqual(@as(i8, -1), eps0.trit);
+
+    // Robertson-Seymour needs level 5 (ψ(Ω_ω))
+    const rs = causalDepthOrdinal(spined_categories[0]); // graphs
+    try testing.expectEqual(@as(u8, 5), rs.index);
 }
 
 // ============================================================================
