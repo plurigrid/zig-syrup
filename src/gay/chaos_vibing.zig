@@ -572,7 +572,9 @@ test "CausalChain breakChain hash_xor_bomb" {
 
 test "CausalChain breakChain causal_reverse" {
     var chain = CausalChain.init(GAY_SEED, 20);
-    const before = [_]u64{ chain.steps[5], chain.steps[6], chain.steps[7] };
+    // causal_reverse reverses steps[index..index+6], so steps[5..11]
+    const before_5 = chain.steps[5];
+    const before_10 = chain.steps[10];
     var rng: u64 = 99;
     const fault = Fault{
         .class = .causal,
@@ -582,8 +584,9 @@ test "CausalChain breakChain causal_reverse" {
         .param = 0,
     };
     chain.breakChain(5, fault, &rng);
-    // Reversed section — last element of before should now be first
-    try std.testing.expectEqual(chain.steps[5], before[2]);
+    // After reversal of [5..11]: steps[5] = old steps[10], steps[10] = old steps[5]
+    try std.testing.expectEqual(chain.steps[5], before_10);
+    try std.testing.expectEqual(chain.steps[10], before_5);
 }
 
 test "CausalChain verify detects breakage" {
@@ -608,16 +611,16 @@ test "injectChaos injects faults" {
     const config = ChaosConfig{
         .n_chains = 1,
         .chain_length = 50,
-        .faults_per_chain = 10,
+        .faults_per_chain = 50,
         .intensity = 1.0,
         .seed = 0xCAFE,
-        .fault_classes = 0b1000101, // seed + hash + causal
+        .fault_classes = 0b1111111, // all classes enabled
     };
     var chain = CausalChain.init(0xBEEF, 50);
     var rng: u64 = config.seed;
     var faults: [MAX_FAULTS_PER_CHAIN]Fault = undefined;
     const n = injectChaos(&chain, config, &rng, &faults);
-    // With intensity 1.0 and 10 attempts, should get some faults
+    // With intensity 1.0, all classes, and 50 attempts, must inject some faults
     try std.testing.expect(n > 0);
 }
 

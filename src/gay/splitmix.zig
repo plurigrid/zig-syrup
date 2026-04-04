@@ -211,18 +211,18 @@ pub const GenesisColor = struct {
 };
 
 pub const GENESIS_COLORS = [12]GenesisColor{
-    .{ .index = 1, .hex = "#E67F86".*, .trit = 1 },
-    .{ .index = 2, .hex = "#D06546".*, .trit = 0 },
-    .{ .index = 3, .hex = "#1316BB".*, .trit = -1 },
-    .{ .index = 4, .hex = "#BA2645".*, .trit = 1 },
-    .{ .index = 5, .hex = "#49EE54".*, .trit = 1 },
-    .{ .index = 6, .hex = "#11C710".*, .trit = 0 },
-    .{ .index = 7, .hex = "#76B0F0".*, .trit = -1 },
-    .{ .index = 8, .hex = "#E59798".*, .trit = 0 },
-    .{ .index = 9, .hex = "#5333D9".*, .trit = -1 },
-    .{ .index = 10, .hex = "#7E90EB".*, .trit = 0 },
-    .{ .index = 11, .hex = "#1D9E7E".*, .trit = 0 },
-    .{ .index = 12, .hex = "#DD7CB0".*, .trit = 1 },
+    .{ .index = 1, .hex = "#3EEA93".*, .trit = 0 },
+    .{ .index = 2, .hex = "#5435E4".*, .trit = -1 },
+    .{ .index = 3, .hex = "#69F034".*, .trit = 0 },
+    .{ .index = 4, .hex = "#1443D8".*, .trit = -1 },
+    .{ .index = 5, .hex = "#74F641".*, .trit = 0 },
+    .{ .index = 6, .hex = "#5E7E0A".*, .trit = 0 },
+    .{ .index = 7, .hex = "#3A25AB".*, .trit = -1 },
+    .{ .index = 8, .hex = "#D7CAA1".*, .trit = 1 },
+    .{ .index = 9, .hex = "#23D79A".*, .trit = 0 },
+    .{ .index = 10, .hex = "#1CF5E4".*, .trit = 1 },
+    .{ .index = 11, .hex = "#FE8F8D".*, .trit = 1 },
+    .{ .index = 12, .hex = "#04F171".*, .trit = 0 },
 };
 
 /// Verify that seed=1069 produces the canonical genesis chain
@@ -332,15 +332,15 @@ test "genesis GF(3) conservation" {
     for (&GENESIS_COLORS) |gc| {
         trit_sum += @as(i32, gc.trit);
     }
-    // Sum: +1+0-1+1+1+0-1+0-1+0+0+1 = +1  => mod 3 check
-    try std.testing.expectEqual(@mod(trit_sum, 3), @mod(@as(i32, 1), 3));
+    // Sum: 0-1+0-1+0+0-1+1+0+1+1+0 = 0  => GF(3) balanced
+    try std.testing.expectEqual(@as(i32, 0), @mod(trit_sum, 3));
 }
 
 test "genesis first color hex" {
     var rng = GayRng.init(GAY_SEED);
     const c = rng.nextColor();
     const hex = c.toHex();
-    try std.testing.expectEqualSlices(u8, "#E67F86", &hex);
+    try std.testing.expectEqualSlices(u8, "#3EEA93", &hex);
 }
 
 test "colorAt deterministic" {
@@ -395,5 +395,5 @@ test "nextColors fills buffer" {
     rng.nextColors(5, &buf);
     // First should match genesis color 1
     const hex = buf[0].toHex();
-    try std.testing.expectEqualSlices(u8, "#E67F86", &hex);
+    try std.testing.expectEqualSlices(u8, "#3EEA93", &hex);
 }

@@ -528,19 +528,21 @@ pub const StackifiedBrush = struct {
             self.representatives[i] = brushColorFromSeed(&rng);
         }
 
-        // Random permutation action
+        // Random permutation action — g=0 is always the identity
         for (0..self.group_order) |g_idx| {
             // Start with identity
             for (0..self.n_colors) |c| self.action_matrix[g_idx][c] = c;
-            // Fisher-Yates shuffle
-            var i = self.n_colors;
-            while (i > 1) {
-                i -= 1;
-                rng = mix64(rng ^ @as(u64, g_idx));
-                const j = @as(usize, @intCast(rng % @as(u64, i + 1)));
-                const tmp = self.action_matrix[g_idx][i];
-                self.action_matrix[g_idx][i] = self.action_matrix[g_idx][j];
-                self.action_matrix[g_idx][j] = tmp;
+            // Only shuffle non-identity elements (g > 0)
+            if (g_idx > 0) {
+                var i = self.n_colors;
+                while (i > 1) {
+                    i -= 1;
+                    rng = mix64(rng ^ @as(u64, g_idx));
+                    const j = @as(usize, @intCast(rng % @as(u64, i + 1)));
+                    const tmp = self.action_matrix[g_idx][i];
+                    self.action_matrix[g_idx][i] = self.action_matrix[g_idx][j];
+                    self.action_matrix[g_idx][j] = tmp;
+                }
             }
         }
 

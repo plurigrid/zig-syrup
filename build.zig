@@ -1013,6 +1013,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     openbci_bridge_test_mod.addImport("syrup", syrup_mod);
+    openbci_bridge_test_mod.addImport("fft_bands", fft_bands_mod);
     const openbci_bridge_tests = b.addTest(.{ .root_module = openbci_bridge_test_mod });
     const run_openbci_bridge_tests = b.addRunArtifact(openbci_bridge_tests);
 
@@ -2703,6 +2704,8 @@ pub fn build(b: *std.Build) void {
     bci_integ_test_mod.addImport("propagator", propagator_mod);
     bci_integ_test_mod.addImport("fft_bands", fft_bands_mod);
     bci_integ_test_mod.addImport("erc", erc_mod);
+    const glimpse_mod_for_integ = b.createModule(.{ .root_source_file = b.path("src/glimpse.zig"), .target = target, .optimize = optimize });
+    bci_integ_test_mod.addImport("glimpse", glimpse_mod_for_integ);
     const bci_integ_tests = b.addTest(.{ .root_module = bci_integ_test_mod });
     const run_bci_integ_tests = b.addRunArtifact(bci_integ_tests);
     test_step.dependOn(&run_bci_integ_tests.step);

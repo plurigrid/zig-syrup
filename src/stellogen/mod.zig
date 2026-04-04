@@ -113,6 +113,7 @@ test "compile simple program" {
     const source = "(def nat {[(+nat z)] [(-nat X) (+nat (s X))]})";
 
     const wasm = try compile(allocator, source);
+    defer allocator.free(wasm);
 
     // Check WASM magic
     try std.testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x61, 0x73, 0x6D }, wasm[0..4]);

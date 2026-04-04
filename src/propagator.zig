@@ -208,16 +208,40 @@ pub fn neurofeedback_gate(args: []const ?f32) ?f32 {
 // Substrate Witness Gate
 // =============================================================================
 
-/// Result of a three-substrate witness comparison (tree-walk vs interaction net).
+/// Computational substrate identifier.
+pub const Substrate = enum {
+    tree_walk, // nanoclj sequential eval (fuel-bounded, no TCO)
+    bytecode_vm, // nanoclj register VM (22-opcode, linear dispatch)
+    inet, // nanoclj interaction net (GF(3) trit-balanced, optimal sharing)
+    lokke_guile, // Lokke/Guile Scheme (proper tail calls, GMP, CPS)
+};
+
+/// Result of a four-substrate witness comparison.
 /// Maps to the CellValue lattice: agreement → Value, disagreement → Contradiction.
 pub const SubstrateWitness = struct {
     tree_walk_answer: bool,
     inet_answer: bool,
+    lokke_answer: bool,
     both_halted: bool,
     inet_trit_balanced: bool,
 
     pub fn agrees(self: SubstrateWitness) bool {
-        return self.tree_walk_answer == self.inet_answer;
+        return self.tree_walk_answer == self.inet_answer and
+            self.tree_walk_answer == self.lokke_answer;
+    }
+
+    /// Sequential substrates (tree-walk + lokke) agree but inet diverges.
+    pub fn sequentialAgree(self: SubstrateWitness) bool {
+        return self.tree_walk_answer == self.lokke_answer;
+    }
+
+    /// Count how many substrates say true.
+    pub fn trueCount(self: SubstrateWitness) u8 {
+        var n: u8 = 0;
+        if (self.tree_walk_answer) n += 1;
+        if (self.inet_answer) n += 1;
+        if (self.lokke_answer) n += 1;
+        return n;
     }
 };
 
@@ -237,6 +261,35 @@ pub fn witness_gate(args: []const ?f32) ?f32 {
         return trit_sum;
     } else {
         return null; // Substrates disagree — propagator produces nothing
+    }
+}
+
+/// Classifier ill-posedness: same EEG channel, two classification methods,
+/// different trit assignments. This is orthogonal to Church-Turing divergence.
+/// range-based: trit = if (max-min > threshold) 1 else 0
+/// stddev-based: trit = if (stddev > threshold) 1 else 0
+/// On boundary channels (e.g. Ch7 at ~33k range, ~17k stddev, threshold 50k/5k),
+/// these methods disagree.
+pub const ClassifierWitness = struct {
+    channel: u8,
+    range_trit: i2, // -1, 0, +1 via range method
+    stddev_trit: i2, // -1, 0, +1 via stddev method
+
+    pub fn agrees(self: ClassifierWitness) bool {
+        return self.range_trit == self.stddev_trit;
+    }
+};
+
+/// Classifier gate: args[0] = range-based trit, args[1] = stddev-based trit.
+/// Returns the trit if both methods agree, null on classifier divergence.
+pub fn classifier_gate(args: []const ?f32) ?f32 {
+    const range_trit = args[0] orelse return null;
+    const std_trit = args[1] orelse return null;
+
+    if (range_trit == std_trit) {
+        return range_trit;
+    } else {
+        return null; // Classifier substrate divergence
     }
 }
 
@@ -441,22 +494,64 @@ test "witness_gate with lattice cell contradiction" {
     try std.testing.expect(merged_cell.get_cell_value().isContradiction());
 }
 
-test "SubstrateWitness agrees" {
+test "SubstrateWitness all agree" {
     const w = SubstrateWitness{
         .tree_walk_answer = true,
         .inet_answer = true,
+        .lokke_answer = true,
         .both_halted = true,
         .inet_trit_balanced = true,
     };
     try std.testing.expect(w.agrees());
+    try std.testing.expect(w.sequentialAgree());
+    try std.testing.expectEqual(@as(u8, 3), w.trueCount());
 }
 
-test "SubstrateWitness disagrees" {
+test "SubstrateWitness inet diverges" {
     const w = SubstrateWitness{
         .tree_walk_answer = true,
         .inet_answer = false,
+        .lokke_answer = true,
         .both_halted = true,
         .inet_trit_balanced = true,
     };
     try std.testing.expect(!w.agrees());
+    try std.testing.expect(w.sequentialAgree());
+    try std.testing.expectEqual(@as(u8, 2), w.trueCount());
+}
+
+test "Substrate enum" {
+    try std.testing.expect(@intFromEnum(Substrate.tree_walk) != @intFromEnum(Substrate.lokke_guile));
+}
+
+test "ClassifierWitness agrees" {
+    const cw = ClassifierWitness{
+        .channel = 3,
+        .range_trit = 1,
+        .stddev_trit = 1,
+    };
+    try std.testing.expect(cw.agrees());
+}
+
+test "ClassifierWitness diverges on Ch7" {
+    // Real case: Ch7 E15, range=32601 -> trit=0, stddev=17077 -> trit=1
+    const cw = ClassifierWitness{
+        .channel = 7,
+        .range_trit = 0,
+        .stddev_trit = 1,
+    };
+    try std.testing.expect(!cw.agrees());
+}
+
+test "classifier_gate agrees" {
+    const args = [_]?f32{ 1.0, 1.0 };
+    const result = classifier_gate(&args);
+    try std.testing.expect(result != null);
+    try std.testing.expectEqual(@as(f32, 1.0), result.?);
+}
+
+test "classifier_gate diverges" {
+    const args = [_]?f32{ 0.0, 1.0 };
+    const result = classifier_gate(&args);
+    try std.testing.expect(result == null);
 }

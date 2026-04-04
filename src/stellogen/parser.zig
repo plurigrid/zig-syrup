@@ -501,6 +501,8 @@ test "parse star" {
 
     var parser = Parser.init(allocator, tokens);
     const star = try parser.parseStar();
+    defer allocator.free(star.content);
+    defer allocator.free(star.bans);
 
     try std.testing.expectEqual(@as(usize, 2), star.content.len);
 }
@@ -513,6 +515,13 @@ test "parse constellation" {
 
     var parser = Parser.init(allocator, tokens);
     const constellation = try parser.parseConstellation();
+    defer {
+        for (constellation.stars) |s| {
+            allocator.free(s.content);
+            allocator.free(s.bans);
+        }
+        allocator.free(constellation.stars);
+    }
 
     try std.testing.expectEqual(@as(usize, 2), constellation.stars.len);
     try std.testing.expect(!constellation.stars[0].is_state);
@@ -521,7 +530,20 @@ test "parse constellation" {
 
 test "parse def expression" {
     const allocator = std.testing.allocator;
-    const exprs = try parse(allocator, "(def foo X)");
+    var lex_inner = lexer.Lexer.init("(def foo X)");
+    const tokens = try lex_inner.tokenize(allocator);
+    defer allocator.free(tokens);
+    var parser = Parser.init(allocator, tokens);
+    const exprs = try parser.parseProgram();
+    defer {
+        for (exprs) |expr| {
+            switch (expr) {
+                .def => |d| allocator.destroy(d.value),
+                else => {},
+            }
+        }
+        allocator.free(exprs);
+    }
 
     try std.testing.expectEqual(@as(usize, 1), exprs.len);
     switch (exprs[0]) {

@@ -240,7 +240,7 @@ pub const OpenBCIBridge = struct {
     
     pub fn init(allocator: Allocator, world: World) !Self {
         const fft_size = 256;
-        const fft_bands = @import("../fft_bands.zig");
+        const fft_bands = @import("fft_bands");
         const window = try allocator.alloc(f32, fft_size);
         @memcpy(window, &fft_bands.hanning_256);
         

@@ -701,14 +701,16 @@ test "integration: substrate witness gate detects divergence" {
     try epoch_cell.set_content(3.0);
     try std.testing.expect(epoch_cell.get_cell_value().isContradiction());
 
-    // SubstrateWitness struct encodes the full witness result
+    // SubstrateWitness: tree-walk + lokke agree, inet diverges
     const witness = propagator.SubstrateWitness{
         .tree_walk_answer = true,
         .inet_answer = false,
+        .lokke_answer = true,
         .both_halted = true,
         .inet_trit_balanced = true,
     };
     try std.testing.expect(!witness.agrees());
+    try std.testing.expect(witness.sequentialAgree());
 }
 
 // ============================================================================
@@ -773,4 +775,38 @@ test "integration: 29-epoch Cyton witness pipeline with glimpse timestamps" {
     // Total glimpse span for 29 epochs: 29 * 250 * 564,480
     const total_glimpses = EPOCHS * SAMPLE_RATE * TICKS_PER_SAMPLE;
     try std.testing.expectEqual(@as(u64, 4_092_480_000), total_glimpses);
+}
+
+// ============================================================================
+// TEST 19: Classifier substrate divergence — range vs stddev on Ch7 E15
+// ============================================================================
+test "19. classifier substrate divergence on channel 7 epoch 15" {
+    const LCell = propagator.Cell(f32, comptime propagator.latticeMerge(f32));
+
+    // Real Cyton data: Ch7 oscillates ~11k-44k uV
+    // Range = 32601 < 50000 threshold -> trit = 0 (clean)
+    // StdDev = 17077 > 5000 threshold -> trit = 1 (flicker)
+    const cw = propagator.ClassifierWitness{
+        .channel = 7,
+        .range_trit = 0, // range method: clean
+        .stddev_trit = 1, // stddev method: flicker
+    };
+    try std.testing.expect(!cw.agrees());
+
+    // classifier_gate returns null on divergence -> lattice contradiction
+    const args = [_]?f32{ 0.0, 1.0 };
+    const result = propagator.classifier_gate(&args);
+    try std.testing.expect(result == null);
+
+    // This gives us TWO kinds of ill-posedness:
+    // 1. Church-Turing: tree-walk vs inet (same expression, different answers)
+    // 2. Classifier:    range vs stddev   (same data, different trits)
+    // Both are captured in the propagator lattice as contradictions.
+    var cell = LCell.init(std.testing.allocator, "ch7_classifier");
+    defer cell.deinit();
+
+    // Range says sum=4 for E15 (Ch7=0), stddev says sum=5 (Ch7=1)
+    try cell.set_content(4.0);
+    try cell.set_content(5.0);
+    try std.testing.expect(cell.get_cell_value().isContradiction());
 }

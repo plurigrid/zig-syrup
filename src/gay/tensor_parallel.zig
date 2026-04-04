@@ -203,16 +203,19 @@ pub fn colorLogits(data: []f32, n_tokens: u32, vocab_shard: u32, partition: Tens
 // Expected Fingerprint (computed ahead of time)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Compute expected fingerprint for hidden states BEFORE computation.
+/// Compute expected fingerprint for hidden states colored from zero.
+/// Matches colorHiddenStates: each element = 0.0 + c.r * 1e-7.
 pub fn expectedFingerprint(seed: u64, n_tokens: u32, hidden_dim: u32, layer: u32) u32 {
     var fp: u32 = 0;
     for (0..n_tokens) |t| {
+        const global_t: u64 = @as(u64, @intCast(t)) + 1;
         for (0..hidden_dim) |d| {
-            const h = seed ^ (@as(u64, @intCast(t + 1)) *% HASH_MUL_1) ^
+            const h = seed ^ (global_t *% HASH_MUL_1) ^
                 (@as(u64, layer) *% HASH_MUL_2) ^
                 (@as(u64, @intCast(d + 1)) *% HASH_MUL_3);
-            const c = hashColor(h, @as(u64, @intCast(t + 1)));
-            fp ^= @as(u32, @bitCast(c.r));
+            const c = hashColor(h, global_t);
+            const val: f32 = c.r * 1e-7;
+            fp ^= @as(u32, @bitCast(val));
         }
     }
     return fp;

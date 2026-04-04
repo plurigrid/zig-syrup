@@ -209,7 +209,9 @@ test "unify function terms" {
     const x = ast.makeVar("X");
     const a = ast.makeAtom(.null, "a");
     const fx = try ast.makeFunc(allocator, .null, "f", &.{x});
+    defer allocator.free(fx.function.args);
     const fa = try ast.makeFunc(allocator, .null, "f", &.{a});
+    defer allocator.free(fa.function.args);
 
     const result = try unify(allocator, fx, fa);
     try std.testing.expect(result != null);
@@ -236,6 +238,7 @@ test "unify fails on occurs check" {
     // X and f(X) should fail
     const x = ast.makeVar("X");
     const fx = try ast.makeFunc(allocator, .null, "f", &.{x});
+    defer allocator.free(fx.function.args);
 
     const result = unify(allocator, x, fx);
     try std.testing.expect(result == UnifyError.OccursCheck);
@@ -248,7 +251,9 @@ test "unify with polarities" {
     const x = ast.makeVar("X");
     const a = ast.makeAtom(.null, "a");
     const pos_fx = try ast.makeFunc(allocator, .pos, "f", &.{x});
+    defer allocator.free(pos_fx.function.args);
     const neg_fa = try ast.makeFunc(allocator, .neg, "f", &.{a});
+    defer allocator.free(neg_fa.function.args);
 
     const result = try unify(allocator, pos_fx, neg_fa);
     try std.testing.expect(result != null);

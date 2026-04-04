@@ -133,7 +133,8 @@ pub fn encodePropValue(pv: propagator.Value, allocator: Allocator) !Value {
             label.* = Value.fromSymbol("gay:contradiction");
             if (c.info) |info| {
                 const fields = try allocator.alloc(Value, 1);
-                fields[0] = Value.fromString(info);
+                const info_dupe = try allocator.dupe(u8, info);
+                fields[0] = Value.fromString(info_dupe);
                 break :blk Value.fromRecord(label, fields);
             } else {
                 const fields = try allocator.alloc(Value, 0);

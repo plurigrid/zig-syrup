@@ -511,7 +511,7 @@ fn initLocomotionCircuit(neurons: []Neuron) void {
 ///
 /// The shader encodes the connectome adjacency as a flat buffer,
 /// enabling the GPU to propagate both wavefronts simultaneously.
-pub fn generateWitnessWGSL(n_neurons: u32) []const u8 {
+pub fn generateWitnessWGSL(_: u32) []const u8 {
     // Comptime WGSL generation for the witnessing protocol
     return
         \\// Witnessing Worm — GPU-parallel wavefront propagation
@@ -802,7 +802,7 @@ pub const PerpetualWitness = struct {
     }
 
     /// Run N epochs of perpetual witnessing
-    pub fn runPerpetual(self: *PerpetualWitness, n_epochs: u32, steps_per_epoch: u32) []EpochResult {
+    pub fn runPerpetual(_: *PerpetualWitness, n_epochs: u32, steps_per_epoch: u32) []EpochResult {
         // Can't allocate dynamically in this context, so caller should loop
         _ = n_epochs;
         _ = steps_per_epoch;
