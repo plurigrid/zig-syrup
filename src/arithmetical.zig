@@ -140,6 +140,10 @@ pub const problems = [_]ClassifiedProblem{
     // Π⁰₁ — co-c.e.
     .{ .name = "totality", .level = PI_1, .description = "Does program P halt on ALL inputs?", .reduces_from = null, .source = "complement of halting" },
     .{ .name = "goldbach", .level = PI_1, .description = "Every even n>2 is sum of two primes?", .reduces_from = null, .source = "Π⁰₁ sentence" },
+    .{ .name = "riemann-hypothesis", .level = PI_1, .description = "All nontrivial zeros of zeta(s) have Re(s)=1/2?", .reduces_from = null, .source = "Riemann 1859; MRDP encodes negation as Diophantine" },
+    .{ .name = "grh", .level = PI_1, .description = "All nontrivial zeros of L(s,chi) have Re(s)=1/2?", .reduces_from = "riemann-hypothesis", .source = "Generalized RH; controls Chebotarev error term" },
+    // Σ⁰₁ in number theory
+    .{ .name = "artin-conjecture", .level = SIGMA_1, .description = "Artin L-function has holomorphic continuation?", .reduces_from = null, .source = "Artin 1923; known for some cases via Langlands" },
     // Σ⁰₂ — limit computable (need halting oracle)
     .{ .name = "infinity", .level = SIGMA_2, .description = "Is the domain of program P infinite?", .reduces_from = "halting", .source = "Post's theorem" },
     .{ .name = "completeness", .level = SIGMA_2, .description = "Is theory T complete?", .reduces_from = null, .source = "Gödel second incompleteness" },
@@ -859,17 +863,44 @@ pub const MoebiusBoundary = struct {
     exclusive_trit: i8, // -1 (Π, validator)
     inclusive_trit: i8, // +1 (Σ, generator)
     flips: bool, // true: including seed changes polarity
+    flip_index: u32, // 0-indexed count of Π→Σ flip primes ≤ seed
+    total_flip_primes: u32, // total Π→Σ flip primes ≤ seed
 };
+
+/// Count primes p ≤ n where mertensTrit(p-1)=-1 and mertensTrit(p)=+1 (Π→Σ flip).
+/// Returns {index_of_n, total_count}. If n itself is not a flipper, index = total.
+fn countFlipPrimes(n: u32) struct { index: u32, total: u32 } {
+    var count: u32 = 0;
+    var index: u32 = 0;
+    var found = false;
+    // Sieve-free: just check each prime up to n
+    var p: u32 = 2;
+    while (p <= n) : (p += 1) {
+        if (mobius(@intCast(p)) != -1) continue; // not prime (μ(p)=-1 iff prime)
+        if (mertensTrit(p - 1) == -1 and mertensTrit(p) == 1) {
+            if (p == n) {
+                index = count;
+                found = true;
+            }
+            count += 1;
+        }
+    }
+    if (!found) index = count;
+    return .{ .index = index, .total = count };
+}
 
 pub fn moebiusBoundary() MoebiusBoundary {
     const excl = mertens(CANONICAL_SEED - 1);
     const incl = mertens(CANONICAL_SEED);
+    const flips = countFlipPrimes(CANONICAL_SEED);
     return .{
         .exclusive_mertens = excl,
         .inclusive_mertens = incl,
         .exclusive_trit = mertensTrit(CANONICAL_SEED - 1),
         .inclusive_trit = mertensTrit(CANONICAL_SEED),
         .flips = mertensTrit(CANONICAL_SEED - 1) != mertensTrit(CANONICAL_SEED),
+        .flip_index = flips.index,
+        .total_flip_primes = flips.total,
     };
 }
 
@@ -900,6 +931,9 @@ test "mertens at canonical seed" {
     try testing.expect(boundary.flips);
     try testing.expectEqual(@as(i8, -1), boundary.exclusive_trit);
     try testing.expectEqual(@as(i8, 1), boundary.inclusive_trit);
+
+    // 1069 is the 120th Π→Σ flip prime (0-indexed)
+    try testing.expectEqual(@as(u32, 120), boundary.flip_index);
 }
 
 test "prime realizers" {
