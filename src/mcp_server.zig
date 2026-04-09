@@ -20,6 +20,7 @@ const std = @import("std");
 const json = std.json;
 const syrup = @import("syrup");
 const nurse = @import("nurse");
+const compat = @import("compat");
 
 const SERVER_NAME = "zig-syrup";
 const SERVER_VERSION = "0.1.0";
@@ -799,22 +800,41 @@ fn handleCzernowitzQuery(allocator: std.mem.Allocator, args: json.ObjectMap) !js
 // Main Server Loop
 // ============================================================================
 
+/// Read one line from stdin via compat (no deprecatedReader).
+fn readLineFromStdin(buf: []u8) ?[]u8 {
+    var pos: usize = 0;
+    while (pos < buf.len) {
+        var byte: [1]u8 = undefined;
+        const n = compat.stdinRead(&byte);
+        if (n == 0) {
+            if (pos == 0) return null;
+            return buf[0..pos];
+        }
+        if (byte[0] == '\n') return buf[0..pos];
+        buf[pos] = byte[0];
+        pos += 1;
+    }
+    return buf[0..pos];
+}
+
+/// Compat stdout writer (no deprecatedWriter).
+const CompatWriter = struct {
+    pub fn writeAll(_: *CompatWriter, bytes: []const u8) !void {
+        compat.stdoutWrite(bytes);
+    }
+};
+
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var debug_alloc = compat.makeDebugAllocator();
+    defer _ = debug_alloc.deinit();
+    const allocator = debug_alloc.allocator();
 
-    const stdin_file = std.fs.File.stdin();
-    const stdout_file = std.fs.File.stdout();
-
-    const reader = stdin_file.deprecatedReader();
-    var stdout = stdout_file.deprecatedWriter();
+    var stdout = CompatWriter{};
 
     var line_buf: [MAX_LINE_SIZE]u8 = undefined;
 
     while (true) {
-        const line = reader.readUntilDelimiterOrEof(&line_buf, '\n') catch return
-            orelse return;
+        const line = readLineFromStdin(&line_buf) orelse return;
 
         if (line.len == 0) continue;
 

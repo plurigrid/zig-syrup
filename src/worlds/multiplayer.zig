@@ -8,7 +8,8 @@ const World = @import("world.zig").World;
 const WorldState = @import("world.zig").WorldState;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
-const Mutex = std.Thread.Mutex;
+const compat = @import("compat");
+const Mutex = compat.Mutex;
 const Condition = std.Thread.Condition;
 
 /// Player in a multiplayer session

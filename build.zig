@@ -4,6 +4,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Zig 0.15/0.16 compatibility layer
+    const compat_mod = b.addModule("compat", .{
+        .root_source_file = b.path("src/compat.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Library module
     const syrup_mod = b.addModule("syrup", .{
         .root_source_file = b.path("src/syrup.zig"),
@@ -683,6 +690,17 @@ pub fn build(b: *std.Build) void {
     const homotopy_tests = b.addTest(.{ .root_module = homotopy_test_mod });
     const run_homotopy_tests = b.addRunArtifact(homotopy_tests);
 
+    // Time unit module tests (temporal ontology conversion lattice)
+    const time_unit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/time_unit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    time_unit_test_mod.addImport("syrup", syrup_mod);
+    time_unit_test_mod.addImport("continuation", continuation_mod);
+    const time_unit_tests = b.addTest(.{ .root_module = time_unit_test_mod });
+    const run_time_unit_tests = b.addRunArtifact(time_unit_tests);
+
     // Linalg module tests
     const linalg_test_mod = b.createModule(.{
         .root_source_file = b.path("src/linalg.zig"),
@@ -940,6 +958,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    worlds_mod.addImport("compat", compat_mod);
     worlds_mod.addImport("syrup", syrup_mod);
     worlds_mod.addImport("bristol", bristol_lib);
     worlds_mod.addImport("bci_homotopy", bci_mod);
@@ -1774,6 +1793,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_cell_dispatch_tests.step);
     test_step.dependOn(&run_tileable_shader_tests.step);
     test_step.dependOn(&run_homotopy_tests.step);
+    test_step.dependOn(&run_time_unit_tests.step);
     test_step.dependOn(&run_linalg_tests.step);
     test_step.dependOn(&run_ripser_tests.step);
     test_step.dependOn(&run_scs_tests.step);
@@ -1860,6 +1880,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    ghostty_web_server_mod.addImport("compat", compat_mod);
     ghostty_web_server_mod.addImport("websocket_framing", websocket_framing_mod);
 
     const ghostty_web_exe = b.addExecutable(.{
@@ -2768,6 +2789,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    ghostty_vt_tileable_mod.addImport("compat", compat_mod);
     ghostty_vt_tileable_mod.addImport("retty", retty_mod);
     ghostty_vt_tileable_mod.addImport("terminal", terminal_mod);
     ghostty_vt_tileable_mod.addImport("virion", virion_mod);
@@ -3025,6 +3047,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    mcp_server_mod.addImport("compat", compat_mod);
     mcp_server_mod.addImport("syrup", syrup_mod);
     mcp_server_mod.addImport("nurse", nurse_mod);
     mcp_server_mod.addImport("retrodiction", retrodiction_mod);
@@ -3044,6 +3067,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    mcp_server_test_mod.addImport("compat", compat_mod);
     mcp_server_test_mod.addImport("syrup", syrup_mod);
     mcp_server_test_mod.addImport("nurse", nurse_mod);
     mcp_server_test_mod.addImport("retrodiction", retrodiction_mod);

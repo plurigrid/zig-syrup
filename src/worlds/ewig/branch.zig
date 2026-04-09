@@ -85,7 +85,7 @@ pub const BranchManager = struct {
     allocator: Allocator,
     branches: std.StringHashMap(*Branch),
     active_branch: []const u8,
-    mutex: std.Thread.Mutex,
+    mutex: @import("compat").Mutex,
     
     const Self = @This();
     

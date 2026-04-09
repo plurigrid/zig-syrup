@@ -290,9 +290,7 @@ test "testConnectionMetrics" {
 }
 
 test "testServerMetrics" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     var metrics = ServerMetrics.init(allocator, 1000);
     
@@ -308,9 +306,7 @@ test "testServerMetrics" {
 }
 
 test "testLatencyHistogram" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     var hist = LatencyHistogram.init(allocator);
     
@@ -329,9 +325,7 @@ test "testLatencyHistogram" {
 }
 
 test "testEventLog" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     var log = EventLog.init(allocator);
     defer log.deinit();

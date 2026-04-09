@@ -246,9 +246,7 @@ pub const CompressionMetrics = struct {
 const testing = std.testing;
 
 test "testRleCompression" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     const rle = RleCompressor{ .allocator = allocator };
     
@@ -266,9 +264,7 @@ test "testRleCompression" {
 }
 
 test "testAdaptiveCompressionVt" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     const compressor = AdaptiveCompressor.init(allocator);
     

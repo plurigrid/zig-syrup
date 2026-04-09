@@ -983,9 +983,7 @@ test "max streams limit" {
 }
 
 test "resample: upsample 10Hz to 300Hz" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var input: [10]f32 = undefined;
     for (0..10) |i| {
@@ -1001,9 +999,7 @@ test "resample: upsample 10Hz to 300Hz" {
 }
 
 test "resample: downsample 300Hz to 10Hz" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var input: [300]f32 = undefined;
     for (0..300) |_i| {

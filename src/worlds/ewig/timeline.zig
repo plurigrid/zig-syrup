@@ -323,7 +323,7 @@ pub const Timeline = struct {
 pub const TimelineManager = struct {
     allocator: Allocator,
     timelines: std.StringHashMap(*Timeline),
-    mutex: std.Thread.Mutex,
+    mutex: @import("compat").Mutex,
     
     const Self = @This();
     

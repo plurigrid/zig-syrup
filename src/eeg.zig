@@ -137,7 +137,10 @@ fn deriveColor(powers: fft_bands.BandPowers, allocator: std.mem.Allocator) !Tria
         (clean_powers.beta - avg_power) * (clean_powers.beta - avg_power) +
         (clean_powers.gamma - avg_power) * (clean_powers.gamma - avg_power)) / 5.0;
 
-    const t2: i2 = if (variance > avg_power * 0.5) 1 else if (variance < avg_power * 0.1) -1 else 0;
+    // Ternary tower: HIGH = T1+T2 = 4/9, LOW = T2 = 1/9
+    const TERNARY_HALF: f64 = 1.0 / 3.0 + 1.0 / 9.0; // 4/9
+    const T2: f64 = 1.0 / 9.0;
+    const t2: i2 = if (variance > avg_power * TERNARY_HALF) 1 else if (variance < avg_power * T2) -1 else 0;
 
     // Auto-balance: t3 = -(t1 + t2) mod 3
     const sum = @as(i32, @intCast(t1)) + @as(i32, @intCast(t2));
@@ -180,7 +183,7 @@ fn deriveColor(powers: fft_bands.BandPowers, allocator: std.mem.Allocator) !Tria
 // ============================================================================
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -269,7 +272,7 @@ pub fn main() !void {
 // ============================================================================
 
 test "derive color from band powers" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 

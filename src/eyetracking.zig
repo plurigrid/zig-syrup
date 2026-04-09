@@ -1208,9 +1208,7 @@ test "dispersion computation" {
 }
 
 test "microsaccade detection: tiny displacement during fixation" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     // 100 samples at 120Hz: stable fixation with a brief microsaccade
     var samples: [100]GazeSample = undefined;

@@ -8,6 +8,7 @@
 /// - Advertises on NATS mcp.terms.* subject
 
 const std = @import("std");
+const compat = @import("compat");
 const websocket_framing = @import("websocket_framing");
 
 const Frame = websocket_framing.Frame;
@@ -482,7 +483,7 @@ pub const NatsAdvertiser = struct {
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = compat.makeDebugAllocator();
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 

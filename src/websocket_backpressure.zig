@@ -268,9 +268,7 @@ pub const BackpressureStatus = struct {
 const testing = std.testing;
 
 test "WriteQueueBasic" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     var queue = try WriteQueue.init(allocator, 10);
     defer queue.deinit();
@@ -299,9 +297,7 @@ test "WriteQueueBasic" {
 }
 
 test "WriteQueueOverflow" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     
     var queue = try WriteQueue.init(allocator, 3);
     defer queue.deinit();

@@ -1,9 +1,10 @@
 const std = @import("std");
 const syrup = @import("syrup.zig");
+const compat = @import("compat.zig");
 const Value = syrup.Value;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = compat.makeDebugAllocator();
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -16,13 +17,11 @@ pub fn main() !void {
     }
 
     const mode = args[1];
-    
-    const stdin_file = std.fs.File.stdin();
-    const stdout_file = std.fs.File.stdout();
-    var stdout = stdout_file.deprecatedWriter();
+
+    var stdout = CompatWriter{};
 
     if (std.mem.eql(u8, mode, "encode")) {
-        const input = try stdin_file.readToEndAlloc(allocator, 1024 * 1024 * 10);
+        const input = try readAllStdin(allocator, 1024 * 1024 * 10);
         defer allocator.free(input);
 
         // Parse JSON
@@ -40,7 +39,7 @@ pub fn main() !void {
 
     } else if (std.mem.eql(u8, mode, "decode")) {
         // Read all stdin (Syrup bytes)
-        const input = try stdin_file.readToEndAlloc(allocator, 1024 * 1024 * 10);
+        const input = try readAllStdin(allocator, 1024 * 1024 * 10);
         defer allocator.free(input);
 
         // Decode Syrup
@@ -60,6 +59,46 @@ pub fn main() !void {
         std.debug.print("Unknown mode: {s}\n", .{mode});
         std.process.exit(1);
     }
+}
+
+/// Zig 0.16 compat: stdout writer that doesn't need deprecatedWriter.
+const CompatWriter = struct {
+    pub const Error = error{};
+    pub fn writeAll(self: *CompatWriter, bytes: []const u8) Error!void {
+        _ = self;
+        compat.stdoutWrite(bytes);
+    }
+    pub fn writeBytesNTimes(self: *CompatWriter, bytes: []const u8, n: usize) Error!void {
+        for (0..n) |_| try self.writeAll(bytes);
+    }
+    pub fn print(self: *CompatWriter, comptime fmt: []const u8, args: anytype) Error!void {
+        std.fmt.format(self, fmt, args) catch {};
+    }
+    pub fn writeByteNTimes(self: *CompatWriter, byte: u8, n: usize) Error!void {
+        var buf: [256]u8 = undefined;
+        const fill = @min(n, buf.len);
+        @memset(buf[0..fill], byte);
+        var remaining = n;
+        while (remaining > 0) {
+            const chunk = @min(remaining, buf.len);
+            try self.writeAll(buf[0..chunk]);
+            remaining -= chunk;
+        }
+    }
+};
+
+/// Read all of stdin into an allocated buffer (compat: no readToEndAlloc).
+fn readAllStdin(allocator: std.mem.Allocator, max_bytes: usize) ![]u8 {
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    var tmp: [4096]u8 = undefined;
+    while (true) {
+        const n = compat.stdinRead(&tmp);
+        if (n == 0) break;
+        if (buf.items.len + n > max_bytes) return error.StreamTooLong;
+        try buf.appendSlice(tmp[0..n]);
+    }
+    return buf.toOwnedSlice();
 }
 
 fn jsonToSyrup(allocator: std.mem.Allocator, json_val: std.json.Value) !Value {

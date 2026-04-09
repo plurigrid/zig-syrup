@@ -271,9 +271,7 @@ test "reject short packet" {
 }
 
 test "parse stream with two packets" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var stream = [_]u8{0} ** (DSI24_PACKET_LEN * 2);
     // Packet 1

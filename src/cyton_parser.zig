@@ -245,9 +245,7 @@ test "reject invalid stop byte" {
 }
 
 test "parse stream with multiple packets" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     // Create stream: valid packet + garbage + valid packet
     var stream: [CYTON_PACKET_LEN * 2 + 10]u8 = undefined;
