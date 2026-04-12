@@ -2434,6 +2434,18 @@ pub fn build(b: *std.Build) void {
     const run_gf3_palette_tests = b.addRunArtifact(gf3_palette_tests);
     test_step.dependOn(&run_gf3_palette_tests.step);
 
+    // Arena-Parrot-Hat harness (58-cell effective fragment of CatColab instance I)
+    const arena_parrot_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/arena_parrot_harness.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const arena_parrot_tests = b.addTest(.{ .root_module = arena_parrot_test_mod });
+    const run_arena_parrot_tests = b.addRunArtifact(arena_parrot_tests);
+    test_step.dependOn(&run_arena_parrot_tests.step);
+    const test_arena_parrot_step = b.step("test-arena-parrot", "Run Arena-Parrot-Hat CatColab harness tests");
+    test_arena_parrot_step.dependOn(&run_arena_parrot_tests.step);
+
     // Retrodiction module (GF(3) multiple realizability of pasts)
     const retrodiction_mod = b.addModule("retrodiction", .{
         .root_source_file = b.path("src/retrodiction.zig"),
