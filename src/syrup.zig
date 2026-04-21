@@ -93,7 +93,9 @@ const FixedBufWriter = struct {
     }
 
     pub fn print(self: *FixedBufWriter, comptime fmt: []const u8, args: anytype) Error!void {
-        std.fmt.format(self, fmt, args) catch return error.NoSpaceLeft;
+        var tmp: [4096]u8 = undefined;
+        const written = std.fmt.bufPrint(&tmp, fmt, args) catch return error.NoSpaceLeft;
+        try self.writeAll(written);
     }
 
     pub fn write(self: *FixedBufWriter, data: []const u8) Error!usize {
@@ -123,8 +125,8 @@ pub const BigInt = struct {
 
     fn compareMagnitudes(a: []const u8, b: []const u8) Order {
         // Strip leading zeros using std.mem.trimLeft
-        const a_trimmed = std.mem.trimLeft(u8, a, &.{0});
-        const b_trimmed = std.mem.trimLeft(u8, b, &.{0});
+        const a_trimmed = std.mem.trimStart(u8, a, &.{0});
+        const b_trimmed = std.mem.trimStart(u8, b, &.{0});
         const len_cmp = std.math.order(a_trimmed.len, b_trimmed.len);
         return if (len_cmp != .eq) len_cmp else std.mem.order(u8, a_trimmed, b_trimmed);
     }
