@@ -17,7 +17,6 @@
 /// - Interaction: halt, fuse, schedule
 ///
 /// Trit Classification: PLUS (+1) generation (creates interaction traces)
-
 const std = @import("std");
 const ghostty_ix = @import("ghostty_ix");
 
@@ -27,36 +26,36 @@ pub const Command = ghostty_ix.Command;
 /// BIM Opcodes (small instruction set for formal verification)
 pub const Opcode = enum(u8) {
     /// Stack operations
-    push_const = 0,   // arg: constant value
-    push_var = 1,     // arg: variable index
-    pop = 2,          // no args
-    dup = 3,          // duplicate top of stack
+    push_const = 0, // arg: constant value
+    push_var = 1, // arg: variable index
+    pop = 2, // no args
+    dup = 3, // duplicate top of stack
 
     /// Unification (Martelli-Montanari)
-    unify = 10,       // unify top two stack items
-    bind = 11,        // bind variable to value
-    deref = 12,       // dereference variable
+    unify = 10, // unify top two stack items
+    bind = 11, // bind variable to value
+    deref = 12, // dereference variable
     occurs_check = 13, // check occurs-check constraint
 
     /// Control flow
-    call = 20,        // arg: function/continuation ID
-    ret = 21,         // return from function
-    jump = 22,        // arg: instruction offset
-    jump_fail = 23,   // jump if unification fails
+    call = 20, // arg: function/continuation ID
+    ret = 21, // return from function
+    jump = 22, // arg: instruction offset
+    jump_fail = 23, // jump if unification fails
 
     /// Memory
-    alloc = 30,       // arg: size (allocate on heap)
-    free = 31,        // arg: address
-    store = 32,       // store stack top to memory
-    load = 33,        // load from memory to stack
+    alloc = 30, // arg: size (allocate on heap)
+    free = 31, // arg: address
+    store = 32, // store stack top to memory
+    load = 33, // load from memory to stack
 
     /// Interaction (for integration with continuation system)
-    fuse = 40,        // fuse two interaction traces
-    schedule = 41,    // schedule for continuation
+    fuse = 40, // fuse two interaction traces
+    schedule = 41, // schedule for continuation
     call_extern = 42, // call external function
 
     /// Termination
-    halt = 99,        // halt with success
+    halt = 99, // halt with success
 };
 
 /// BIM Value (can be constant, variable, or term)
@@ -64,8 +63,8 @@ pub const Value = union(enum) {
     const_int: i64,
     const_float: f64,
     const_str: []const u8,
-    variable: u32,         // variable index
-    term: Term,            // structured term for unification
+    variable: u32, // variable index
+    term: Term, // structured term for unification
 };
 
 /// Term for unification
@@ -91,7 +90,7 @@ pub const Instruction = struct {
 
     pub fn encode(self: Instruction) u32 {
         return (@as(u32, @intFromEnum(self.opcode)) << 24) |
-               (@as(u32, @bitCast(self.arg)) & 0xFFFFFF);
+            (@as(u32, @bitCast(self.arg)) & 0xFFFFFF);
     }
 
     pub fn decode(bytecode: u32) Instruction {
@@ -265,7 +264,8 @@ pub const BIMExecutor = struct {
         const trace = try vm.getTrace(self.allocator);
 
         var output_buf: [512]u8 = undefined;
-        const output = try std.fmt.bufPrint(&output_buf,
+        const output = try std.fmt.bufPrint(
+            &output_buf,
             "BIM execution: success={}, trace_len={}",
             .{ vm.success, vm.trace.items.len },
         );

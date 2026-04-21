@@ -20,7 +20,7 @@ pub const WorldTile = struct {
     content: syrup.Value,
     /// Tile metadata
     metadata: TileMetadata,
-    
+
     pub const TileMetadata = struct {
         /// Last modified tick
         modified_tick: u64,
@@ -29,7 +29,7 @@ pub const WorldTile = struct {
         /// Tile type
         tile_type: TileType,
     };
-    
+
     pub const TileType = enum {
         empty,
         terrain,
@@ -38,12 +38,12 @@ pub const WorldTile = struct {
         interactive,
         circuit,
     };
-    
+
     /// Serialize to syrup record
     pub fn toSyrup(self: WorldTile, allocator: Allocator) !syrup.Value {
         var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         errdefer entries.deinit(allocator);
-        
+
         try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("x"),
             .value = syrup.Value.fromInteger(self.x),
@@ -64,14 +64,14 @@ pub const WorldTile = struct {
             .key = syrup.Value.fromSymbol("modified"),
             .value = syrup.Value.fromInteger(@intCast(self.metadata.modified_tick)),
         });
-        
+
         if (self.metadata.owner) |owner| {
             try entries.append(allocator, .{
                 .key = syrup.Value.fromSymbol("owner"),
                 .value = syrup.Value.fromInteger(owner),
             });
         }
-        
+
         // Return as dictionary (avoiding record which needs stable label pointer)
         const dict_entries = try entries.toOwnedSlice(allocator);
         return syrup.Value.fromDictionary(dict_entries);
@@ -86,7 +86,7 @@ pub const TileMapping = struct {
     origin_x: f32,
     origin_y: f32,
     origin_z: f32,
-    
+
     /// Convert world position to tile coordinates
     pub fn worldToTile(self: TileMapping, x: f32, y: f32, z: f32) [3]i32 {
         return .{
@@ -95,7 +95,7 @@ pub const TileMapping = struct {
             @intFromFloat((z - self.origin_z) / self.tile_size),
         };
     }
-    
+
     /// Convert tile coordinates to world position (center)
     pub fn tileToWorld(self: TileMapping, tx: i32, ty: i32, tz: i32) [3]f32 {
         return .{
@@ -109,28 +109,28 @@ pub const TileMapping = struct {
 /// Syrup adapter for world serialization
 pub const SyrupAdapter = struct {
     const Self = @This();
-    
+
     allocator: Allocator,
     mapping: TileMapping,
     tile_cache: std.AutoHashMapUnmanaged(TileKey, WorldTile),
-    
+
     const TileKey = struct {
         x: i32,
         y: i32,
         z: i32,
-        
+
         pub fn hash(self: TileKey) u32 {
             var h: u32 = @bitCast(self.x);
             h = h *% 31 +% @as(u32, @bitCast(self.y));
             h = h *% 31 +% @as(u32, @bitCast(self.z));
             return h;
         }
-        
+
         pub fn eql(a: TileKey, b: TileKey) bool {
             return a.x == b.x and a.y == b.y and a.z == b.z;
         }
     };
-    
+
     pub fn init(allocator: Allocator, mapping: TileMapping) Self {
         return .{
             .allocator = allocator,
@@ -138,20 +138,20 @@ pub const SyrupAdapter = struct {
             .tile_cache = .{},
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         self.tile_cache.deinit(self.allocator);
     }
-    
+
     /// Convert world state to tile grid
     pub fn worldToTiles(self: *Self, world: World) ![]WorldTile {
         var tiles = std.ArrayListUnmanaged(WorldTile){};
         defer tiles.deinit(self.allocator);
-        
+
         // Create tiles from player positions
         for (world.getActivePlayers()) |player| {
             const tile_coords = self.mapping.worldToTile(0, 0, 0); // Would use actual position
-            
+
             const tile = WorldTile{
                 .x = tile_coords[0],
                 .y = tile_coords[1],
@@ -163,28 +163,28 @@ pub const SyrupAdapter = struct {
                     .tile_type = .player_spawn,
                 },
             };
-            
+
             try tiles.append(self.allocator, tile);
         }
-        
+
         return tiles.toOwnedSlice(self.allocator);
     }
-    
+
     /// Serialize world as tile grid
     pub fn serializeWorld(self: *Self, world: World) !syrup.Value {
         const tiles = try self.worldToTiles(world);
         defer self.allocator.free(tiles);
-        
+
         var tile_list = std.ArrayListUnmanaged(syrup.Value){};
         defer tile_list.deinit(self.allocator);
-        
+
         for (tiles) |tile| {
             try tile_list.append(self.allocator, try tile.toSyrup(self.allocator));
         }
-        
+
         var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer entries.deinit(self.allocator);
-        
+
         try entries.append(self.allocator, .{
             .key = syrup.Value.fromSymbol("uri"),
             .value = syrup.Value.fromString(world.config.uri),
@@ -197,16 +197,16 @@ pub const SyrupAdapter = struct {
             .key = syrup.Value.fromSymbol("tiles"),
             .value = syrup.Value.fromList(try tile_list.toOwnedSlice(self.allocator)),
         });
-        
+
         const label = syrup.Value.fromSymbol("world");
         var fields = try self.allocator.alloc(syrup.Value, 1);
         defer self.allocator.free(fields);
-        
+
         fields[0] = syrup.Value.fromDictionary(try entries.toOwnedSlice(self.allocator));
-        
+
         return syrup.Value.fromRecord(&label, fields);
     }
-    
+
     /// Deserialize tiles to world (partial reconstruction)
     pub fn deserializeTiles(self: *Self, value: syrup.Value) ![]WorldTile {
         _ = self;
@@ -214,15 +214,15 @@ pub const SyrupAdapter = struct {
         // Implementation would parse syrup and reconstruct tiles
         return &[_]WorldTile{};
     }
-    
+
     /// Get or create tile at coordinates
     pub fn getTile(self: *Self, x: i32, y: i32, z: i32) !*WorldTile {
         const key = TileKey{ .x = x, .y = y, .z = z };
-        
+
         if (self.tile_cache.getPtr(key)) |tile| {
             return tile;
         }
-        
+
         const new_tile = WorldTile{
             .x = x,
             .y = y,
@@ -234,18 +234,18 @@ pub const SyrupAdapter = struct {
                 .tile_type = .empty,
             },
         };
-        
+
         try self.tile_cache.put(self.allocator, key, new_tile);
         return self.tile_cache.getPtr(key).?;
     }
-    
+
     /// Update tile content
     pub fn updateTile(self: *Self, x: i32, y: i32, z: i32, content: syrup.Value, tick: u64) !void {
         const tile = try self.getTile(x, y, z);
         tile.content = content;
         tile.metadata.modified_tick = tick;
     }
-    
+
     /// Compute CID for tile grid
     pub fn computeTileGridCid(self: *Self, world: World, out: *[32]u8) !void {
         const world_syrup = try self.serializeWorld(world);
@@ -253,30 +253,30 @@ pub const SyrupAdapter = struct {
             var arena = std.heap.ArenaAllocator.init(self.allocator);
             defer arena.deinit();
         }
-        
+
         try syrup.computeCid(world_syrup, out);
     }
-    
+
     /// Create damage tracking for tiles (only changed since last sync)
     pub fn computeDelta(self: *Self, _: World, since_tick: u64) ![]WorldTile {
         var deltas = std.ArrayListUnmanaged(WorldTile){};
         defer deltas.deinit(self.allocator);
-        
+
         var it = self.tile_cache.iterator();
         while (it.next()) |entry| {
             if (entry.value_ptr.metadata.modified_tick >= since_tick) {
                 try deltas.append(self.allocator, entry.value_ptr.*);
             }
         }
-        
+
         return deltas.toOwnedSlice(self.allocator);
     }
-    
+
     /// Merge tile state from remote source (CapTP sync)
     pub fn mergeRemoteTiles(self: *Self, remote_tiles: []WorldTile, strategy: MergeStrategy) !void {
         for (remote_tiles) |tile| {
             const key = TileKey{ .x = tile.x, .y = tile.y, .z = tile.z };
-            
+
             switch (strategy) {
                 .overwrite => {
                     try self.tile_cache.put(self.allocator, key, tile);
@@ -299,7 +299,7 @@ pub const SyrupAdapter = struct {
             }
         }
     }
-    
+
     pub const MergeStrategy = enum {
         /// Overwrite local with remote
         overwrite,
@@ -335,7 +335,7 @@ pub const TileOperations = struct {
             }
         }
     }
-    
+
     /// Find tiles matching predicate
     pub fn findTiles(
         allocator: Allocator,
@@ -344,14 +344,14 @@ pub const TileOperations = struct {
     ) ![]WorldTile {
         var results = std.ArrayListUnmanaged(WorldTile){};
         defer results.deinit(allocator);
-        
+
         var it = adapter.tile_cache.iterator();
         while (it.next()) |entry| {
             if (predicate(entry.value_ptr.*)) {
                 try results.append(allocator, entry.value_ptr.*);
             }
         }
-        
+
         return results.toOwnedSlice(allocator);
     }
 };
@@ -366,29 +366,29 @@ test "tile mapping" {
         .origin_y = 0,
         .origin_z = 0,
     };
-    
+
     const tile = mapping.worldToTile(1.5, 2.5, 3.5);
     try testing.expectEqual(@as(i32, 1), tile[0]);
     try testing.expectEqual(@as(i32, 2), tile[1]);
     try testing.expectEqual(@as(i32, 3), tile[2]);
-    
+
     const world = mapping.tileToWorld(1, 2, 3);
     try testing.expectApproxEqAbs(@as(f32, 1.5), world[0], 0.001);
 }
 
 test "syrup adapter" {
     const allocator = testing.allocator;
-    
+
     const mapping = TileMapping{
         .tile_size = 1.0,
         .origin_x = 0,
         .origin_y = 0,
         .origin_z = 0,
     };
-    
+
     var adapter = SyrupAdapter.init(allocator, mapping);
     defer adapter.deinit();
-    
+
     const tile = try adapter.getTile(0, 0, 0);
     try testing.expectEqual(@as(i32, 0), tile.x);
     try testing.expectEqual(@as(i32, 0), tile.y);
@@ -397,7 +397,7 @@ test "syrup adapter" {
 
 test "world tile serialization" {
     const allocator = testing.allocator;
-    
+
     const tile = WorldTile{
         .x = 1,
         .y = 2,
@@ -409,9 +409,9 @@ test "world tile serialization" {
             .tile_type = .terrain,
         },
     };
-    
+
     const syrup_val = try tile.toSyrup(allocator);
     defer syrup_val.deinitContainers(allocator);
-    
+
     try testing.expect(syrup_val == .dictionary);
 }

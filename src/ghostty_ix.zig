@@ -14,7 +14,6 @@
 /// - ERGODIC (0): Coordination commands (focus, sync, state-update)
 /// - PLUS (+1): Creation commands (create, execute, build)
 /// Sum ≡ 0 (mod 3) constraint enforces balanced dispatch
-
 const std = @import("std");
 const websocket_framing = @import("websocket_framing");
 const spatial_propagator = @import("spatial_propagator");
@@ -29,9 +28,9 @@ pub const MessageType = websocket_framing.MessageType;
 
 /// Command classification for GF(3) trifurcation
 pub const CommandTrit = enum(i8) {
-    minus = -1,    // Validation/verification
-    ergodic = 0,   // Coordination/state-management
-    plus = 1,      // Generation/creation
+    minus = -1, // Validation/verification
+    ergodic = 0, // Coordination/state-management
+    plus = 1, // Generation/creation
 };
 
 /// Command types that IX recognizes
@@ -64,10 +63,10 @@ pub const CommandType = enum {
 /// Parsed command from input event
 pub const Command = struct {
     command_type: CommandType,
-    args: []const u8,           // Raw argument string
-    modifiers: u8,              // Keyboard modifiers from INPUT
-    spatial_context: ?SpatialContext = null,  // Optional spatial state
-    bci_context: ?BCIContext = null,          // Optional BCI state
+    args: []const u8, // Raw argument string
+    modifiers: u8, // Keyboard modifiers from INPUT
+    spatial_context: ?SpatialContext = null, // Optional spatial state
+    bci_context: ?BCIContext = null, // Optional BCI state
 
     pub fn trit(self: Command) CommandTrit {
         return switch (self.command_type) {
@@ -93,10 +92,10 @@ pub const SpatialContext = struct {
 
 /// BCI context for color/valence integration
 pub const BCIContext = struct {
-    phi: f32,                   // Integrated Information
-    valence: f32,               // -log(vortex_count)
-    fisher_rao: f32,            // Fisher-Rao metric
-    dominant_trit: i8,          // GF(3) trit assignment
+    phi: f32, // Integrated Information
+    valence: f32, // -log(vortex_count)
+    fisher_rao: f32, // Fisher-Rao metric
+    dominant_trit: i8, // GF(3) trit assignment
 };
 
 /// Execution result
@@ -104,7 +103,7 @@ pub const ExecutionResult = struct {
     success: bool,
     output: []const u8,
     error_message: ?[]const u8 = null,
-    next_state: ?[]const u8 = null,     // For continuation/state machines
+    next_state: ?[]const u8 = null, // For continuation/state machines
     colors_updated: bool = false,
     spatial_changed: bool = false,
 };
@@ -112,7 +111,7 @@ pub const ExecutionResult = struct {
 /// Main command dispatcher
 pub const CommandDispatcher = struct {
     allocator: std.mem.Allocator,
-    trit_histogram: [3]u32 = .{ 0, 0, 0 },  // Track -1, 0, +1 dispatch counts
+    trit_histogram: [3]u32 = .{ 0, 0, 0 }, // Track -1, 0, +1 dispatch counts
     last_command_trit: i8 = 0,
     pending_continuations: std.ArrayListUnmanaged(*Continuation) = .{},
 
@@ -145,13 +144,13 @@ pub const CommandDispatcher = struct {
 
         // For now: simple key-to-command mapping
         const command_type: CommandType = switch (key_event.char_code) {
-            'c' => if ((modifiers & 0x02) != 0) .shell else .noop,      // Ctrl+C = shell
-            'q' => .query,                                                // Q = query state
+            'c' => if ((modifiers & 0x02) != 0) .shell else .noop, // Ctrl+C = shell
+            'q' => .query, // Q = query state
             'f' => if ((modifiers & 0x08) != 0) .focus_update else .noop, // Meta+F = focus
-            'm' => .propagator_cmd,                                        // M = merge/propagate
-            's' => .stellogen,                                             // S = stellogen
-            'b' => .bim,                                                   // B = BIM
-            'p' => .continuation,                                          // P = pause/resume
+            'm' => .propagator_cmd, // M = merge/propagate
+            's' => .stellogen, // S = stellogen
+            'b' => .bim, // B = BIM
+            'p' => .continuation, // P = pause/resume
             else => .noop,
         };
 
@@ -315,8 +314,8 @@ pub const CommandDispatcher = struct {
     /// Check GF(3) balance of dispatch counts
     pub fn checkTritBalance(self: CommandDispatcher) bool {
         const sum: i32 = @as(i32, @intCast(self.trit_histogram[0])) * (-1) +
-                         @as(i32, @intCast(self.trit_histogram[1])) * 0 +
-                         @as(i32, @intCast(self.trit_histogram[2])) * 1;
+            @as(i32, @intCast(self.trit_histogram[1])) * 0 +
+            @as(i32, @intCast(self.trit_histogram[2])) * 1;
         return @mod(sum, 3) == 0;
     }
 };
@@ -356,9 +355,9 @@ pub const testing = struct {
         defer dispatcher.deinit();
 
         // Dispatch three balanced commands: validation, coordination, creation
-        const cmd1 = Command{ .command_type = .query, .args = "", .modifiers = 0 };  // MINUS
-        const cmd2 = Command{ .command_type = .focus_update, .args = "", .modifiers = 0 };  // ERGODIC
-        const cmd3 = Command{ .command_type = .shell, .args = "", .modifiers = 0 };  // PLUS
+        const cmd1 = Command{ .command_type = .query, .args = "", .modifiers = 0 }; // MINUS
+        const cmd2 = Command{ .command_type = .focus_update, .args = "", .modifiers = 0 }; // ERGODIC
+        const cmd3 = Command{ .command_type = .shell, .args = "", .modifiers = 0 }; // PLUS
 
         _ = try dispatcher.execute(cmd1);
         _ = try dispatcher.execute(cmd2);

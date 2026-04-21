@@ -14,7 +14,6 @@
 /// - medialab/simd-csv (Rust): Two-speed SIMD architecture
 /// - simdjson: SIMD character class detection
 /// - lemire/fast_float: Fast floating-point parsing
-
 const std = @import("std");
 const math = @import("std").math;
 

@@ -703,8 +703,9 @@ pub fn abduceIndex(color: Color, seed: u64, max_index: u32, tolerance: f64) stru
 /// Abduce seed: given color + index, try common seeds
 pub fn abduceSeed(color: Color, index: u32) struct { seed: u64, distance: f64, found: bool } {
     const common_seeds = [_]u64{
-        0xDEADBEEF, 0xCAFEBABE, 0x12345678, 0x42424242,
-        GAY_IGOR_SEED, 0, 1, 42, 1069, 0x1337,
+        0xDEADBEEF,    0xCAFEBABE, 0x12345678, 0x42424242,
+        GAY_IGOR_SEED, 0,          1,          42,
+        1069,          0x1337,
     };
     var best_seed: u64 = 0;
     var best_dist: f64 = std.math.inf(f64);

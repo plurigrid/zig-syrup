@@ -6,7 +6,6 @@
 ///!   Jerry Bowden Park → High St & Oregon Ave intersection
 ///!   Lat:  ~37.4240 to ~37.4295
 ///!   Lng: ~-122.1460 to ~-122.1380
-
 const std = @import("std");
 
 // ── OLC constants ──────────────────────────────────────────────────────────

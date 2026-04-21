@@ -16,7 +16,6 @@
 ///!   This is the fastest geo tile for GeoACSet operations:
 ///!   a single length-4 cell (~110km x 110km) covering the entire
 ///!   recovery simplex from Palo Alto to SF.
-
 const std = @import("std");
 
 // ── OLC encode (inlined) ───────────────────────────────────────────────────
@@ -55,7 +54,10 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lat_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
         if (digit >= length) break;
         var lng_digit = @as(usize, @intFromFloat(@floor(lng_val / res)));
         if (lng_digit >= CODE_ALPHABET.len) lng_digit = CODE_ALPHABET.len - 1;
@@ -63,13 +65,19 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lng_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
     }
     while (digit < SEPARATOR_POSITION) {
         buffer[idx] = '0';
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
     }
     if (length > PAIR_CODE_LENGTH) {
         const lat_res_base = pairRes(PAIR_CODE_LENGTH - 2);
@@ -121,7 +129,12 @@ fn codeTrit(code: []const u8) i8 {
     return @intCast(@as(i32, @intCast(@mod(sum, 3))) - 1);
 }
 fn tritSymbol(t: i8) u8 {
-    return switch (t) { -1 => '-', 0 => '0', 1 => '+', else => '?' };
+    return switch (t) {
+        -1 => '-',
+        0 => '0',
+        1 => '+',
+        else => '?',
+    };
 }
 
 // ── Geo math ───────────────────────────────────────────────────────────────
@@ -131,7 +144,7 @@ fn haversine(lat1: f64, lng1: f64, lat2: f64, lng2: f64) f64 {
     const dlng = (lng2 - lng1) * std.math.pi / 180.0;
     const a = std.math.sin(dlat / 2.0) * std.math.sin(dlat / 2.0) +
         std.math.cos(lat1 * std.math.pi / 180.0) * std.math.cos(lat2 * std.math.pi / 180.0) *
-        std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
+            std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
     return 6371000.0 * 2.0 * std.math.atan2(std.math.sqrt(a), std.math.sqrt(1.0 - a));
 }
 
@@ -207,18 +220,18 @@ const Waypoint = struct {
 };
 
 const caltrain_northbound = [_]Waypoint{
-    .{ .name = "California Ave",        .lat = 37.4291, .lng = -122.1422 },
-    .{ .name = "Palo Alto",             .lat = 37.4433, .lng = -122.1649 },
-    .{ .name = "Menlo Park",            .lat = 37.4546, .lng = -122.1825 },
-    .{ .name = "Redwood City",          .lat = 37.4857, .lng = -122.2320 },
-    .{ .name = "San Mateo",             .lat = 37.5680, .lng = -122.3240 },
-    .{ .name = "Hillsdale",             .lat = 37.5381, .lng = -122.3459 },
-    .{ .name = "Millbrae",              .lat = 37.5998, .lng = -122.3866 },
-    .{ .name = "San Bruno",             .lat = 37.6306, .lng = -122.4118 },
-    .{ .name = "South SF",              .lat = 37.6559, .lng = -122.4050 },
-    .{ .name = "Bayshore",              .lat = 37.7094, .lng = -122.4014 },
-    .{ .name = "22nd St",               .lat = 37.7577, .lng = -122.3920 },
-    .{ .name = "SF 4th & King",         .lat = 37.7764, .lng = -122.3941 },
+    .{ .name = "California Ave", .lat = 37.4291, .lng = -122.1422 },
+    .{ .name = "Palo Alto", .lat = 37.4433, .lng = -122.1649 },
+    .{ .name = "Menlo Park", .lat = 37.4546, .lng = -122.1825 },
+    .{ .name = "Redwood City", .lat = 37.4857, .lng = -122.2320 },
+    .{ .name = "San Mateo", .lat = 37.5680, .lng = -122.3240 },
+    .{ .name = "Hillsdale", .lat = 37.5381, .lng = -122.3459 },
+    .{ .name = "Millbrae", .lat = 37.5998, .lng = -122.3866 },
+    .{ .name = "San Bruno", .lat = 37.6306, .lng = -122.4118 },
+    .{ .name = "South SF", .lat = 37.6559, .lng = -122.4050 },
+    .{ .name = "Bayshore", .lat = 37.7094, .lng = -122.4014 },
+    .{ .name = "22nd St", .lat = 37.7577, .lng = -122.3920 },
+    .{ .name = "SF 4th & King", .lat = 37.7764, .lng = -122.3941 },
 };
 
 // ── GeoACSet speed tiers ─────────────────────────────────────────────────
@@ -264,12 +277,12 @@ pub fn main() !void {
     p("── OLC PREFIX HIERARCHY: fastest geo for GeoACSet ──────────────────\n\n", .{});
 
     const prefix_points = [_]struct { name: []const u8, lat: f64, lng: f64 }{
-        .{ .name = "PIXEL device",           .lat = 37.427619, .lng = -122.140716 },
-        .{ .name = "Stanford CSLI (Aczel)",  .lat = 37.4275,   .lng = -122.1697 },
-        .{ .name = "California Ave Caltrain",.lat = 37.4291,   .lng = -122.1422 },
-        .{ .name = "Topos Institute Berkeley",.lat = 37.8717,  .lng = -122.2597 },
-        .{ .name = "InterContinental SF",    .lat = 37.7835,   .lng = -122.4028 },
-        .{ .name = "Millbrae interchange",   .lat = 37.5998,   .lng = -122.3866 },
+        .{ .name = "PIXEL device", .lat = 37.427619, .lng = -122.140716 },
+        .{ .name = "Stanford CSLI (Aczel)", .lat = 37.4275, .lng = -122.1697 },
+        .{ .name = "California Ave Caltrain", .lat = 37.4291, .lng = -122.1422 },
+        .{ .name = "Topos Institute Berkeley", .lat = 37.8717, .lng = -122.2597 },
+        .{ .name = "InterContinental SF", .lat = 37.7835, .lng = -122.4028 },
+        .{ .name = "Millbrae interchange", .lat = 37.5998, .lng = -122.3866 },
     };
 
     p("  Point                        len4  len6      len8        len10       \n", .{});
@@ -319,7 +332,7 @@ pub fn main() !void {
     const face_sum = @mod(@as(i32, vtrit[0]) + @as(i32, vtrit[1]) + @as(i32, vtrit[2]) + 6, 3) - 1;
     const rev_face = @mod(-face_sum + 3, 3) - 1;
     p("  Forward:  v0[{c}] + v1[{c}] + v2[{c}] = [{c}]  (same vertices, same sum)\n", .{
-        tritSymbol(vtrit[0]), tritSymbol(vtrit[1]), tritSymbol(vtrit[2]),
+        tritSymbol(vtrit[0]),           tritSymbol(vtrit[1]), tritSymbol(vtrit[2]),
         tritSymbol(@intCast(face_sum)),
     });
     p("  Reversed orientation trit: [{c}]  (negated mod 3)\n", .{

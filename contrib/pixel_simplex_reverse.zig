@@ -10,7 +10,6 @@
 ///!
 ///! Reversal inverts edge orientation: e01 now goes PA→SF (NW bearing).
 ///! Face trit is preserved under reversal (GF(3) addition is commutative).
-
 const std = @import("std");
 
 // ── OLC encode (inlined) ───────────────────────────────────────────────────
@@ -49,7 +48,10 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lat_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
         if (digit >= length) break;
         var lng_digit = @as(usize, @intFromFloat(@floor(lng_val / res)));
         if (lng_digit >= CODE_ALPHABET.len) lng_digit = CODE_ALPHABET.len - 1;
@@ -57,13 +59,19 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lng_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
     }
     while (digit < SEPARATOR_POSITION) {
         buffer[idx] = '0';
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
     }
     if (length > PAIR_CODE_LENGTH) {
         const lat_res_base = pairRes(PAIR_CODE_LENGTH - 2);
@@ -115,10 +123,20 @@ fn codeTrit(code: []const u8) i8 {
     return @intCast(@as(i32, @intCast(@mod(sum, 3))) - 1);
 }
 fn tritSymbol(t: i8) u8 {
-    return switch (t) { -1 => '-', 0 => '0', 1 => '+', else => '?' };
+    return switch (t) {
+        -1 => '-',
+        0 => '0',
+        1 => '+',
+        else => '?',
+    };
 }
 fn tritName(t: i8) []const u8 {
-    return switch (t) { -1 => "MINUS", 0 => "ERGODIC", 1 => "PLUS", else => "???" };
+    return switch (t) {
+        -1 => "MINUS",
+        0 => "ERGODIC",
+        1 => "PLUS",
+        else => "???",
+    };
 }
 
 // ── Geo math ───────────────────────────────────────────────────────────────
@@ -128,7 +146,7 @@ fn haversine(lat1: f64, lng1: f64, lat2: f64, lng2: f64) f64 {
     const dlng = (lng2 - lng1) * std.math.pi / 180.0;
     const a = std.math.sin(dlat / 2.0) * std.math.sin(dlat / 2.0) +
         std.math.cos(lat1 * std.math.pi / 180.0) * std.math.cos(lat2 * std.math.pi / 180.0) *
-        std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
+            std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
     return 6371000.0 * 2.0 * std.math.atan2(std.math.sqrt(a), std.math.sqrt(1.0 - a));
 }
 
@@ -204,18 +222,18 @@ const Waypoint = struct {
 };
 
 const caltrain_stops_reverse = [_]Waypoint{
-    .{ .name = "California Ave",        .lat = 37.4291, .lng = -122.1422 },
-    .{ .name = "Palo Alto",             .lat = 37.4433, .lng = -122.1649 },
-    .{ .name = "Menlo Park",            .lat = 37.4546, .lng = -122.1825 },
-    .{ .name = "Redwood City",          .lat = 37.4857, .lng = -122.2320 },
-    .{ .name = "San Mateo",             .lat = 37.5680, .lng = -122.3240 },
-    .{ .name = "Hillsdale",             .lat = 37.5381, .lng = -122.3459 },
-    .{ .name = "Millbrae",              .lat = 37.5998, .lng = -122.3866 },
-    .{ .name = "San Bruno",             .lat = 37.6306, .lng = -122.4118 },
-    .{ .name = "South SF",              .lat = 37.6559, .lng = -122.4050 },
-    .{ .name = "Bayshore",              .lat = 37.7094, .lng = -122.4014 },
-    .{ .name = "22nd St",               .lat = 37.7577, .lng = -122.3920 },
-    .{ .name = "SF 4th & King",         .lat = 37.7764, .lng = -122.3941 },
+    .{ .name = "California Ave", .lat = 37.4291, .lng = -122.1422 },
+    .{ .name = "Palo Alto", .lat = 37.4433, .lng = -122.1649 },
+    .{ .name = "Menlo Park", .lat = 37.4546, .lng = -122.1825 },
+    .{ .name = "Redwood City", .lat = 37.4857, .lng = -122.2320 },
+    .{ .name = "San Mateo", .lat = 37.5680, .lng = -122.3240 },
+    .{ .name = "Hillsdale", .lat = 37.5381, .lng = -122.3459 },
+    .{ .name = "Millbrae", .lat = 37.5998, .lng = -122.3866 },
+    .{ .name = "San Bruno", .lat = 37.6306, .lng = -122.4118 },
+    .{ .name = "South SF", .lat = 37.6559, .lng = -122.4050 },
+    .{ .name = "Bayshore", .lat = 37.7094, .lng = -122.4014 },
+    .{ .name = "22nd St", .lat = 37.7577, .lng = -122.3920 },
+    .{ .name = "SF 4th & King", .lat = 37.7764, .lng = -122.3941 },
 };
 
 // ── Yuliya context from Beeper forensics ─────────────────────────────────────
@@ -283,7 +301,7 @@ pub fn main() !void {
     p("\n── FACE TRIT (commutative — invariant under reversal) ────────────\n\n", .{});
     const face_sum = @mod(@as(i32, vtrit[0]) + @as(i32, vtrit[1]) + @as(i32, vtrit[2]) + 6, 3) - 1;
     p("  v0[{c}] + v1[{c}] + v2[{c}] = [{c}]  {s}\n", .{
-        tritSymbol(vtrit[0]), tritSymbol(vtrit[1]), tritSymbol(vtrit[2]),
+        tritSymbol(vtrit[0]),           tritSymbol(vtrit[1]),         tritSymbol(vtrit[2]),
         tritSymbol(@intCast(face_sum)), tritName(@intCast(face_sum)),
     });
     p("  (same face trit as forward trace — GF(3) addition commutes)\n", .{});
@@ -353,7 +371,7 @@ pub fn main() !void {
     const walk_bearing = bearing(v0.lat, v0.lng, caltrain_stops_reverse[0].lat, caltrain_stops_reverse[0].lng);
     p("  Distance: {d:.0}m ({d:.2} km)\n", .{ walk_dist, walk_dist / 1000.0 });
     p("  Bearing:  {d:.0} ({s})\n", .{ walk_bearing, compassDir(walk_bearing) });
-    p("  Est time: {d:.0} min walk\n", .{ walk_dist / 80.0 }); // ~80m/min walking speed
+    p("  Est time: {d:.0} min walk\n", .{walk_dist / 80.0}); // ~80m/min walking speed
 
     // 5 interpolated points along the walk
     p("\n  Walk waypoints:\n", .{});
@@ -376,7 +394,7 @@ pub fn main() !void {
     const last_bearing = bearing(caltrain_stops_reverse[caltrain_stops_reverse.len - 1].lat, caltrain_stops_reverse[caltrain_stops_reverse.len - 1].lng, v1.lat, v1.lng);
     p("  Distance: {d:.0}m ({d:.2} km)\n", .{ last_dist, last_dist / 1000.0 });
     p("  Bearing:  {d:.0} ({s})\n", .{ last_bearing, compassDir(last_bearing) });
-    p("  Est time: {d:.0} min walk / 5 min Uber\n", .{ last_dist / 80.0 });
+    p("  Est time: {d:.0} min walk / 5 min Uber\n", .{last_dist / 80.0});
 
     // ── Total journey time estimate ──────────────────────────────────────
     p("\n══════════════════════════════════════════════════════════════════════\n", .{});
@@ -387,7 +405,7 @@ pub fn main() !void {
     p("     12 stops, ~55 min express / ~70 min local\n", .{});
     p("\n  3. Walk/Uber from 4th & King → InterContinental SF\n", .{});
     p("     {d:.0}m {s}, ~{d:.0} min walk\n", .{ last_dist, compassDir(last_bearing), last_dist / 80.0 });
-    p("\n  TOTAL: ~{d:.0} min (walk + Caltrain express + walk)\n", .{ walk_dist / 80.0 + 55.0 + last_dist / 80.0 });
+    p("\n  TOTAL: ~{d:.0} min (walk + Caltrain express + walk)\n", .{walk_dist / 80.0 + 55.0 + last_dist / 80.0});
     p("  TOTAL DISTANCE: {d:.1} km (as the crow flies)\n", .{d01 / 1000.0});
     p("\n  ALTERNATIVE: Uber/Lyft direct — ~35 min, 31 mi via US-101 N\n", .{});
     p("\n  Device:  Pixel 10 Pro Fold (\"mantissa phone\")\n", .{});

@@ -36,7 +36,6 @@ pub fn main() !void {
         // We need a writer that implements the Writer interface
         // syrup.Value.encode takes a writer
         try syrup_val.encode(&stdout);
-
     } else if (std.mem.eql(u8, mode, "decode")) {
         // Read all stdin (Syrup bytes)
         const input = try readAllStdin(allocator, 1024 * 1024 * 10);
@@ -54,7 +53,6 @@ pub fn main() !void {
         // std.json.stringify handles writing to a stream
         const jval = try syrupToJson(arena_alloc, val);
         try stdout.print("{f}", .{std.json.fmt(jval, .{})});
-
     } else {
         std.debug.print("Unknown mode: {s}\n", .{mode});
         std.process.exit(1);
@@ -140,7 +138,7 @@ fn jsonToSyrup(allocator: std.mem.Allocator, json_val: std.json.Value) !Value {
             // Syrup requires sorted keys? Value.dictionary will sort them if we use the constructor?
             // Actually Value.dictionary is just a slice. The encoder expects them sorted?
             // Let's assume the library handles it or we need to sort.
-            // syrup.zig says "Canonical encoding (auto-sorted dicts/sets)" 
+            // syrup.zig says "Canonical encoding (auto-sorted dicts/sets)"
             // but checking the encode implementation would be safe.
             // For now, let's sort them.
             std.sort.block(Value.DictEntry, entries, {}, compareDictEntries);
@@ -167,9 +165,9 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
             // syrup-transport.ts uses JSON.parse which produces numbers.
             // Let's try to convert to i64 if it fits, else float.
             if (bi.toI128()) |i| {
-                 if (i >= std.math.minInt(i64) and i <= std.math.maxInt(i64)) {
-                     return std.json.Value{ .integer = @intCast(i) };
-                 }
+                if (i >= std.math.minInt(i64) and i <= std.math.maxInt(i64)) {
+                    return std.json.Value{ .integer = @intCast(i) };
+                }
             }
             // Bigint doesn't fit in i64 — encode as string with "$bigint" prefix
             return std.json.Value{ .string = "$bigint" };
@@ -179,10 +177,10 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
         .string => |s| return std.json.Value{ .string = s },
         .symbol => |s| return std.json.Value{ .string = s }, // Map symbols to strings
         .bytes => |b| {
-             // JSON doesn't support bytes. Base64?
-             // Or maybe just string if it's UTF8?
-             // For now, let's assume it's string-compatible or error.
-             return std.json.Value{ .string = b }; 
+            // JSON doesn't support bytes. Base64?
+            // Or maybe just string if it's UTF8?
+            // For now, let's assume it's string-compatible or error.
+            return std.json.Value{ .string = b };
         },
         .list => |l| {
             var arr = std.json.Array.init(allocator);
@@ -197,7 +195,7 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
                 // Keys must be strings in JSON
                 switch (entry.key) {
                     .string, .symbol => |k| {
-                         try obj.put(k, try syrupToJson(allocator, entry.value));
+                        try obj.put(k, try syrupToJson(allocator, entry.value));
                     },
                     .integer => |ki| {
                         // Integer keys: convert to decimal string
@@ -208,7 +206,7 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
                     else => {
                         // Other complex keys: use type prefix
                         try obj.put("$key", try syrupToJson(allocator, entry.value));
-                    }
+                    },
                 }
             }
             return std.json.Value{ .object = obj };
@@ -222,21 +220,21 @@ fn syrupToJson(allocator: std.mem.Allocator, syrup_val: Value) !std.json.Value {
             return std.json.Value{ .array = arr };
         },
         .record => |r| {
-             // Map record to object with special field?
-             // Or just an array [label, fields...]
-             // syrup-transport.ts expects JSON objects.
-             // Let's map to object: { "$label": label, "$fields": [...] }
-             var obj = std.json.ObjectMap.init(allocator);
-             // Label is a Value
-             const label_json = try syrupToJson(allocator, r.label.*);
-             try obj.put("$label", label_json);
-             
-             var fields_arr = std.json.Array.init(allocator);
-             for (r.fields) |arg| {
-                 try fields_arr.append(try syrupToJson(allocator, arg));
-             }
-             try obj.put("$fields", std.json.Value{ .array = fields_arr });
-             return std.json.Value{ .object = obj };
+            // Map record to object with special field?
+            // Or just an array [label, fields...]
+            // syrup-transport.ts expects JSON objects.
+            // Let's map to object: { "$label": label, "$fields": [...] }
+            var obj = std.json.ObjectMap.init(allocator);
+            // Label is a Value
+            const label_json = try syrupToJson(allocator, r.label.*);
+            try obj.put("$label", label_json);
+
+            var fields_arr = std.json.Array.init(allocator);
+            for (r.fields) |arg| {
+                try fields_arr.append(try syrupToJson(allocator, arg));
+            }
+            try obj.put("$fields", std.json.Value{ .array = fields_arr });
+            return std.json.Value{ .object = obj };
         },
         .tagged => |t| {
             // Tagged value: { "$tag": tag_string, "$value": payload }

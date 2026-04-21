@@ -14,13 +14,13 @@ const ABTestConfig = @import("ab_test.zig").ABTestConfig;
 /// Memory tracker for immer-style structures
 pub const MemoryTracker = struct {
     const Self = @This();
-    
+
     total_allocated: usize,
     total_freed: usize,
     peak_usage: usize,
     current_usage: usize,
     allocation_count: u64,
-    
+
     pub fn init() Self {
         return .{
             .total_allocated = 0,
@@ -30,7 +30,7 @@ pub const MemoryTracker = struct {
             .allocation_count = 0,
         };
     }
-    
+
     pub fn recordAllocation(self: *Self, size: usize) void {
         self.total_allocated += size;
         self.current_usage += size;
@@ -39,12 +39,12 @@ pub const MemoryTracker = struct {
             self.peak_usage = self.current_usage;
         }
     }
-    
+
     pub fn recordFree(self: *Self, size: usize) void {
         self.total_freed += size;
         self.current_usage -= size;
     }
-    
+
     pub fn getStats(self: Self) MemoryStats {
         return .{
             .total_allocated = self.total_allocated,
@@ -53,7 +53,7 @@ pub const MemoryTracker = struct {
             .allocation_count = self.allocation_count,
         };
     }
-    
+
     pub const MemoryStats = struct {
         total_allocated: usize,
         current_usage: usize,
@@ -78,13 +78,13 @@ pub const WorldBenchmark = struct {
     memory: MemoryTracker.MemoryStats,
     /// World-specific metrics
     world_metrics: WorldMetrics,
-    
+
     pub const WorldMetrics = struct {
         player_count: usize,
         tick_count: u64,
         state_size_bytes: usize,
     };
-    
+
     pub fn format(
         self: WorldBenchmark,
         comptime fmt: []const u8,
@@ -93,7 +93,7 @@ pub const WorldBenchmark = struct {
     ) !void {
         _ = fmt;
         _ = options;
-        
+
         try writer.print(
             "WorldBenchmark({s}): {d} ops, {d} ns/op, {d} ops/sec\n",
             .{
@@ -126,7 +126,7 @@ pub const BenchmarkComparison = struct {
     variants: []const WorldBenchmark,
     /// Statistical comparison
     comparisons: []const VariantComparison,
-    
+
     pub const VariantComparison = struct {
         variant_uri: []const u8,
         /// Relative performance (1.0 = same, 0.5 = 2x faster)
@@ -136,21 +136,21 @@ pub const BenchmarkComparison = struct {
         /// Significance level (p-value approximation)
         significance: f64,
     };
-    
+
     /// Generate report
     pub fn generateReport(self: BenchmarkComparison, allocator: Allocator) ![]const u8 {
         var report = std.ArrayList(u8).init(allocator);
         defer report.deinit();
-        
+
         const writer = report.writer();
-        
+
         try writer.print("World Benchmark Comparison Report\n", .{});
         try writer.print("=================================\n\n", .{});
-        
+
         try writer.print("Baseline: {s}\n", .{self.baseline.world_uri});
         try writer.print("  Performance: {d} ns/op\n", .{self.baseline.avg_ns});
         try writer.print("  Memory peak: {d} bytes\n\n", .{self.baseline.memory.peak_usage});
-        
+
         for (self.variants, self.comparisons) |variant, comp| {
             try writer.print("Variant: {s}\n", .{variant.world_uri});
             try writer.print("  Performance: {d} ns/op ({d:.1}x)\n", .{
@@ -160,7 +160,7 @@ pub const BenchmarkComparison = struct {
             try writer.print("  Memory: {d:.1}x baseline\n", .{comp.relative_memory});
             try writer.print("  Significance: p={d:.3}\n\n", .{comp.significance});
         }
-        
+
         return report.toOwnedSlice();
     }
 };
@@ -168,11 +168,11 @@ pub const BenchmarkComparison = struct {
 /// Benchmark adapter for world performance testing
 pub const BenchmarkAdapter = struct {
     const Self = @This();
-    
+
     allocator: Allocator,
     memory_tracker: MemoryTracker,
     results: std.ArrayListUnmanaged(WorldBenchmark),
-    
+
     pub fn init(allocator: Allocator) !Self {
         return .{
             .allocator = allocator,
@@ -180,11 +180,11 @@ pub const BenchmarkAdapter = struct {
             .results = .{},
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         self.results.deinit(self.allocator);
     }
-    
+
     /// Benchmark a single world
     pub fn benchmarkWorld(
         self: *Self,
@@ -193,14 +193,14 @@ pub const BenchmarkAdapter = struct {
         comptime benchmark_type: BenchmarkType,
     ) !WorldBenchmark {
         const start_time = std.time.nanoTimestamp();
-        
+
         // Track memory at start
         const mem_start = self.memory_tracker.getStats();
-        
+
         // Create world
         const world = try World.create(self.allocator, world_uri, null);
         defer world.destroy();
-        
+
         // Run benchmark using available World operations
         switch (benchmark_type) {
             .tick => {
@@ -223,15 +223,15 @@ pub const BenchmarkAdapter = struct {
                 }
             },
         }
-        
+
         const end_time = std.time.nanoTimestamp();
         const total_ns = end_time - start_time;
         const avg_ns = @divFloor(total_ns, iterations);
         const ops_per_sec = if (avg_ns > 0) @divFloor(@as(i128, 1_000_000_000), avg_ns) else 0;
-        
+
         // Get memory stats
         const mem_end = self.memory_tracker.getStats();
-        
+
         const benchmark = WorldBenchmark{
             .world_uri = world_uri,
             .iterations = iterations,
@@ -250,11 +250,11 @@ pub const BenchmarkAdapter = struct {
                 .state_size_bytes = 0,
             },
         };
-        
+
         try self.results.append(self.allocator, benchmark);
         return benchmark;
     }
-    
+
     /// Run comparison between multiple world URIs (variants)
     pub fn runComparison(
         self: *Self,
@@ -264,33 +264,33 @@ pub const BenchmarkAdapter = struct {
         if (world_uris.len < 2) {
             return error.InsufficientVariants;
         }
-        
+
         var benchmarks = std.ArrayListUnmanaged(WorldBenchmark){};
         defer benchmarks.deinit(self.allocator);
-        
+
         // Benchmark each variant
         for (world_uris) |uri| {
             const result = try self.benchmarkWorld(uri, iterations, .full_simulation);
             try benchmarks.append(self.allocator, result);
         }
-        
+
         // Calculate comparisons
         var comparisons = std.ArrayListUnmanaged(BenchmarkComparison.VariantComparison){};
         defer comparisons.deinit(self.allocator);
-        
+
         const baseline = benchmarks.items[0];
-        
+
         for (benchmarks.items[1..]) |variant| {
             const relative_speed = if (baseline.avg_ns > 0)
                 @as(f64, @floatFromInt(baseline.avg_ns)) / @as(f64, @floatFromInt(variant.avg_ns))
             else
                 1.0;
-            
+
             const relative_memory = if (baseline.memory.peak_usage > 0)
                 @as(f64, @floatFromInt(variant.memory.peak_usage)) / @as(f64, @floatFromInt(baseline.memory.peak_usage))
             else
                 1.0;
-            
+
             try comparisons.append(self.allocator, .{
                 .variant_uri = variant.world_uri,
                 .relative_speed = relative_speed,
@@ -298,14 +298,14 @@ pub const BenchmarkAdapter = struct {
                 .significance = 0.05, // Placeholder
             });
         }
-        
+
         return BenchmarkComparison{
             .baseline = baseline,
             .variants = try self.allocator.dupe(WorldBenchmark, benchmarks.items[1..]),
             .comparisons = try self.allocator.dupe(BenchmarkComparison.VariantComparison, comparisons.items),
         };
     }
-    
+
     /// Benchmark A/B test framework overhead
     pub fn benchmarkABTest(
         self: *Self,
@@ -313,7 +313,7 @@ pub const BenchmarkAdapter = struct {
         assignments_per_variant: usize,
     ) !ABTestBenchmark {
         const start_time = std.time.nanoTimestamp();
-        
+
         // Create A/B test with default config
         const config = ABTestConfig{
             .name = "benchmark",
@@ -324,9 +324,9 @@ pub const BenchmarkAdapter = struct {
         };
         var ab_test = try ABTest.init(self.allocator, config, 42);
         defer ab_test.deinit();
-        
+
         ab_test.start();
-        
+
         // Run assignments
         const total_assignments = variant_count * assignments_per_variant;
         for (0..total_assignments) |i| {
@@ -334,10 +334,10 @@ pub const BenchmarkAdapter = struct {
             defer self.allocator.free(player_id);
             _ = try ab_test.assignPlayer(player_id, .RoundRobin, null);
         }
-        
+
         const end_time = std.time.nanoTimestamp();
         const total_ns = end_time - start_time;
-        
+
         return ABTestBenchmark{
             .variant_count = variant_count,
             .assignments = total_assignments,
@@ -345,36 +345,36 @@ pub const BenchmarkAdapter = struct {
             .ns_per_assignment = @divFloor(total_ns, total_assignments),
         };
     }
-    
+
     pub const ABTestBenchmark = struct {
         variant_count: usize,
         assignments: usize,
         total_ns: i128,
         ns_per_assignment: i128,
     };
-    
+
     /// Get all results
     pub fn getResults(self: Self) []const WorldBenchmark {
         return self.results.items;
     }
-    
+
     /// Generate summary report
     pub fn generateReport(self: Self, allocator: Allocator) ![]const u8 {
         var report = std.ArrayListUnmanaged(u8){};
         defer report.deinit(allocator);
-        
+
         const writer = report.writer(allocator);
-        
+
         try writer.print("World Benchmark Summary\n", .{});
         try writer.print("=======================\n\n", .{});
-        
+
         for (self.results.items) |result| {
             try writer.print("{s}\n", .{result});
         }
-        
+
         return report.toOwnedSlice(allocator);
     }
-    
+
     /// Clear all results
     pub fn clearResults(self: *Self) void {
         self.results.clearRetainingCapacity();
@@ -396,11 +396,11 @@ const testing = std.testing;
 
 test "memory tracker" {
     var tracker = MemoryTracker.init();
-    
+
     tracker.recordAllocation(100);
     tracker.recordAllocation(200);
     tracker.recordFree(100);
-    
+
     const stats = tracker.getStats();
     try testing.expectEqual(@as(usize, 300), stats.total_allocated);
     try testing.expectEqual(@as(usize, 200), stats.current_usage);
@@ -409,12 +409,12 @@ test "memory tracker" {
 
 test "benchmark adapter" {
     const allocator = testing.allocator;
-    
+
     var adapter = try BenchmarkAdapter.init(allocator);
     defer adapter.deinit();
-    
+
     const result = try adapter.benchmarkWorld("a://benchmark-test", 10, .tick);
-    
+
     try testing.expectEqualStrings("a://benchmark-test", result.world_uri);
     try testing.expectEqual(@as(usize, 10), result.iterations);
     try testing.expect(result.avg_ns > 0);
@@ -422,12 +422,12 @@ test "benchmark adapter" {
 
 test "ab test benchmark" {
     const allocator = testing.allocator;
-    
+
     var adapter = try BenchmarkAdapter.init(allocator);
     defer adapter.deinit();
-    
+
     const result = try adapter.benchmarkABTest(3, 10);
-    
+
     try testing.expectEqual(@as(usize, 3), result.variant_count);
     try testing.expectEqual(@as(usize, 30), result.assignments);
 }

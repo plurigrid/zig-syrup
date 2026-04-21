@@ -4,8 +4,13 @@ const syrup = @import("syrup");
 // Bristol Fashion MPC Circuit Parser & Syrup Serializer
 
 pub const GateType = enum {
-    AND, XOR, INV, EQ, EQW, MAND,
-    
+    AND,
+    XOR,
+    INV,
+    EQ,
+    EQW,
+    MAND,
+
     pub fn fromString(s: []const u8) !GateType {
         if (std.mem.eql(u8, s, "AND")) return .AND;
         if (std.mem.eql(u8, s, "XOR")) return .XOR;
@@ -27,12 +32,12 @@ pub const Gate = struct {
     pub fn toSyrup(self: Gate, allocator: std.mem.Allocator) !syrup.Value {
         // Encode gate as record: <'gate {op: "AND", in: [0, 1], out: [2]}>
         const label = syrup.Value.fromSymbol("gate");
-        
+
         // Build input list
         var in_list = std.ArrayListUnmanaged(syrup.Value){};
         defer in_list.deinit(allocator);
         for (self.input_wires) |w| try in_list.append(allocator, syrup.Value.fromInteger(w));
-        
+
         // Build output list
         var out_list = std.ArrayListUnmanaged(syrup.Value){};
         defer out_list.deinit(allocator);
@@ -51,7 +56,7 @@ pub const Gate = struct {
         // Sort order: "in", "op", "out". Correct.
 
         const dict = syrup.Value.fromDictionary(try dict_entries.toOwnedSlice(allocator));
-        
+
         // Record fields list
         var fields_list = std.ArrayListUnmanaged(syrup.Value){};
         defer fields_list.deinit(allocator);
@@ -70,7 +75,7 @@ pub const Circuit = struct {
 
     pub fn parse(allocator: std.mem.Allocator, input: []const u8) !Circuit {
         var it = std.mem.tokenizeAny(u8, input, " \n\r\t");
-        
+
         const num_gates = try std.fmt.parseInt(u32, it.next() orelse return error.UnexpectedEOF, 10);
         const num_wires = try std.fmt.parseInt(u32, it.next() orelse return error.UnexpectedEOF, 10);
 
@@ -88,24 +93,24 @@ pub const Circuit = struct {
 
         var gates = try allocator.alloc(Gate, num_gates);
         var gate_idx: usize = 0;
-        
+
         while (gate_idx < num_gates) : (gate_idx += 1) {
             const n_in = try std.fmt.parseInt(u32, it.next() orelse return error.UnexpectedEOF, 10);
             const n_out = try std.fmt.parseInt(u32, it.next() orelse return error.UnexpectedEOF, 10);
-            
+
             const in_wires = try allocator.alloc(u32, n_in);
             for (in_wires) |*w| {
                 w.* = try std.fmt.parseInt(u32, it.next() orelse return error.UnexpectedEOF, 10);
             }
-            
+
             const out_wires = try allocator.alloc(u32, n_out);
             for (out_wires) |*w| {
                 w.* = try std.fmt.parseInt(u32, it.next() orelse return error.UnexpectedEOF, 10);
             }
-            
+
             const op_str = it.next() orelse return error.UnexpectedEOF;
             const op = try GateType.fromString(op_str);
-            
+
             gates[gate_idx] = .{
                 .num_in = n_in,
                 .num_out = n_out,
@@ -123,40 +128,40 @@ pub const Circuit = struct {
             .gates = gates,
         };
     }
-    
+
     pub fn toSyrup(self: Circuit, allocator: std.mem.Allocator) !syrup.Value {
         // Circuit Record: <'circuit {gates: [...], meta: {ng: ..., nw: ...}}>
         const label = syrup.Value.fromSymbol("circuit");
-        
+
         // Gates List
         var gates_list = std.ArrayListUnmanaged(syrup.Value){};
         defer gates_list.deinit(allocator);
         for (self.gates) |g| {
             try gates_list.append(allocator, try g.toSyrup(allocator));
         }
-        
+
         // Metadata Dictionary
         var meta_entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer meta_entries.deinit(allocator);
-        
+
         try meta_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("gates"), .value = syrup.Value.fromInteger(self.num_gates) });
         try meta_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("wires"), .value = syrup.Value.fromInteger(self.num_wires) });
-        
+
         const meta_dict = syrup.Value.fromDictionary(try meta_entries.toOwnedSlice(allocator));
-        
+
         // Main Dictionary
         var main_entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer main_entries.deinit(allocator);
-        
+
         try main_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("body"), .value = syrup.Value.fromList(try gates_list.toOwnedSlice(allocator)) });
         try main_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("meta"), .value = meta_dict });
-        
+
         const main_dict = syrup.Value.fromDictionary(try main_entries.toOwnedSlice(allocator));
-        
+
         // Fields list
         var fields = try allocator.alloc(syrup.Value, 1);
         fields[0] = main_dict;
-        
+
         return syrup.Value.fromRecord(&label, fields);
     }
 };

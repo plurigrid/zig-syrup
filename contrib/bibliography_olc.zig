@@ -10,7 +10,6 @@
 ///!   v/basictex/all.bib
 ///!   v/dialecticaLambek/references.bib
 ///!   d/concordia/CITATION.bib
-
 const std = @import("std");
 
 const CODE_ALPHABET: []const u8 = "23456789CFGHJMPQRVWX";
@@ -47,7 +46,10 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lat_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
         if (digit >= length) break;
         var lng_digit = @as(usize, @intFromFloat(@floor(lng_val / res)));
         if (lng_digit >= CODE_ALPHABET.len) lng_digit = CODE_ALPHABET.len - 1;
@@ -55,13 +57,19 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lng_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
     }
     while (digit < SEPARATOR_POSITION) {
         buffer[idx] = '0';
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = '+'; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = '+';
+            idx += 1;
+        }
     }
     if (length > PAIR_CODE_LENGTH) {
         const lat_res_base = pairRes(PAIR_CODE_LENGTH - 2);
@@ -112,7 +120,12 @@ fn codeTrit(code: []const u8) i8 {
     return @intCast(@as(i32, @intCast(@mod(sum, 3))) - 1);
 }
 fn tritSymbol(t: i8) u8 {
-    return switch (t) { -1 => '-', 0 => '0', 1 => '+', else => '?' };
+    return switch (t) {
+        -1 => '-',
+        0 => '0',
+        1 => '+',
+        else => '?',
+    };
 }
 
 const Institution = struct {
@@ -125,100 +138,68 @@ const Institution = struct {
 
 const institutions = [_]Institution{
     // ── Cambridge ──
-    .{ .name = "Cambridge University Press / DPMMS", .lat = 52.2043, .lng = 0.1149,
-       .bib_keys = &.{ "RiehlVerity:2022eo", "CoeckeKissinger17", "depaiva1990" }, .world = 'e' },
+    .{ .name = "Cambridge University Press / DPMMS", .lat = 52.2043, .lng = 0.1149, .bib_keys = &.{ "RiehlVerity:2022eo", "CoeckeKissinger17", "depaiva1990" }, .world = 'e' },
     // ── Johns Hopkins (Emily Riehl) ──
-    .{ .name = "Johns Hopkins University (Riehl)", .lat = 39.3299, .lng = -76.6205,
-       .bib_keys = &.{ "RiehlVerity:2021ce", "RiehlVerity:2022eo" }, .world = 'e' },
+    .{ .name = "Johns Hopkins University (Riehl)", .lat = 39.3299, .lng = -76.6205, .bib_keys = &.{ "RiehlVerity:2021ce", "RiehlVerity:2022eo" }, .world = 'e' },
     // ── Macquarie University (Verity, Lack, Street) ──
-    .{ .name = "Macquarie University (Verity/Lack)", .lat = -33.7738, .lng = 151.1126,
-       .bib_keys = &.{ "Lack:2010tc", "BLV:2020af" }, .world = 'e' },
+    .{ .name = "Macquarie University (Verity/Lack)", .lat = -33.7738, .lng = 151.1126, .bib_keys = &.{ "Lack:2010tc", "BLV:2020af" }, .world = 'e' },
     // ── Oxford (Abramsky, Coecke, Kissinger) ──
-    .{ .name = "University of Oxford (CompSci)", .lat = 51.7600, .lng = -1.2588,
-       .bib_keys = &.{ "Abramsky96", "CoeckeKissinger17" }, .world = 'o' },
+    .{ .name = "University of Oxford (CompSci)", .lat = 51.7600, .lng = -1.2588, .bib_keys = &.{ "Abramsky96", "CoeckeKissinger17" }, .world = 'o' },
     // ── UCL (DisCoPy — de Felice, Toumi) ──
-    .{ .name = "UCL (DisCoPy group)", .lat = 51.5246, .lng = -0.1340,
-       .bib_keys = &.{ "DelpeuchVicary22", "DunnVicary19" }, .world = 'o' },
+    .{ .name = "UCL (DisCoPy group)", .lat = 51.5246, .lng = -0.1340, .bib_keys = &.{ "DelpeuchVicary22", "DunnVicary19" }, .world = 'o' },
     // ── Tallinn (Gepner) ──
-    .{ .name = "TalTech (Gepner)", .lat = 59.3953, .lng = 24.6713,
-       .bib_keys = &.{ "GepnerHaugsengKock:2021oa" }, .world = 'e' },
+    .{ .name = "TalTech (Gepner)", .lat = 59.3953, .lng = 24.6713, .bib_keys = &.{"GepnerHaugsengKock:2021oa"}, .world = 'e' },
     // ── NTNU (Haugseng) ──
-    .{ .name = "NTNU Trondheim (Haugseng)", .lat = 63.4184, .lng = 10.4017,
-       .bib_keys = &.{ "GepnerHaugsengKock:2021oa" }, .world = 'e' },
+    .{ .name = "NTNU Trondheim (Haugseng)", .lat = 63.4184, .lng = 10.4017, .bib_keys = &.{"GepnerHaugsengKock:2021oa"}, .world = 'e' },
     // ── UAB Barcelona (Kock) ──
-    .{ .name = "UAB Barcelona (Kock)", .lat = 41.5006, .lng = 2.1094,
-       .bib_keys = &.{ "GepnerHaugsengKock:2021oa" }, .world = 'e' },
+    .{ .name = "UAB Barcelona (Kock)", .lat = 41.5006, .lng = 2.1094, .bib_keys = &.{"GepnerHaugsengKock:2021oa"}, .world = 'e' },
     // ── Lund (Astrom) ──
-    .{ .name = "Lund University (Astrom)", .lat = 55.7127, .lng = 13.2100,
-       .bib_keys = &.{ "Aastrom.Wittenmark:2013a" }, .world = 'd' },
+    .{ .name = "Lund University (Astrom)", .lat = 55.7127, .lng = 13.2100, .bib_keys = &.{"Aastrom.Wittenmark:2013a"}, .world = 'd' },
     // ── Leicester (Abbott containers) ──
-    .{ .name = "University of Leicester (Abbott)", .lat = 52.6219, .lng = -1.1253,
-       .bib_keys = &.{ "abbot2003categoriesthesis", "abbott2003categories" }, .world = 'd' },
+    .{ .name = "University of Leicester (Abbott)", .lat = 52.6219, .lng = -1.1253, .bib_keys = &.{ "abbot2003categoriesthesis", "abbott2003categories" }, .world = 'd' },
     // ── Nottingham (Altenkirch) ──
-    .{ .name = "University of Nottingham (Altenkirch)", .lat = 52.9388, .lng = -1.1966,
-       .bib_keys = &.{ "abbott2003categories", "abbott2005containers" }, .world = 'd' },
+    .{ .name = "University of Nottingham (Altenkirch)", .lat = 52.9388, .lng = -1.1966, .bib_keys = &.{ "abbott2003categories", "abbott2005containers" }, .world = 'd' },
     // ── Topos Institute (Spivak, Aberle) ──
-    .{ .name = "Topos Institute, Berkeley", .lat = 37.8717, .lng = -122.2597,
-       .bib_keys = &.{ "aberle2024polynomial" }, .world = 'd' },
+    .{ .name = "Topos Institute, Berkeley", .lat = 37.8717, .lng = -122.2597, .bib_keys = &.{"aberle2024polynomial"}, .world = 'd' },
     // ── Pisa (Bonchi, Zanasi — string diagrams) ──
-    .{ .name = "University of Pisa (Bonchi)", .lat = 43.7228, .lng = 10.4017,
-       .bib_keys = &.{ "BonchiEtAl22", "Abramsky:1996a" }, .world = 'o' },
+    .{ .name = "University of Pisa (Bonchi)", .lat = 43.7228, .lng = 10.4017, .bib_keys = &.{ "BonchiEtAl22", "Abramsky:1996a" }, .world = 'o' },
     // ── Tallinn/IOCL (Di Lavore — monoidal streams) ──
-    .{ .name = "Tallinn Univ of Technology", .lat = 59.3953, .lng = 24.6713,
-       .bib_keys = &.{ "DiLavoreEtAl22" }, .world = 'o' },
+    .{ .name = "Tallinn Univ of Technology", .lat = 59.3953, .lng = 24.6713, .bib_keys = &.{"DiLavoreEtAl22"}, .world = 'o' },
     // ── Birmingham (de Paiva) ──
-    .{ .name = "University of Birmingham (de Paiva)", .lat = 52.4508, .lng = -1.9305,
-       .bib_keys = &.{ "depaiva1991", "depaiva1996", "depaiva2007" }, .world = 'v' },
+    .{ .name = "University of Birmingham (de Paiva)", .lat = 52.4508, .lng = -1.9305, .bib_keys = &.{ "depaiva1991", "depaiva1996", "depaiva2007" }, .world = 'v' },
     // ── Amsterdam (Dialectica Lambek colloquium) ──
-    .{ .name = "University of Amsterdam", .lat = 52.3563, .lng = 4.9553,
-       .bib_keys = &.{ "depaiva1991" }, .world = 'v' },
+    .{ .name = "University of Amsterdam", .lat = 52.3563, .lng = 4.9553, .bib_keys = &.{"depaiva1991"}, .world = 'v' },
     // ── McGill (Lambek) ──
-    .{ .name = "McGill University (Lambek)", .lat = 45.5048, .lng = -73.5772,
-       .bib_keys = &.{ "lambek1988" }, .world = 'v' },
+    .{ .name = "McGill University (Lambek)", .lat = 45.5048, .lng = -73.5772, .bib_keys = &.{"lambek1988"}, .world = 'v' },
     // ── ENS Lyon (Gimenez) ──
-    .{ .name = "ENS Lyon (Gimenez)", .lat = 45.7296, .lng = 4.8272,
-       .bib_keys = &.{ "gimenez:recursion" }, .world = 'v' },
+    .{ .name = "ENS Lyon (Gimenez)", .lat = 45.7296, .lng = 4.8272, .bib_keys = &.{"gimenez:recursion"}, .world = 'v' },
     // ── Stanford (Aczel — non-well-founded sets) ──
-    .{ .name = "Stanford CSLI (Aczel)", .lat = 37.4275, .lng = -122.1697,
-       .bib_keys = &.{ "aczel:afa", "aczel:rrs" }, .world = 'v' },
+    .{ .name = "Stanford CSLI (Aczel)", .lat = 37.4275, .lng = -122.1697, .bib_keys = &.{ "aczel:afa", "aczel:rrs" }, .world = 'v' },
     // ── UPenn (Scedrov) ──
-    .{ .name = "UPenn (Scedrov)", .lat = 39.9522, .lng = -75.1932,
-       .bib_keys = &.{ "scedrov:ist", "scedrov:forcing" }, .world = 'v' },
+    .{ .name = "UPenn (Scedrov)", .lat = 39.9522, .lng = -75.1932, .bib_keys = &.{ "scedrov:ist", "scedrov:forcing" }, .world = 'v' },
     // ── Darmstadt (Streicher) ──
-    .{ .name = "TU Darmstadt (Streicher)", .lat = 49.8779, .lng = 8.6542,
-       .bib_keys = &.{ "streicher:semtt", "lafont1991" }, .world = 'v' },
+    .{ .name = "TU Darmstadt (Streicher)", .lat = 49.8779, .lng = 8.6542, .bib_keys = &.{ "streicher:semtt", "lafont1991" }, .world = 'v' },
     // ── Queen Mary London (Hyland) ──
-    .{ .name = "DPMMS Cambridge (Hyland)", .lat = 52.2043, .lng = 0.1157,
-       .bib_keys = &.{ "hyland2002" }, .world = 'v' },
+    .{ .name = "DPMMS Cambridge (Hyland)", .lat = 52.2043, .lng = 0.1157, .bib_keys = &.{"hyland2002"}, .world = 'v' },
     // ── ITU Copenhagen (Biering) ──
-    .{ .name = "ITU Copenhagen (Biering)", .lat = 55.6596, .lng = 12.5912,
-       .bib_keys = &.{ "biering2008" }, .world = 'v' },
+    .{ .name = "ITU Copenhagen (Biering)", .lat = 55.6596, .lng = 12.5912, .bib_keys = &.{"biering2008"}, .world = 'v' },
     // ── Queen Mary London (Oliva) ──
-    .{ .name = "Queen Mary Univ London (Oliva)", .lat = 51.5233, .lng = -0.0418,
-       .bib_keys = &.{ "oliva2014" }, .world = 'v' },
+    .{ .name = "Queen Mary Univ London (Oliva)", .lat = 51.5233, .lng = -0.0418, .bib_keys = &.{"oliva2014"}, .world = 'v' },
     // ── Grandis/Pare — Genova/Dalhousie ──
-    .{ .name = "Universita di Genova (Grandis)", .lat = 44.4133, .lng = 8.9625,
-       .bib_keys = &.{ "GrandisPare2004:ad" }, .world = 'e' },
-    .{ .name = "Dalhousie University (Pare)", .lat = 44.6366, .lng = -63.5917,
-       .bib_keys = &.{ "GrandisPare2004:ad" }, .world = 'e' },
+    .{ .name = "Universita di Genova (Grandis)", .lat = 44.4133, .lng = 8.9625, .bib_keys = &.{"GrandisPare2004:ad"}, .world = 'e' },
+    .{ .name = "Dalhousie University (Pare)", .lat = 44.6366, .lng = -63.5917, .bib_keys = &.{"GrandisPare2004:ad"}, .world = 'e' },
     // ── Fritz (Innsbruck — Markov categories) ──
-    .{ .name = "Univ of Innsbruck (Fritz)", .lat = 47.2633, .lng = 11.3861,
-       .bib_keys = &.{ "FritzLiang23" }, .world = 'o' },
+    .{ .name = "Univ of Innsbruck (Fritz)", .lat = 47.2633, .lng = 11.3861, .bib_keys = &.{"FritzLiang23"}, .world = 'o' },
     // ── Vanderbilt (Bohmann — spectra) ──
-    .{ .name = "Vanderbilt University (Bohmann)", .lat = 36.1447, .lng = -86.8027,
-       .bib_keys = &.{ "bohmann:globalspectra" }, .world = 'v' },
+    .{ .name = "Vanderbilt University (Bohmann)", .lat = 36.1447, .lng = -86.8027, .bib_keys = &.{"bohmann:globalspectra"}, .world = 'v' },
     // ── Peter Henry (UWO) ──
-    .{ .name = "Western Ontario (Henry)", .lat = 43.0096, .lng = -81.2737,
-       .bib_keys = &.{ "Henry:2020lm" }, .world = 'e' },
+    .{ .name = "Western Ontario (Henry)", .lat = 43.0096, .lng = -81.2737, .bib_keys = &.{"Henry:2020lm"}, .world = 'e' },
     // ── Anel/Lejay (CMU/Paris) ──
-    .{ .name = "CMU (Anel)", .lat = 40.4433, .lng = -79.9436,
-       .bib_keys = &.{ "AnelLejay:2018eh" }, .world = 'e' },
+    .{ .name = "CMU (Anel)", .lat = 40.4433, .lng = -79.9436, .bib_keys = &.{"AnelLejay:2018eh"}, .world = 'e' },
     // ── PIXEL LAST SEEN ──
-    .{ .name = "** PIXEL 10 PRO FOLD (last seen) **", .lat = 37.4276, .lng = -122.1407,
-       .bib_keys = &.{ "mantissa_phone_2026" }, .world = 'y' },
+    .{ .name = "** PIXEL 10 PRO FOLD (last seen) **", .lat = 37.4276, .lng = -122.1407, .bib_keys = &.{"mantissa_phone_2026"}, .world = 'y' },
     // ── InterContinental SF (current position) ──
-    .{ .name = "** YOU: InterContinental SF 8F **", .lat = 37.7835, .lng = -122.4028,
-       .bib_keys = &.{ "current_position_2026" }, .world = 'y' },
+    .{ .name = "** YOU: InterContinental SF 8F **", .lat = 37.7835, .lng = -122.4028, .bib_keys = &.{"current_position_2026"}, .world = 'y' },
 };
 
 pub fn main() !void {
@@ -253,7 +234,7 @@ pub fn main() !void {
 
     p("\n  ─────────────────────────────────────────────────────────────────────────────────────\n", .{});
     p("  GF(3) distribution: [-]={d}  [0]={d}  [+]={d}  (total {d})\n", .{
-        trit_counts[0], trit_counts[1], trit_counts[2],
+        trit_counts[0],                                   trit_counts[1], trit_counts[2],
         trit_counts[0] + trit_counts[1] + trit_counts[2],
     });
 
@@ -312,8 +293,8 @@ pub fn main() !void {
 
     const points = [_]struct { name: []const u8, lat: f64, lng: f64 }{
         .{ .name = "YOU (InterContinental SF)", .lat = v0_lat, .lng = v0_lng },
-        .{ .name = "PIXEL (triangulated)",      .lat = v1_lat, .lng = v1_lng },
-        .{ .name = "Stanford CSLI (Aczel)",     .lat = v2_lat, .lng = v2_lng },
+        .{ .name = "PIXEL (triangulated)", .lat = v1_lat, .lng = v1_lng },
+        .{ .name = "Stanford CSLI (Aczel)", .lat = v2_lat, .lng = v2_lng },
     };
 
     for (points) |pt| {
@@ -327,7 +308,7 @@ pub fn main() !void {
     const dlng = (v1_lng - v2_lng) * std.math.pi / 180.0;
     const a = std.math.sin(dlat / 2.0) * std.math.sin(dlat / 2.0) +
         std.math.cos(v1_lat * std.math.pi / 180.0) * std.math.cos(v2_lat * std.math.pi / 180.0) *
-        std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
+            std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
     const d = 6371000.0 * 2.0 * std.math.atan2(std.math.sqrt(a), std.math.sqrt(1.0 - a));
 
     p("\n  PIXEL → Stanford CSLI: {d:.0}m ({d:.2} km)\n", .{ d, d / 1000.0 });

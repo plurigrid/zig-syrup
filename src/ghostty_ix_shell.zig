@@ -8,7 +8,6 @@
 /// - Non-blocking execution (could be enhanced to async)
 /// - Trit classification: PLUS (+1) generation command
 /// - Error messages included in output on failure
-
 const std = @import("std");
 const ghostty_ix = @import("ghostty_ix");
 

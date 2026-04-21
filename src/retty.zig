@@ -1324,9 +1324,9 @@ test "Layout symmetric" {
     // Minus (0) -> 3
     // Ergodic (1) -> 3 (3.33 rounds to 3)
     // Plus (2) -> 4
-    
+
     // Case 1: Minus (Floor)
-    const c_minus = [_]Constraint{ .{ .symmetric = .{ 1, 3, 0 } } };
+    const c_minus = [_]Constraint{.{ .symmetric = .{ 1, 3, 0 } }};
     var out_minus: [1]Rect = undefined;
     area.splitVertical(&c_minus, &out_minus);
     try testing.expectEqual(@as(u16, 3), out_minus[0].height);
@@ -1334,13 +1334,13 @@ test "Layout symmetric" {
     // Case 2: Ergodic (Round)
     // 10 * 1 / 2 = 5.
     // 10 * 2 / 3 = 6.66 -> 7
-    const c_ergodic = [_]Constraint{ .{ .symmetric = .{ 2, 3, 1 } } };
+    const c_ergodic = [_]Constraint{.{ .symmetric = .{ 2, 3, 1 } }};
     var out_ergodic: [1]Rect = undefined;
     area.splitVertical(&c_ergodic, &out_ergodic);
     try testing.expectEqual(@as(u16, 7), out_ergodic[0].height);
 
     // Case 3: Plus (Ceil)
-    const c_plus = [_]Constraint{ .{ .symmetric = .{ 1, 3, 2 } } };
+    const c_plus = [_]Constraint{.{ .symmetric = .{ 1, 3, 2 } }};
     var out_plus: [1]Rect = undefined;
     area.splitVertical(&c_plus, &out_plus);
     try testing.expectEqual(@as(u16, 4), out_plus[0].height);

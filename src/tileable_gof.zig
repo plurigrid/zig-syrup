@@ -1128,7 +1128,7 @@ test "tileable render produces output" {
 
     // Check that framebuffer has non-default values
     var non_space: u32 = 0;
-    for (tg.framebuf_cp[0..@as(usize, tg.cols) * tg.rows]) |cp| {
+    for (tg.framebuf_cp[0 .. @as(usize, tg.cols) * tg.rows]) |cp| {
         if (cp != ' ') non_space += 1;
     }
     try std.testing.expect(non_space > 0); // borders were drawn

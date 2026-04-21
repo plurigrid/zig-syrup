@@ -1,5 +1,5 @@
 //! format.zig - Storage formats for Ewig
-//! 
+//!
 //! Binary format spec, JSON export/import, compression, encryption,
 //! and migration between versions.
 
@@ -33,42 +33,42 @@ pub const EventType = enum(u8) {
     WorldCreated = 0x01,
     WorldDestroyed = 0x02,
     Checkpoint = 0x03,
-    
+
     // State events
     StateChanged = 0x10,
     StateBatch = 0x11,
-    
+
     // Player/actor events
     PlayerAction = 0x20,
     PlayerJoined = 0x21,
     PlayerLeft = 0x22,
-    
+
     // World-specific events
     ObjectCreated = 0x30,
     ObjectDestroyed = 0x31,
     ObjectMoved = 0x32,
-    
+
     // Custom event range
     Custom = 0x80,
-    
+
     // Reserved for future use
     Reserved = 0xFF,
 };
 
 /// Binary event header (fixed size for fast scanning)
 pub const EventHeader = extern struct {
-    magic: [4]u8,           // "EVNT"
-    version: u8,            // Format version
-    flags: u8,              // Compression, encryption flags
-    type: EventType,        // Event type
-    reserved: u8,           // Padding
-    timestamp: i64,         // Nanoseconds since epoch
-    seq: u64,               // Sequence number
-    hash: Hash,             // SHA-256 of event content
-    parent: Hash,           // Previous event hash
-    world_uri_len: u32,     // Length of world URI
-    payload_len: u32,       // Length of payload
-    checksum: u32,          // CRC32 of header
+    magic: [4]u8, // "EVNT"
+    version: u8, // Format version
+    flags: u8, // Compression, encryption flags
+    type: EventType, // Event type
+    reserved: u8, // Padding
+    timestamp: i64, // Nanoseconds since epoch
+    seq: u64, // Sequence number
+    hash: Hash, // SHA-256 of event content
+    parent: Hash, // Previous event hash
+    world_uri_len: u32, // Length of world URI
+    payload_len: u32, // Length of payload
+    checksum: u32, // CRC32 of header
 };
 
 pub const COMPRESS_NONE: u8 = 0x00;
@@ -140,7 +140,7 @@ pub fn serializeHeader(header: EventHeader) [100]u8 {
     var buf: [100]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buf);
     const writer = stream.writer();
-    
+
     writer.writeAll(&header.magic) catch unreachable;
     writer.writeByte(header.version) catch unreachable;
     writer.writeByte(header.flags) catch unreachable;
@@ -153,7 +153,7 @@ pub fn serializeHeader(header: EventHeader) [100]u8 {
     writer.writeInt(u32, header.world_uri_len, .little) catch unreachable;
     writer.writeInt(u32, header.payload_len, .little) catch unreachable;
     writer.writeInt(u32, header.checksum, .little) catch unreachable;
-    
+
     return buf;
 }
 
@@ -161,35 +161,35 @@ pub fn serializeHeader(header: EventHeader) [100]u8 {
 pub fn deserializeHeader(buf: [100]u8) !EventHeader {
     var stream = std.io.fixedBufferStream(&buf);
     const reader = stream.reader();
-    
+
     var header: EventHeader = undefined;
-    
+
     var magic: [4]u8 = undefined;
     try reader.readNoEof(&magic);
     if (!std.mem.eql(u8, &magic, "EVNT")) return error.InvalidMagic;
     header.magic = magic;
-    
+
     header.version = try reader.readByte();
     header.flags = try reader.readByte();
     header.type = @enumFromInt(try reader.readByte());
     header.reserved = try reader.readByte();
-    
+
     header.timestamp = try reader.readInt(i64, .little);
     header.seq = try reader.readInt(u64, .little);
-    
+
     try reader.readNoEof(&header.hash);
     try reader.readNoEof(&header.parent);
-    
+
     header.world_uri_len = try reader.readInt(u32, .little);
     header.payload_len = try reader.readInt(u32, .little);
     header.checksum = try reader.readInt(u32, .little);
-    
+
     // Verify header checksum
     var header_copy = header;
     header_copy.checksum = 0;
     const computed = computeChecksum(&serializeHeader(header_copy));
     if (computed != header.checksum) return error.ChecksumMismatch;
-    
+
     return header;
 }
 
@@ -239,16 +239,16 @@ pub fn encryptAes256Gcm(
     const aes = std.crypto.aead.aes_gcm.Aes256Gcm;
     var ciphertext: [4096]u8 = undefined;
     var tag: [16]u8 = undefined;
-    
+
     if (plaintext.len > ciphertext.len) return error.TooLarge;
-    
+
     aes.encrypt(ciphertext[0..plaintext.len], &tag, plaintext, &.{}, nonce, key);
-    
+
     // Combine ciphertext and tag
     const result = try allocator.alloc(u8, plaintext.len + tag.len);
     @memcpy(result[0..plaintext.len], ciphertext[0..plaintext.len]);
     @memcpy(result[plaintext.len..], &tag);
-    
+
     return result;
 }
 
@@ -260,18 +260,18 @@ pub fn decryptAes256Gcm(
     nonce: EncryptionNonce,
 ) ![]u8 {
     if (ciphertext.len < 16) return error.InvalidCiphertext;
-    
+
     const aes = std.crypto.aead.aes_gcm.Aes256Gcm;
     const ct_len = ciphertext.len - 16;
-    
+
     const plaintext = try allocator.alloc(u8, ct_len);
     errdefer allocator.free(plaintext);
-    
+
     const ct = ciphertext[0..ct_len];
     const tag = ciphertext[ct_len..][0..16];
-    
+
     try aes.decrypt(plaintext, ct, tag, &.{}, nonce, key);
-    
+
     return plaintext;
 }
 
@@ -312,10 +312,10 @@ pub fn exportToJson(allocator: Allocator, events: []const EventJson) ![]u8 {
 pub fn importFromJson(allocator: Allocator, json: []const u8) ![]EventJson {
     const parsed = try std.json.parseFromSlice([]EventJson, allocator, json, .{});
     defer parsed.deinit();
-    
+
     var result = try allocator.alloc(EventJson, parsed.value.len);
     errdefer allocator.free(result);
-    
+
     for (parsed.value, 0..) |event, i| {
         result[i] = .{
             .timestamp = event.timestamp,
@@ -327,7 +327,7 @@ pub fn importFromJson(allocator: Allocator, json: []const u8) ![]EventJson {
             .payload = try allocator.dupe(u8, event.payload),
         };
     }
-    
+
     return result;
 }
 
@@ -338,7 +338,7 @@ pub fn importFromJson(allocator: Allocator, json: []const u8) ![]EventJson {
 pub const FormatVersion = enum(u8) {
     v1 = 1,
     v2 = 2, // Future version with additional features
-    
+
     pub fn current() FormatVersion {
         return .v1;
     }
@@ -364,21 +364,21 @@ pub fn migrateVersion(
 // ============================================================================
 
 pub const BlockHeader = extern struct {
-    magic: [6]u8,           // "EWIG\x00\x01"
-    block_type: u8,         // Data, Index, or Manifest
-    flags: u8,              // Compression, encryption
-    sequence: u64,          // Block sequence number
-    entry_count: u32,       // Number of events in block
-    data_offset: u32,       // Offset to data section
-    data_size: u32,         // Size of data section
-    checksum: u64,          // CRC64 of entire block
+    magic: [6]u8, // "EWIG\x00\x01"
+    block_type: u8, // Data, Index, or Manifest
+    flags: u8, // Compression, encryption
+    sequence: u64, // Block sequence number
+    entry_count: u32, // Number of events in block
+    data_offset: u32, // Offset to data section
+    data_size: u32, // Size of data section
+    checksum: u64, // CRC64 of entire block
 };
 
 pub const BlockType = enum(u8) {
-    Data = 0x01,      // Event data
-    Index = 0x02,     // Index entries
-    Manifest = 0x03,  // File manifest
-    Snapshot = 0x04,  // State snapshot
+    Data = 0x01, // Event data
+    Index = 0x02, // Index entries
+    Manifest = 0x03, // File manifest
+    Snapshot = 0x04, // State snapshot
 };
 
 /// Create a data block containing multiple events
@@ -391,10 +391,10 @@ pub fn createDataBlock(
     for (events) |event| {
         data_size += 64 + event.world_uri.len + event.payload.len;
     }
-    
+
     var block = try allocator.alloc(u8, @sizeOf(BlockHeader) + data_size);
     errdefer allocator.free(block);
-    
+
     var header: BlockHeader = .{
         .magic = MAGIC.*,
         .block_type = @intFromEnum(BlockType.Data),
@@ -405,10 +405,10 @@ pub fn createDataBlock(
         .data_size = @intCast(data_size),
         .checksum = 0,
     };
-    
+
     // Write header
     @memcpy(block[0..@sizeOf(BlockHeader)], std.mem.asBytes(&header));
-    
+
     // Write events
     var offset: usize = @sizeOf(BlockHeader);
     for (events) |event| {
@@ -420,11 +420,11 @@ pub fn createDataBlock(
         @memcpy(block[offset..][0..event.payload.len], event.payload);
         offset += event.payload.len;
     }
-    
+
     // Compute and write checksum
     header.checksum = computeChecksum(block);
     @memcpy(block[0..@sizeOf(BlockHeader)], std.mem.asBytes(&header));
-    
+
     return block;
 }
 
@@ -457,14 +457,14 @@ test "header serialization" {
         .payload_len = 100,
         .checksum = 0,
     };
-    
+
     // Compute checksum on serialized bytes (with checksum=0)
     const serialized_zero = serializeHeader(header);
     header.checksum = computeChecksum(&serialized_zero);
-    
+
     const serialized = serializeHeader(header);
     const deserialized = try deserializeHeader(serialized);
-    
+
     try testing.expectEqual(header.version, deserialized.version);
     try testing.expectEqual(header.type, deserialized.type);
     try testing.expectEqual(header.timestamp, deserialized.timestamp);

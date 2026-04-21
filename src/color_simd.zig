@@ -97,10 +97,12 @@ pub inline fn rgb_to_hue_simd(r_vec: ColorVec4, g_vec: ColorVec4, b_vec: ColorVe
     const is_max_g = @as(ColorVec4, @select(f32, max_val == g_vec, @as(ColorVec4, @splat(1.0)), @as(ColorVec4, @splat(0.0))));
 
     // Hue = 60° × f(max_component, delta)
-    const hue_base = @select(f32,
+    const hue_base = @select(
+        f32,
         is_max_r > 0,
         @as(ColorVec4, @splat(60.0)) * @mod((g_vec - b_vec) / delta, @as(ColorVec4, @splat(6.0))),
-        @select(f32,
+        @select(
+            f32,
             is_max_g > 0,
             @as(ColorVec4, @splat(60.0)) * ((b_vec - r_vec) / delta + @as(ColorVec4, @splat(2.0))),
             @as(ColorVec4, @splat(60.0)) * ((r_vec - g_vec) / delta + @as(ColorVec4, @splat(4.0))),
@@ -149,8 +151,8 @@ pub fn rgb_to_hcl_batch(colors: []const Color, allocator: std.mem.Allocator) ![]
 
         // RGB → Luminance (perceptual)
         const lum_vec = @as(ColorVec4, @splat(0.299)) * r_vec +
-                       @as(ColorVec4, @splat(0.587)) * g_vec +
-                       @as(ColorVec4, @splat(0.114)) * b_vec;
+            @as(ColorVec4, @splat(0.587)) * g_vec +
+            @as(ColorVec4, @splat(0.114)) * b_vec;
 
         // Scatter HCL results
         for (0..batch_size) |i| {

@@ -97,8 +97,8 @@ pub const Tribble = struct {
 
 /// Tower level: which extension field is needed to distinguish this position.
 pub const TowerLevel = enum(u8) {
-    gf3 = 1,  // trit alone suffices
-    gf9 = 2,  // need pair context (nonet)
+    gf3 = 1, // trit alone suffices
+    gf9 = 2, // need pair context (nonet)
     gf27 = 3, // need triple context (tribble)
 };
 

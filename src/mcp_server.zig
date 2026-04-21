@@ -143,114 +143,60 @@ const Tool = struct {
 };
 
 const tools = [_]Tool{
-    .{
-        .name = "syrup_encode",
-        .description = "Encode a JSON value to Syrup canonical binary format (base64 output)",
-        .input_schema =
-        \\{"type":"object","properties":{"value":{"description":"JSON value to encode to Syrup"}},"required":["value"]}
+    .{ .name = "syrup_encode", .description = "Encode a JSON value to Syrup canonical binary format (base64 output)", .input_schema =
+    \\{"type":"object","properties":{"value":{"description":"JSON value to encode to Syrup"}},"required":["value"]}
     },
-    .{
-        .name = "syrup_decode",
-        .description = "Decode base64-encoded Syrup binary back to JSON",
-        .input_schema =
-        \\{"type":"object","properties":{"data":{"type":"string","description":"Base64-encoded Syrup binary"}},"required":["data"]}
+    .{ .name = "syrup_decode", .description = "Decode base64-encoded Syrup binary back to JSON", .input_schema =
+    \\{"type":"object","properties":{"data":{"type":"string","description":"Base64-encoded Syrup binary"}},"required":["data"]}
     },
-    .{
-        .name = "virion_create",
-        .description = "Create a virion (skill particle) with name, GF(3) role trit (-1/0/+1), mode trit, and capability domains",
-        .input_schema =
-        \\{"type":"object","properties":{"name":{"type":"string","description":"Skill name (max 63 chars)"},"role":{"type":"integer","enum":[-1,0,1],"description":"Role trit: -1=validate, 0=coordinate, +1=generate"},"mode":{"type":"integer","enum":[-1,0,1],"description":"Mode trit: -1=filter, 0=iterate, +1=integrate"},"domains":{"type":"array","items":{"type":"string","enum":["serialize","transport","color","propagate","identity","bci","topology","terminal","world","agent","verify","generate","coordinate","measure","transform","bridge"]},"description":"Capability domains"}},"required":["name","role","mode"]}
+    .{ .name = "virion_create", .description = "Create a virion (skill particle) with name, GF(3) role trit (-1/0/+1), mode trit, and capability domains", .input_schema =
+    \\{"type":"object","properties":{"name":{"type":"string","description":"Skill name (max 63 chars)"},"role":{"type":"integer","enum":[-1,0,1],"description":"Role trit: -1=validate, 0=coordinate, +1=generate"},"mode":{"type":"integer","enum":[-1,0,1],"description":"Mode trit: -1=filter, 0=iterate, +1=integrate"},"domains":{"type":"array","items":{"type":"string","enum":["serialize","transport","color","propagate","identity","bci","topology","terminal","world","agent","verify","generate","coordinate","measure","transform","bridge"]},"description":"Capability domains"}},"required":["name","role","mode"]}
     },
-    .{
-        .name = "virion_recombine",
-        .description = "Recombine two virions for gain-of-function capability synthesis. Returns child with union of capabilities, enforced GF(3) balance.",
-        .input_schema =
-        \\{"type":"object","properties":{"parent_a":{"type":"object","description":"First parent virion"},"parent_b":{"type":"object","description":"Second parent virion"}},"required":["parent_a","parent_b"]}
+    .{ .name = "virion_recombine", .description = "Recombine two virions for gain-of-function capability synthesis. Returns child with union of capabilities, enforced GF(3) balance.", .input_schema =
+    \\{"type":"object","properties":{"parent_a":{"type":"object","description":"First parent virion"},"parent_b":{"type":"object","description":"Second parent virion"}},"required":["parent_a","parent_b"]}
     },
-    .{
-        .name = "world_list",
-        .description = "List available world configurations (326 worlds via 4 combinatorial cheatcodes: Gray code, GF(3) filter, necklace reduction, De Bruijn windows)",
-        .input_schema =
-        \\{"type":"object","properties":{"variant":{"type":"string","enum":["A","B","C"],"description":"World variant filter (A=Golden, B=Plastic, C=Silver)"},"limit":{"type":"integer","default":20,"description":"Max worlds to return"},"offset":{"type":"integer","default":0}},"required":[]}
+    .{ .name = "world_list", .description = "List available world configurations (326 worlds via 4 combinatorial cheatcodes: Gray code, GF(3) filter, necklace reduction, De Bruijn windows)", .input_schema =
+    \\{"type":"object","properties":{"variant":{"type":"string","enum":["A","B","C"],"description":"World variant filter (A=Golden, B=Plastic, C=Silver)"},"limit":{"type":"integer","default":20,"description":"Max worlds to return"},"offset":{"type":"integer","default":0}},"required":[]}
     },
-    .{
-        .name = "world_signature",
-        .description = "Get compact signature for a world by ID: variant:trits|depth|necklace_class",
-        .input_schema =
-        \\{"type":"object","properties":{"world_id":{"type":"integer","description":"World ID (0-325)"}},"required":["world_id"]}
+    .{ .name = "world_signature", .description = "Get compact signature for a world by ID: variant:trits|depth|necklace_class", .input_schema =
+    \\{"type":"object","properties":{"world_id":{"type":"integer","description":"World ID (0-325)"}},"required":["world_id"]}
     },
-    .{
-        .name = "cid_compute",
-        .description = "Compute SHA-256 content-addressed identity of a JSON value (via Syrup canonical encoding)",
-        .input_schema =
-        \\{"type":"object","properties":{"value":{"description":"JSON value to compute CID for"}},"required":["value"]}
+    .{ .name = "cid_compute", .description = "Compute SHA-256 content-addressed identity of a JSON value (via Syrup canonical encoding)", .input_schema =
+    \\{"type":"object","properties":{"value":{"description":"JSON value to compute CID for"}},"required":["value"]}
     },
-    .{
-        .name = "czernowitz_query",
-        .description = "Query the 13 Czernowitz bazaar speculators (bmorphism/* repos mapped to GF(3) roles: MINUS=verifiers, ZERO=arbitrageurs, PLUS=scouts)",
-        .input_schema =
-        \\{"type":"object","properties":{"trit":{"type":"integer","enum":[-1,0,1],"description":"Filter by trit: -1=MINUS, 0=ZERO, +1=PLUS"},"repo":{"type":"string","description":"Filter by repo name substring"}},"required":[]}
+    .{ .name = "czernowitz_query", .description = "Query the 13 Czernowitz bazaar speculators (bmorphism/* repos mapped to GF(3) roles: MINUS=verifiers, ZERO=arbitrageurs, PLUS=scouts)", .input_schema =
+    \\{"type":"object","properties":{"trit":{"type":"integer","enum":[-1,0,1],"description":"Filter by trit: -1=MINUS, 0=ZERO, +1=PLUS"},"repo":{"type":"string","description":"Filter by repo name substring"}},"required":[]}
     },
-    .{
-        .name = "capability_domains",
-        .description = "List all 16 virion capability domains with descriptions. Maps to zig-syrup's 7 architectural layers.",
-        .input_schema =
-        \\{"type":"object","properties":{},"required":[]}
+    .{ .name = "capability_domains", .description = "List all 16 virion capability domains with descriptions. Maps to zig-syrup's 7 architectural layers.", .input_schema =
+    \\{"type":"object","properties":{},"required":[]}
     },
     // Nurse tools — one system awareness layer
-    .{
-        .name = "nurse_sense",
-        .description = "Update a somatic propagator cell. Cells: sympathetic, pain, gi_distress, skin_crawling, temperature, sleep_quality, appetite, irritability, craving, anhedonia. Values 0.0-1.0.",
-        .input_schema =
-        \\{"type":"object","properties":{"cell":{"type":"string","description":"Cell name"},"value":{"type":"number","description":"0.0-1.0"}},"required":["cell","value"]}
+    .{ .name = "nurse_sense", .description = "Update a somatic propagator cell. Cells: sympathetic, pain, gi_distress, skin_crawling, temperature, sleep_quality, appetite, irritability, craving, anhedonia. Values 0.0-1.0.", .input_schema =
+    \\{"type":"object","properties":{"cell":{"type":"string","description":"Cell name"},"value":{"type":"number","description":"0.0-1.0"}},"required":["cell","value"]}
     },
-    .{
-        .name = "nurse_state",
-        .description = "Read full system state: propagator cells, substances, phase, HERO status, intervention threshold.",
-        .input_schema =
-        \\{"type":"object","properties":{},"required":[]}
+    .{ .name = "nurse_state", .description = "Read full system state: propagator cells, substances, phase, HERO status, intervention threshold.", .input_schema =
+    \\{"type":"object","properties":{},"required":[]}
     },
-    .{
-        .name = "nurse_intervene",
-        .description = "Epsilon-greedy bandit selects intervention arm (pharmacological via HERO or behavioral).",
-        .input_schema =
-        \\{"type":"object","properties":{},"required":[]}
+    .{ .name = "nurse_intervene", .description = "Epsilon-greedy bandit selects intervention arm (pharmacological via HERO or behavioral).", .input_schema =
+    \\{"type":"object","properties":{},"required":[]}
     },
-    .{
-        .name = "nurse_dispense",
-        .description = "Direct HERO slot dispense (1-10). Slot map: 1=clonidine, 2=gabapentin, 3=hydroxyzine, 4=magnesium, 5=l-tyrosine, 6=omega-3, 7=b-complex, 8=melatonin, 9-10=reserve.",
-        .input_schema =
-        \\{"type":"object","properties":{"slot":{"type":"integer","description":"Slot 1-10"}},"required":["slot"]}
+    .{ .name = "nurse_dispense", .description = "Direct HERO slot dispense (1-10). Slot map: 1=clonidine, 2=gabapentin, 3=hydroxyzine, 4=magnesium, 5=l-tyrosine, 6=omega-3, 7=b-complex, 8=melatonin, 9-10=reserve.", .input_schema =
+    \\{"type":"object","properties":{"slot":{"type":"integer","description":"Slot 1-10"}},"required":["slot"]}
     },
-    .{
-        .name = "nurse_schedule",
-        .description = "Dispense a named schedule: wake, morning, midday, evening, bedtime.",
-        .input_schema =
-        \\{"type":"object","properties":{"schedule":{"type":"string","enum":["wake","morning","midday","evening","bedtime"]}},"required":["schedule"]}
+    .{ .name = "nurse_schedule", .description = "Dispense a named schedule: wake, morning, midday, evening, bedtime.", .input_schema =
+    \\{"type":"object","properties":{"schedule":{"type":"string","enum":["wake","morning","midday","evening","bedtime"]}},"required":["schedule"]}
     },
-    .{
-        .name = "nurse_trajectory",
-        .description = "Update substance trajectory (mg) and day count. Phase auto-derives from day.",
-        .input_schema =
-        \\{"type":"object","properties":{"vyvanse":{"type":"number"},"adderall":{"type":"number"},"caffeine":{"type":"number"},"nicotine":{"type":"number"},"day":{"type":"integer"}},"required":[]}
+    .{ .name = "nurse_trajectory", .description = "Update substance trajectory (mg) and day count. Phase auto-derives from day.", .input_schema =
+    \\{"type":"object","properties":{"vyvanse":{"type":"number"},"adderall":{"type":"number"},"caffeine":{"type":"number"},"nicotine":{"type":"number"},"day":{"type":"integer"}},"required":[]}
     },
-    .{
-        .name = "nurse_detect",
-        .description = "HERO device detection: returns network probe commands (WiFi scan, mDNS, cloud fingerprint, mitmproxy workflow, BLE scan, app binary analysis via radare2).",
-        .input_schema =
-        \\{"type":"object","properties":{},"required":[]}
+    .{ .name = "nurse_detect", .description = "HERO device detection: returns network probe commands (WiFi scan, mDNS, cloud fingerprint, mitmproxy workflow, BLE scan, app binary analysis via radare2).", .input_schema =
+    \\{"type":"object","properties":{},"required":[]}
     },
-    .{
-        .name = "qualia_resolve",
-        .description = "Resolve a qualia market outcome via the Omega kernel. Bridges vibe:// URIs to logical verification.",
-        .input_schema =
-        \\{"type":"object","properties":{"market_id":{"type":"integer","description":"Qualia market ID from Aptos"},"hypothesis":{"type":"string","description":"The hypothesis being verified"}},"required":["market_id"]}
+    .{ .name = "qualia_resolve", .description = "Resolve a qualia market outcome via the Omega kernel. Bridges vibe:// URIs to logical verification.", .input_schema =
+    \\{"type":"object","properties":{"market_id":{"type":"integer","description":"Qualia market ID from Aptos"},"hypothesis":{"type":"string","description":"The hypothesis being verified"}},"required":["market_id"]}
     },
-    .{
-        .name = "retrodiction_gate",
-        .description = "GF(3) retrodiction gate: evaluate a capability/policy request against agent history. Replaces OpenShell's manual operator TUI with automated fiber analysis. Returns approve/deny/contradict with diagnostics.",
-        .input_schema =
-        \\{"type":"object","properties":{"history":{"type":"array","items":{"type":"integer","enum":[-1,0,1]},"description":"Agent trit trajectory (history of access trits: -1=read_only, 0=full, +1=read_write)"},"cap_role":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability role trit"},"cap_mode":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability mode trit"},"cap_polarity":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability polarity trit"},"difficulty_threshold":{"type":"number","default":0,"description":"Max retrodiction difficulty (0=no limit)"}},"required":["history","cap_role","cap_mode","cap_polarity"]}
+    .{ .name = "retrodiction_gate", .description = "GF(3) retrodiction gate: evaluate a capability/policy request against agent history. Replaces OpenShell's manual operator TUI with automated fiber analysis. Returns approve/deny/contradict with diagnostics.", .input_schema =
+    \\{"type":"object","properties":{"history":{"type":"array","items":{"type":"integer","enum":[-1,0,1]},"description":"Agent trit trajectory (history of access trits: -1=read_only, 0=full, +1=read_write)"},"cap_role":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability role trit"},"cap_mode":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability mode trit"},"cap_polarity":{"type":"integer","enum":[-1,0,1],"description":"Proposed capability polarity trit"},"difficulty_threshold":{"type":"number","default":0,"description":"Max retrodiction difficulty (0=no limit)"}},"required":["history","cap_role","cap_mode","cap_polarity"]}
     },
 };
 
@@ -346,9 +292,18 @@ fn handleRetrodictionGate(allocator: std.mem.Allocator, args: json.ObjectMap) !j
     const mode_val = args.get("cap_mode") orelse return toolError(allocator, "missing 'cap_mode'");
     const pol_val = args.get("cap_polarity") orelse return toolError(allocator, "missing 'cap_polarity'");
 
-    const role_i: i8 = switch (role_val) { .integer => |n| @intCast(n), else => return toolError(allocator, "cap_role must be integer") };
-    const mode_i: i8 = switch (mode_val) { .integer => |n| @intCast(n), else => return toolError(allocator, "cap_mode must be integer") };
-    const pol_i: i8 = switch (pol_val) { .integer => |n| @intCast(n), else => return toolError(allocator, "cap_polarity must be integer") };
+    const role_i: i8 = switch (role_val) {
+        .integer => |n| @intCast(n),
+        else => return toolError(allocator, "cap_role must be integer"),
+    };
+    const mode_i: i8 = switch (mode_val) {
+        .integer => |n| @intCast(n),
+        else => return toolError(allocator, "cap_mode must be integer"),
+    };
+    const pol_i: i8 = switch (pol_val) {
+        .integer => |n| @intCast(n),
+        else => return toolError(allocator, "cap_polarity must be integer"),
+    };
 
     const cap_role = retro.Trit.fromInt(role_i) orelse return toolError(allocator, "cap_role must be -1, 0, or +1");
     const cap_mode = retro.Trit.fromInt(mode_i) orelse return toolError(allocator, "cap_mode must be -1, 0, or +1");
@@ -758,7 +713,8 @@ fn handleCzernowitzQuery(allocator: std.mem.Allocator, args: json.ObjectMap) !js
             1 => "PLUS",
             else => "?",
         };
-        parts[count] = try std.fmt.allocPrint(allocator,
+        parts[count] = try std.fmt.allocPrint(
+            allocator,
             "  [{s:>5}] {s:<22} {s}\n           {s}",
             .{ trit_label, s.role, s.repo, s.correspondence },
         );
@@ -770,8 +726,7 @@ fn handleCzernowitzQuery(allocator: std.mem.Allocator, args: json.ObjectMap) !js
     for (parts[0..count]) |p| total_len += p.len + 2;
     total_len += 32; // footer
 
-    const header = try std.fmt.allocPrint(allocator,
-        "Czernowitz Bazaar Speculators (bmorphism/* repos):\n\n", .{});
+    const header = try std.fmt.allocPrint(allocator, "Czernowitz Bazaar Speculators (bmorphism/* repos):\n\n", .{});
     const footer = try std.fmt.allocPrint(allocator, "\nTotal: {d} speculators", .{count});
 
     // Concatenate

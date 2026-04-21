@@ -47,14 +47,14 @@ pub const CHANNEL_LABELS = [_][]const u8{ "Fp1", "Fp2", "C3", "C4", "P3", "P4", 
 // ============================================================================
 
 /// Raw 24-bit signed integer ADC value
-pub const ADC24 = i32;  // Stored in i32 but only 24 bits used
+pub const ADC24 = i32; // Stored in i32 but only 24 bits used
 
 /// Single EEG sample from Cyton device
 pub const CytonSample = struct {
-    timestamp: i64,                        // Glimpses (1/141,120,000 s). See glimpse.zig.
-    sample_number: u8,                     // 0-255 counter (wraps)
-    channels: [CYTON_NUM_CHANNELS]f32,    // 8 channels in microvolts
-    accel: [3]i16,                         // 3-axis accelerometer (raw)
+    timestamp: i64, // Glimpses (1/141,120,000 s). See glimpse.zig.
+    sample_number: u8, // 0-255 counter (wraps)
+    channels: [CYTON_NUM_CHANNELS]f32, // 8 channels in microvolts
+    accel: [3]i16, // 3-axis accelerometer (raw)
 
     pub fn format(
         self: CytonSample,
@@ -111,7 +111,7 @@ pub fn parseCytonPacket(data: [CYTON_PACKET_LEN]u8, timestamp: i64) ParseError!C
 
         // Sign-extend from 24-bit to 32-bit
         if ((raw & 0x800000) != 0) {
-            raw |= @as(i32, -16777216);  // 0xFF000000 in 32-bit signed
+            raw |= @as(i32, -16777216); // 0xFF000000 in 32-bit signed
         }
 
         // Convert to microvolts

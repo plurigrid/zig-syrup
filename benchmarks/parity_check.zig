@@ -11,13 +11,13 @@ pub fn main() !void {
     _ = arena.allocator();
 
     const expected = "<4'Test{3'int1+3'seq[1\"a1\"b]}>";
-    
+
     // Construct equivalent Zig Value
     const label = syrup.Value.fromSymbol("Test");
-    
+
     const int_key = syrup.Value.fromSymbol("int");
     const int_val = syrup.Value.fromInteger(1);
-    
+
     const seq_key = syrup.Value.fromSymbol("seq");
     const seq_val = syrup.Value.fromList(&[_]syrup.Value{
         syrup.Value.fromString("a"),
@@ -30,13 +30,13 @@ pub fn main() !void {
         .{ .key = int_key, .value = int_val },
         .{ .key = seq_key, .value = seq_val },
     };
-    
+
     // In Rust impl, structs are encoded as Records with a dictionary inside
     // <Label { key val ... }>
     // This is weird. Let's look at the Rust output again:
     // <4'Test{3'int1+3'seq[1"a1"b]}>
     // This looks like a Record where the fields list contains a SINGLE dictionary
-    
+
     const dict = syrup.Value.fromDictionary(&dict_entries);
     const fields = [_]syrup.Value{dict};
     const record = syrup.Value.fromRecord(&label, &fields);
@@ -52,7 +52,7 @@ pub fn main() !void {
     try stdout.print("================\n", .{});
     try stdout.print("Expected: {s}\n", .{expected});
     try stdout.print("Actual:   {s}\n", .{encoded});
-    
+
     if (std.mem.eql(u8, expected, encoded)) {
         try stdout.print("RESULT: PASS\n", .{});
     } else {

@@ -178,11 +178,11 @@ pub fn classify(name: []const u8) ?ClassifiedProblem {
 // ============================================================================
 
 pub const MorphismKind = enum(u8) {
-    isomorphism,  // same level, mutual reductions
-    embedding,    // source embeds into target (≤ level)
-    collapse,     // source harder but reduces to easier target
-    gf3_bridge,   // connected by trit conservation
-    none,         // no morphism detected
+    isomorphism, // same level, mutual reductions
+    embedding, // source embeds into target (≤ level)
+    collapse, // source harder but reduces to easier target
+    gf3_bridge, // connected by trit conservation
+    none, // no morphism detected
 };
 
 pub const Morphism = struct {
@@ -309,12 +309,12 @@ pub fn classifySkillClaim(claim: []const u8) Level {
 // ============================================================================
 
 pub const DiophantineKind = enum(u8) {
-    pythagorean,     // x² + y² = z²
-    pell,            // x² - Dy² = 1
-    fermat,          // xⁿ + yⁿ = zⁿ (n≥3: no nontrivial solutions)
-    markov,          // x² + y² + z² = 3xyz
-    sum_of_squares,  // n = x² + y²
-    linear,          // ax + by = c (Bezout)
+    pythagorean, // x² + y² = z²
+    pell, // x² - Dy² = 1
+    fermat, // xⁿ + yⁿ = zⁿ (n≥3: no nontrivial solutions)
+    markov, // x² + y² + z² = 3xyz
+    sum_of_squares, // n = x² + y²
+    linear, // ax + by = c (Bezout)
 };
 
 pub const DiophantineEquation = struct {
@@ -533,12 +533,12 @@ test "morphism detection" {
 
 /// Proof-theoretic strength levels for WQO/obstruction theorems.
 pub const ProofStrength = enum(u8) {
-    rca_0,       // RCA₀ — recursive comprehension (base)
-    wkl_0,       // WKL₀ — weak König's lemma
-    aca_0,       // ACA₀ — arithmetical comprehension
-    atr_0,       // ATR₀ — arithmetical transfinite recursion (Kruskal)
-    pi11_ca_0,   // Π¹₁-CA₀ — Π¹₁ comprehension (Robertson-Seymour)
-    beyond,      // Beyond Π¹₁-CA₀ (Friedman's TREE)
+    rca_0, // RCA₀ — recursive comprehension (base)
+    wkl_0, // WKL₀ — weak König's lemma
+    aca_0, // ACA₀ — arithmetical comprehension
+    atr_0, // ATR₀ — arithmetical transfinite recursion (Kruskal)
+    pi11_ca_0, // Π¹₁-CA₀ — Π¹₁ comprehension (Robertson-Seymour)
+    beyond, // Beyond Π¹₁-CA₀ (Friedman's TREE)
 
     pub fn ordinalName(self: ProofStrength) []const u8 {
         return switch (self) {
@@ -650,10 +650,10 @@ pub const obstruction_sets = [_]ObstructionSet{
 // ============================================================================
 
 pub const SpinedCategoryKind = enum(u8) {
-    graphs,        // Classical: tree-width of graphs (Robertson-Seymour)
-    hypergraphs,   // Generalized: hypertree-width (Gottlob et al.)
-    matroids,      // Branch-width of matroids (Geelen et al.)
-    sigma_structs,  // σ-structures: arbitrary relational (Bumpus-Kocsis)
+    graphs, // Classical: tree-width of graphs (Robertson-Seymour)
+    hypergraphs, // Generalized: hypertree-width (Gottlob et al.)
+    matroids, // Branch-width of matroids (Geelen et al.)
+    sigma_structs, // σ-structures: arbitrary relational (Bumpus-Kocsis)
 };
 
 pub const SpinedCategory = struct {
@@ -680,14 +680,10 @@ pub const SpinedCategory = struct {
 };
 
 pub const spined_categories = [_]SpinedCategory{
-    .{ .kind = .graphs, .wqo_status = .proven, .strength = .pi11_ca_0,
-       .source = "Robertson-Seymour 2004" },
-    .{ .kind = .hypergraphs, .wqo_status = .conjectured, .strength = .pi11_ca_0,
-       .source = "Gottlob-Leone-Scarcello 2002" },
-    .{ .kind = .matroids, .wqo_status = .conjectured, .strength = .beyond,
-       .source = "Geelen-Gerards-Whittle (in progress)" },
-    .{ .kind = .sigma_structs, .wqo_status = .open, .strength = .beyond,
-       .source = "Bumpus-Kocsis 2105.05372" },
+    .{ .kind = .graphs, .wqo_status = .proven, .strength = .pi11_ca_0, .source = "Robertson-Seymour 2004" },
+    .{ .kind = .hypergraphs, .wqo_status = .conjectured, .strength = .pi11_ca_0, .source = "Gottlob-Leone-Scarcello 2002" },
+    .{ .kind = .matroids, .wqo_status = .conjectured, .strength = .beyond, .source = "Geelen-Gerards-Whittle (in progress)" },
+    .{ .kind = .sigma_structs, .wqo_status = .open, .strength = .beyond, .source = "Bumpus-Kocsis 2105.05372" },
 };
 
 /// Look up obstruction set by property name.
@@ -748,34 +744,13 @@ pub const GorardLevel = struct {
 };
 
 pub const gorard_tower = [_]GorardLevel{
-    .{ .index = 0, .ordinal_name = "ω",
-       .proof_system = .rca_0,
-       .causal_property = "finite causal diamond (all paths terminate)",
-       .trit = 1 },
-    .{ .index = 1, .ordinal_name = "ω^ω",
-       .proof_system = .rca_0,
-       .causal_property = "primitive recursive causal depth",
-       .trit = -1 },
-    .{ .index = 2, .ordinal_name = "ω^ω^ω",
-       .proof_system = .wkl_0,
-       .causal_property = "compactness: every infinite branch has accumulation",
-       .trit = 1 },
-    .{ .index = 3, .ordinal_name = "ε₀",
-       .proof_system = .aca_0,
-       .causal_property = "Peano-complete causal invariance (Gentzen boundary)",
-       .trit = -1 },
-    .{ .index = 4, .ordinal_name = "Γ₀",
-       .proof_system = .atr_0,
-       .causal_property = "predicative transfinite induction along causal well-ordering",
-       .trit = 1 },
-    .{ .index = 5, .ordinal_name = "ψ(Ω_ω)",
-       .proof_system = .pi11_ca_0,
-       .causal_property = "impredicative: causal graph minor theorem (all causal subgraphs WQO)",
-       .trit = -1 },
-    .{ .index = 6, .ordinal_name = "θ(Ω^ω·ω)",
-       .proof_system = .beyond,
-       .causal_property = "TREE-scale causal branching (Friedman barrier)",
-       .trit = 0 },
+    .{ .index = 0, .ordinal_name = "ω", .proof_system = .rca_0, .causal_property = "finite causal diamond (all paths terminate)", .trit = 1 },
+    .{ .index = 1, .ordinal_name = "ω^ω", .proof_system = .rca_0, .causal_property = "primitive recursive causal depth", .trit = -1 },
+    .{ .index = 2, .ordinal_name = "ω^ω^ω", .proof_system = .wkl_0, .causal_property = "compactness: every infinite branch has accumulation", .trit = 1 },
+    .{ .index = 3, .ordinal_name = "ε₀", .proof_system = .aca_0, .causal_property = "Peano-complete causal invariance (Gentzen boundary)", .trit = -1 },
+    .{ .index = 4, .ordinal_name = "Γ₀", .proof_system = .atr_0, .causal_property = "predicative transfinite induction along causal well-ordering", .trit = 1 },
+    .{ .index = 5, .ordinal_name = "ψ(Ω_ω)", .proof_system = .pi11_ca_0, .causal_property = "impredicative: causal graph minor theorem (all causal subgraphs WQO)", .trit = -1 },
+    .{ .index = 6, .ordinal_name = "θ(Ω^ω·ω)", .proof_system = .beyond, .causal_property = "TREE-scale causal branching (Friedman barrier)", .trit = 0 },
 };
 
 /// GF(3) conservation check: sum of all tower trits should be 0 mod 3
@@ -952,7 +927,7 @@ pub const CANONICAL_SEED: u64 = 1069;
 
 /// Primes less than 100: the base realizer set (25 elements).
 pub const primes_lt_100 = [_]u32{
-    2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47,
+    2,  3,  5,  7,  11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47,
     53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
 };
 

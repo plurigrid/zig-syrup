@@ -11,9 +11,9 @@ pub const Face = struct {
     endpoint: Endpoint,
 
     pub const Endpoint = enum(i8) {
-        start = 1,   // +1 (pos/producer) - Narya e₀
-        end = -1,    // -1 (neg/consumer) - Narya e₁
-        interior = 0 // 0 (null/neutral) - Narya degeneracy
+        start = 1, // +1 (pos/producer) - Narya e₀
+        end = -1, // -1 (neg/consumer) - Narya e₁
+        interior = 0, // 0 (null/neutral) - Narya degeneracy
     };
 
     pub fn init(dim: u8, endpoint: Endpoint) Face {
@@ -156,7 +156,7 @@ pub const Term = union(enum) {
                     // Face equality check
                     if (f.id.face.dim != of.id.face.dim) return false;
                     if (f.id.face.endpoint != of.id.face.endpoint) return false;
-                    
+
                     if (f.args.len != of.args.len) return false;
                     for (f.args, of.args) |a, b| {
                         if (!a.eql(b)) return false;
@@ -305,7 +305,7 @@ pub fn makeAtom(face: Face, name: []const u8) Term {
 test "Face compatibility" {
     // Dim 0
     const start0 = Face.init(0, .start); // +1
-    const end0 = Face.init(0, .end);     // -1
+    const end0 = Face.init(0, .end); // -1
     const int0 = Face.init(0, .interior); // 0
 
     // Dim 1
@@ -317,7 +317,7 @@ test "Face compatibility" {
     try std.testing.expect(end0.compatible(start0));
     try std.testing.expect(int0.compatible(start0));
     try std.testing.expect(int0.compatible(end0));
-    
+
     // Incompatible pairs (Dim 0)
     try std.testing.expect(!start0.compatible(start0));
     try std.testing.expect(!end0.compatible(end0));
@@ -352,12 +352,12 @@ test "term equality with Face" {
 
     try std.testing.expect(x.eql(x2));
     try std.testing.expect(!x.eql(y));
-    
+
     // Test function equality with faces
     const f1 = makeAtom(Face.init(0, .start), "f");
     const f2 = makeAtom(Face.init(0, .start), "f");
     const f3 = makeAtom(Face.init(1, .start), "f"); // Different dim
-    const f4 = makeAtom(Face.init(0, .end), "f");   // Different endpoint
+    const f4 = makeAtom(Face.init(0, .end), "f"); // Different endpoint
 
     try std.testing.expect(f1.eql(f2));
     try std.testing.expect(!f1.eql(f3));

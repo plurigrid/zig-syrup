@@ -275,7 +275,10 @@ pub const Extreme = struct {
             const secs: i128 = @divFloor(self.ticks, @as(i128, @intCast(Extreme.TICKS_PER_SECOND)));
             const m = @mod(secs, 3);
             return switch (@as(u2, @intCast(m))) {
-                0 => 0, 1 => 1, 2 => -1, else => unreachable,
+                0 => 0,
+                1 => 1,
+                2 => -1,
+                else => unreachable,
             };
         }
     };
@@ -601,7 +604,7 @@ test "unbounded: register Fibonacci prime 1597" {
 
 test "unbounded: cascade multiple devices" {
     var basis = Unbounded.PrimeBasis.initEpoch3();
-    _ = basis.registerRate(257);  // +1 prime
+    _ = basis.registerRate(257); // +1 prime
     _ = basis.registerRate(1597); // +1 prime
     _ = basis.registerRate(44100); // +0 (already covered)
     _ = basis.registerRate(3329); // Padovan prime, +1

@@ -21,7 +21,7 @@ const fft_bands = @import("fft_bands.zig");
 
 const SAMPLE_RATE: f64 = 250.0;
 const BUFFER_SIZE: usize = 256 * 1024; // 256 KB input buffer
-const OUTPUT_SIZE: usize = 64 * 1024;  // 64 KB output buffer
+const OUTPUT_SIZE: usize = 64 * 1024; // 64 KB output buffer
 
 // ============================================================================
 // TYPES
@@ -29,9 +29,9 @@ const OUTPUT_SIZE: usize = 64 * 1024;  // 64 KB output buffer
 
 /// GF(3) trit assignment based on frequency band
 pub const TriadicColor = struct {
-    t1: i2,      // Band-based trit: -1, 0, +1
-    t2: i2,      // Variance-based trit
-    t3: i2,      // Auto-balanced to make sum ≡ 0 (mod 3)
+    t1: i2, // Band-based trit: -1, 0, +1
+    t2: i2, // Variance-based trit
+    t3: i2, // Auto-balanced to make sum ≡ 0 (mod 3)
     hex: [7]u8, // "#RRGGBB" format
     dominant_band: []const u8, // "alpha" etc (no null terminator needed)
     band_power: f32,
@@ -73,11 +73,11 @@ pub const EEGOutput = struct {
 /// Map frequency bands to GF(3) trits
 fn bandToTrit(band: fft_bands.Band) i2 {
     return switch (band) {
-        .delta => -1,  // Low frequencies: contraction
-        .theta => -1,  // Meditation: contraction
-        .alpha => 0,   // Neutral: balanced
-        .beta => 1,    // Active: expansion
-        .gamma => 1,   // Cognitive: expansion
+        .delta => -1, // Low frequencies: contraction
+        .theta => -1, // Meditation: contraction
+        .alpha => 0, // Neutral: balanced
+        .beta => 1, // Active: expansion
+        .gamma => 1, // Cognitive: expansion
     };
 }
 
@@ -149,11 +149,11 @@ fn deriveColor(powers: fft_bands.BandPowers, allocator: std.mem.Allocator) !Tria
     // Generate hex color using golden angle (137.508°) mapping
     // For now, use a simple hue map based on dominant band
     const hue_offset: i32 = switch (dominant.band) {
-        .delta => 240,   // Blue: delta
-        .theta => 210,   // Cyan: theta
-        .alpha => 120,   // Green: alpha
-        .beta => 30,     // Yellow/Orange: beta
-        .gamma => 0,     // Red: gamma
+        .delta => 240, // Blue: delta
+        .theta => 210, // Cyan: theta
+        .alpha => 120, // Green: alpha
+        .beta => 30, // Yellow/Orange: beta
+        .gamma => 0, // Red: gamma
     };
 
     // Simplified RGB (full saturation, medium lightness)
@@ -237,7 +237,8 @@ pub fn main() !void {
 
         // Write JSON output (sanitize floating point values)
         var output_buf: [OUTPUT_SIZE]u8 = undefined;
-        const json = try std.fmt.bufPrint(&output_buf,
+        const json = try std.fmt.bufPrint(
+            &output_buf,
             \\{{"ts": {d}, "seq": {d}, "epoch": {d}, "color": {{"t1": {d}, "t2": {d}, "t3": {d}, "hex": "{s}", "dominant_band": "{s}", "integration": {d:.3}}}, "powers": {{"delta": {d:.6}, "theta": {d:.6}, "alpha": {d:.6}, "beta": {d:.6}, "gamma": {d:.6}}}, "gf3_sum": {d}}}
         ,
             .{

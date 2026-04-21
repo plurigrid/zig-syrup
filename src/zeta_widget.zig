@@ -32,7 +32,7 @@ pub const ZetaWidget = struct {
 
     /// History for sparklines
     history: std.ArrayListUnmanaged(f64),
-    
+
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) ZetaWidget {
@@ -54,13 +54,13 @@ pub const ZetaWidget = struct {
         // "Kontorovich Dynamics": Random walk on the moduli space of graphs
         // Update gap with its velocity
         var next_std = self.gap.standard + self.gap.infinitesimal;
-        
+
         // Bounce off bounds (0.0 - 1.0)
         if (next_std > 1.0 or next_std < 0.0) {
             self.gap.infinitesimal *= -1.0;
             next_std = std.math.clamp(next_std, 0.0, 1.0);
         }
-        
+
         self.gap.standard = next_std;
 
         // Entropy tends to increase (Second Law), but we "work" to reduce it (Maxwell's Demon)
@@ -104,7 +104,7 @@ pub const ZetaWidget = struct {
 
     fn renderStats(self: ZetaWidget, buf: *Buffer, area: Rect) void {
         var x = area.x;
-        
+
         // Label
         buf.setString(x, area.y, "ζ-Gap:", Style.default);
         x += 7;
@@ -112,11 +112,11 @@ pub const ZetaWidget = struct {
         // Gap Value (with HyperReal velocity indicator)
         var val_buf: [32]u8 = undefined;
         const val_str = std.fmt.bufPrint(&val_buf, "{d:.2}", .{self.gap.standard}) catch "ERR";
-        
+
         // Color depends on velocity (Green = improving/opening, Red = closing)
         // "Opening" spectral gap is good (better expansion)
         const vel_color = if (self.gap.infinitesimal > 0) Color.green else Color.red;
-        
+
         buf.setString(x, area.y, val_str, Style.fg(vel_color).bold());
         x += @intCast(val_str.len);
 
@@ -137,20 +137,20 @@ pub const ZetaWidget = struct {
     fn renderSparkline(self: ZetaWidget, buf: *Buffer, area: Rect) void {
         // Sparkline characters:  ▂▃▄▅▆▇█
         const levels = " ▂▃▄▅▆▇█";
-        
+
         var i: usize = 0;
         while (i < area.width and i < self.history.items.len) : (i += 1) {
             // Get value from end of history backwards
             const idx = self.history.items.len - 1 - i;
             const val = self.history.items[idx];
-            
+
             // Map 0.0-1.0 to 0-7
             const level_idx = @as(usize, @intFromFloat(val * 7.0));
             const clamped_idx = std.math.clamp(level_idx, 0, 7);
-            
+
             // Render from right to left
             const x = area.x + area.width - 1 - @as(u16, @intCast(i));
-            
+
             // Color mapping: High gap = Blue/Purple (Deep structure), Low gap = Grey (Noise)
             const color = if (val > 0.8) Color.cyan else if (val > 0.5) Color.blue else Color.dark_gray;
 
