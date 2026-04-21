@@ -2963,7 +2963,7 @@ pub fn build(b: *std.Build) void {
         .name = "zoad",
         .root_module = zoad_mod,
     });
-    zoad_exe.linkLibC();
+    zoad_exe.root_module.linkLibC();
 
     // Attempt to link notcurses libraries
     // These will fail gracefully if not found, but the build step can be skipped
