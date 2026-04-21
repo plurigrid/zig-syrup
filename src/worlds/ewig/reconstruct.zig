@@ -61,7 +61,7 @@ pub const SnapshotCache = struct {
     entries: std.HashMap(Hash, CacheEntry, format.HashContext, std.hash_map.default_max_load_percentage),
     max_size: usize,
     current_size: usize,
-    mutex: @import("compat").Mutex,
+    mutex: std.Io.Mutex,
     hits: u64,
     misses: u64,
     

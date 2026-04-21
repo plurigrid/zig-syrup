@@ -8,7 +8,7 @@ const World = @import("world.zig").World;
 const WorldState = @import("world.zig").WorldState;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
-const compat = @import("compat");
+const compat = std.Io;
 const Mutex = compat.Mutex;
 const Condition = std.Thread.Condition;
 

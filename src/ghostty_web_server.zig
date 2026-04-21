@@ -8,7 +8,7 @@
 /// - Advertises on NATS mcp.terms.* subject
 
 const std = @import("std");
-const compat = @import("compat");
+const compat = std.Io;
 const websocket_framing = @import("websocket_framing");
 
 const Frame = websocket_framing.Frame;

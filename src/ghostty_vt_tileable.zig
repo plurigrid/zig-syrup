@@ -14,7 +14,7 @@
 //! Trit: gain-of-function (+1) × terminal:// (0) × tidar-verify (-1) = 0 ✓
 
 const std = @import("std");
-const compat = @import("compat");
+const compat = std.Io;
 const retty = @import("retty");
 const terminal_mod = @import("terminal");
 const virion = @import("virion");

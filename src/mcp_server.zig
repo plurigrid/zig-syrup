@@ -20,7 +20,7 @@ const std = @import("std");
 const json = std.json;
 const syrup = @import("syrup");
 const nurse = @import("nurse");
-const compat = @import("compat");
+const compat = std.Io;
 
 const SERVER_NAME = "zig-syrup";
 const SERVER_VERSION = "0.1.0";

@@ -239,7 +239,7 @@ pub const MemoryStore = struct {
     data: std.HashMap(Hash, []const u8, format.HashContext, std.hash_map.default_max_load_percentage),
     refs: std.HashMap(Hash, usize, format.HashContext, std.hash_map.default_max_load_percentage),
     total_size: usize,
-    mutex: @import("compat").Mutex,
+    mutex: std.Io.Mutex,
     
     const Self = @This();
     
@@ -416,8 +416,8 @@ pub const FileStore = struct {
     base_path: []const u8,
     index: std.HashMap(Hash, struct { offset: u64, size: u32 }, format.HashContext, std.hash_map.default_max_load_percentage),
     refs: std.HashMap(Hash, usize, format.HashContext, std.hash_map.default_max_load_percentage),
-    data_file: ?@import("compat").File,
-    mutex: @import("compat").Mutex,
+    data_file: ?std.Io.File,
+    mutex: std.Io.Mutex,
     
     const Self = @This();
     const INDEX_MAGIC = "EWIG_IDX\x00\x01";

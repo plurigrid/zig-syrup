@@ -132,7 +132,7 @@ pub const EventBatch = struct {
 /// Append-only event log with crash-safe persistence
 pub const EventLog = struct {
     allocator: Allocator,
-    file: ?@import("compat").File,
+    file: ?std.Io.File,
     path: []const u8,
     
     // In-memory index
@@ -145,7 +145,7 @@ pub const EventLog = struct {
     next_seq: u64,
     
     // Sync
-    mutex: @import("compat").Mutex,
+    mutex: std.Io.Mutex,
     
     const Self = @This();
     
