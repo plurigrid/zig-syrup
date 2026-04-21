@@ -2967,8 +2967,8 @@ pub fn build(b: *std.Build) void {
 
     // Attempt to link notcurses libraries
     // These will fail gracefully if not found, but the build step can be skipped
-    zoad_exe.linkSystemLibrary("notcurses");
-    zoad_exe.linkSystemLibrary("notcurses-core");
+    zoad_mod.linkSystemLibrary("notcurses", .{});
+    zoad_mod.linkSystemLibrary("notcurses-core", .{});
 
     // NOTE: zoad requires notcurses C library and headers
     // Build with: zig build zoad (requires notcurses library installed)
