@@ -355,7 +355,7 @@ fn l6_threaded_fused(n: u64, n_threads: usize) !u64 {
 // ============================================================================
 
 fn writeAll(buf: []const u8) void {
-    _ = std.posix.write(std.posix.STDOUT_FILENO, buf) catch {};
+    std.debug.print("{s}", .{buf});
 }
 
 fn printBuf(comptime fmt: []const u8, args: anytype) void {
