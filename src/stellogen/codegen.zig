@@ -146,16 +146,16 @@ pub const WasmBuilder = struct {
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{
             .allocator = allocator,
-            .output = .empty,
-            .types = .empty,
-            .imports = .empty,
-            .functions = .empty,
-            .tables = .empty,
-            .memories = .empty,
-            .globals = .empty,
-            .exports = .empty,
-            .code = .empty,
-            .data = .empty,
+            .output = .{},
+            .types = .{},
+            .imports = .{},
+            .functions = .{},
+            .tables = .{},
+            .memories = .{},
+            .globals = .{},
+            .exports = .{},
+            .code = .{},
+            .data = .{},
             .symbols = std.StringHashMap(SymbolInfo).init(allocator),
         };
     }
@@ -411,7 +411,7 @@ pub const WasmBuilder = struct {
 
         // Type section
         if (self.type_count > 0) {
-            var type_section = std.ArrayListUnmanaged(u8).empty;
+            var type_section = std.ArrayListUnmanaged(u8){};
             defer type_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &type_section, self.type_count);
             try type_section.appendSlice(self.allocator, self.types.items);
@@ -420,7 +420,7 @@ pub const WasmBuilder = struct {
 
         // Import section
         if (self.import_func_count > 0) {
-            var import_section = std.ArrayListUnmanaged(u8).empty;
+            var import_section = std.ArrayListUnmanaged(u8){};
             defer import_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &import_section, self.import_func_count);
             try import_section.appendSlice(self.allocator, self.imports.items);
@@ -429,7 +429,7 @@ pub const WasmBuilder = struct {
 
         // Function section
         if (self.func_count > 0) {
-            var func_section = std.ArrayListUnmanaged(u8).empty;
+            var func_section = std.ArrayListUnmanaged(u8){};
             defer func_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &func_section, self.func_count);
             try func_section.appendSlice(self.allocator, self.functions.items);
@@ -438,7 +438,7 @@ pub const WasmBuilder = struct {
 
         // Memory section
         if (self.memories.items.len > 0) {
-            var mem_section = std.ArrayListUnmanaged(u8).empty;
+            var mem_section = std.ArrayListUnmanaged(u8){};
             defer mem_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &mem_section, 1); // one memory
             try mem_section.appendSlice(self.allocator, self.memories.items);
@@ -447,7 +447,7 @@ pub const WasmBuilder = struct {
 
         // Global section
         if (self.global_count > 0) {
-            var global_section = std.ArrayListUnmanaged(u8).empty;
+            var global_section = std.ArrayListUnmanaged(u8){};
             defer global_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &global_section, self.global_count);
             try global_section.appendSlice(self.allocator, self.globals.items);
@@ -456,7 +456,7 @@ pub const WasmBuilder = struct {
 
         // Export section
         if (self.export_count > 0) {
-            var export_section = std.ArrayListUnmanaged(u8).empty;
+            var export_section = std.ArrayListUnmanaged(u8){};
             defer export_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &export_section, self.export_count);
             try export_section.appendSlice(self.allocator, self.exports.items);
@@ -466,7 +466,7 @@ pub const WasmBuilder = struct {
         // Code section
         if (self.func_count > 0) {
             // For now, wrap each function body
-            var code_section = std.ArrayListUnmanaged(u8).empty;
+            var code_section = std.ArrayListUnmanaged(u8){};
             defer code_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &code_section, self.func_count);
 
@@ -479,7 +479,7 @@ pub const WasmBuilder = struct {
 
         // Data section
         if (self.data.items.len > 0) {
-            var data_section = std.ArrayListUnmanaged(u8).empty;
+            var data_section = std.ArrayListUnmanaged(u8){};
             defer data_section.deinit(self.allocator);
             try writeU32Leb128(self.allocator, &data_section, 1); // one data segment
             try data_section.appendSlice(self.allocator, self.data.items);

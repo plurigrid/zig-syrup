@@ -5,14 +5,6 @@
 
 const std = @import("std");
 const World = @import("world.zig").World;
-
-// 0.16 compat
-fn milliTimestamp() i64 {
-    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
-}
 const WorldVariant = @import("world.zig").WorldVariant;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const StringHashMap = std.StringHashMap;
@@ -31,7 +23,7 @@ pub const SessionMetrics = struct {
     error_count: u32,
 
     pub fn duration(self: SessionMetrics) i64 {
-        const end = self.end_time orelse milliTimestamp();
+        const end = self.end_time orelse std.time.milliTimestamp();
         return end - self.start_time;
     }
 };
@@ -92,7 +84,7 @@ pub const ABTest = struct {
             .config = config,
             .worlds = StringHashMap(*World).init(allocator),
             .player_assignments = StringHashMap(WorldVariant).init(allocator),
-            .metrics = .empty,
+            .metrics = .{},
             .random = prng.random(),
             .start_time = null,
         };
@@ -197,7 +189,7 @@ pub const ABTest = struct {
 
     /// Start the test
     pub fn start(self: *ABTest) void {
-        self.start_time = milliTimestamp();
+        self.start_time = std.time.milliTimestamp();
     }
 
     /// Record session metrics
@@ -209,7 +201,7 @@ pub const ABTest = struct {
     pub fn shouldEnd(self: *ABTest) bool {
         if (self.start_time == null) return false;
 
-        const elapsed = milliTimestamp() - self.start_time.?;
+        const elapsed = std.time.milliTimestamp() - self.start_time.?;
         if (elapsed >= self.config.duration_ms) return true;
 
         if (self.metrics.items.len >= self.config.min_samples) return true;

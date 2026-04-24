@@ -106,7 +106,7 @@
 //! ## DOCUMENTATION CONSOLIDATION
 //! ═══════════════════════════════════════════════════════════════════════════
 //!
-//! ### Source: docs/research/BRUHAT_TITS_COLOR_SPACE.md
+//! ### Source: BRUHAT_TITS_COLOR_SPACE.md
 //!
 //! # Bruhat-Tits Color Space: The RGB of Deep Structure
 //!
@@ -184,7 +184,7 @@
 //!
 //! **Conclusion**: The "Hyperreal Approach" is simply the continuous analog of the discrete p-adic valuation tower found in Bruhat-Tits buildings.
 //!
-//! ### Source: docs/research/HYPERREAL_COLOR_THEORY.md
+//! ### Source: HYPERREAL_COLOR_THEORY.md
 //!
 //! # Hyperreal Color Theory: Grounding in Analysis and Dynamics
 //!
@@ -248,7 +248,7 @@
 //! *   **Intuitionistic Logic**: `HyperReal` (Distinguishing "indistinguishable" values via infinitesimals).
 //! *   **Result**: A color ontology that is mathematically robust, visually "perfect" (resolution independent), and dynamically rich.
 //!
-//! ### Source: docs/research/CATEGORY_THEORY_TILES.md
+//! ### Source: CATEGORY_THEORY_TILES.md
 //!
 //! # Category Theory of Tiled Architectures (Nvidia & OLC)
 //!
@@ -300,7 +300,7 @@
 //! 1.  Correct `pairResolution` formula to $20^{(1 - i/2)}$.
 //! 2.  Verify `encodeOlc` produces valid "849..." codes instead of "222...".
 //!
-//! ### Source: docs/research/ANALYSIS_AND_NEXT_STEPS.md
+//! ### Source: ANALYSIS_AND_NEXT_STEPS.md
 //!
 //! # Pivot Analysis & Next Steps
 //!
@@ -348,9 +348,9 @@
 //! *   `src/hyperreal.zig`: Core math (Tao).
 //! *   `src/zeta_widget.zig`: Core visualization (Kontorovich).
 //! *   `src/zoad.zig`: Integrated Desktop (Singh).
-//! *   `docs/research/HYPERREAL_COLOR_THEORY.md`: Theoretical grounding.
+//! *   `HYPERREAL_COLOR_THEORY.md`: Theoretical grounding.
 //!
-//! ### Source: docs/research/BCI-ECOSYSTEM-LIFTING.md
+//! ### Source: BCI-ECOSYSTEM-LIFTING.md
 //!
 //! # BCI Ecosystem Lifting: From Mechanical Cortex to Universal Receiver
 //!
@@ -705,7 +705,7 @@
 //!
 //! Everything else gets lifted from existing ecosystems through WASM components, C ABI, or TCP/Syrup bridges. **18 eyes audit the boundaries, not the internals.**
 //!
-//! ### Source: docs/architecture/SMART-ENERGY-INTERFACES.md
+//! ### Source: SMART-ENERGY-INTERFACES.md
 //!
 //! # Smart Energy Interfaces for zig-syrup
 //!
@@ -1355,12 +1355,12 @@ pub const CellSlab = struct {
 pub const CombinatorialComplex = struct {
     const Self = @This();
 
-    slabs: std.ArrayListUnmanaged(*CellSlab) = .empty,
+    slabs: std.ArrayListUnmanaged(*CellSlab) = .{},
     next_id: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     max_rank: u8 = 0,
     trit_sum: std.atomic.Value(i32) = std.atomic.Value(i32).init(0),
     allocator: Allocator,
-    rank_index: [256]std.ArrayListUnmanaged(CellId) = [_]std.ArrayListUnmanaged(CellId){.empty} ** 256,
+    rank_index: [256]std.ArrayListUnmanaged(CellId) = [_]std.ArrayListUnmanaged(CellId){.{}} ** 256,
 
     pub fn init(allocator: Allocator) Self {
         return .{

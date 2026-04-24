@@ -42,8 +42,7 @@ pub fn main() !void {
         backend.draw(buffer);
 
         // Output to terminal
-        const out = backend.output();
-        _ = std.c.write(std.posix.STDOUT_FILENO, out.ptr, out.len);
+        _ = try std.posix.write(std.posix.STDOUT_FILENO, backend.output());
 
         // Sleep 100ms
         // const ts = std.posix.timespec{ .tv_sec = 0, .tv_nsec = 100 * 1000 * 1000 };

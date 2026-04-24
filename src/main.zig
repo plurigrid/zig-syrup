@@ -55,15 +55,8 @@ pub fn main() !void {
 
     // Build output in buffer and write at once
     var out_buf: [2048]u8 = undefined;
-    var pos: usize = 0;
-    const writer = struct {
-        buf: []u8,
-        pos: *usize,
-        fn print(self: @This(), comptime fmt: []const u8, args: anytype) !void {
-            const slice = try std.fmt.bufPrint(self.buf[self.pos.*..], fmt, args);
-            self.pos.* += slice.len;
-        }
-    }{ .buf = &out_buf, .pos = &pos };
+    var fbs = std.io.fixedBufferStream(&out_buf);
+    const writer = fbs.writer();
 
     try writer.print("Zig Syrup CID Verification (BLAKE3)\n", .{});
     try writer.print("====================================\n\n", .{});
@@ -89,5 +82,5 @@ pub fn main() !void {
         try writer.print("✗ CID non-deterministic (should never happen)\n", .{});
     }
 
-    _ = std.c.write(std.posix.STDOUT_FILENO, out_buf[0..pos].ptr, pos);
+    _ = try std.posix.write(std.posix.STDOUT_FILENO, fbs.getWritten());
 }

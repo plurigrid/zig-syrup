@@ -71,7 +71,7 @@ pub const CognitiveModel = struct {
         return .{
             .beliefs = continuation.BeliefSet.init(allocator),
             .current_trit = .zero,
-            .history = .empty,
+            .history = .{},
         };
     }
 

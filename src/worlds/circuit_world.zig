@@ -54,15 +54,15 @@ pub const CircuitInput = struct {
 
     /// Serialize to syrup
     pub fn toSyrup(self: CircuitInput, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry).empty;
+        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer entries.deinit(allocator);
 
         // Player inputs
-        var inputs_list: std.ArrayListUnmanaged(syrup.Value) = .empty;
+        var inputs_list = std.ArrayListUnmanaged(syrup.Value){};
         defer inputs_list.deinit(allocator);
 
         for (self.player_inputs) |input| {
-            var input_entries: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
+            var input_entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
             defer input_entries.deinit(allocator);
 
             try input_entries.append(allocator, .{
@@ -89,7 +89,7 @@ pub const CircuitInput = struct {
         });
 
         // Parameters
-        var params_list: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
+        var params_list = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer params_list.deinit(allocator);
 
         for (self.parameters) |param| {
@@ -265,11 +265,11 @@ pub const CircuitWorld = struct {
         return Self{
             .allocator = allocator,
             .base_world = world,
-            .gates = .empty,
+            .gates = .{},
             .num_wires = 0,
             .num_public_inputs = 0,
             .num_private_inputs = 0,
-            .wire_values = .empty,
+            .wire_values = .{},
             .zk_enabled = false,
             .proving_key = null,
             .verification_key = null,
@@ -380,7 +380,7 @@ pub const CircuitWorld = struct {
             .{},
         );
 
-        var results: std.ArrayListUnmanaged(CircuitOutput.PlayerResult) = .empty;
+        var results = std.ArrayListUnmanaged(CircuitOutput.PlayerResult){};
         defer results.deinit(self.allocator);
 
         // Generate results from wire values
@@ -499,7 +499,7 @@ pub const CircuitBuilder = struct {
     pub fn init(allocator: Allocator) Self {
         return .{
             .allocator = allocator,
-            .gates = .empty,
+            .gates = .{},
             .next_wire = 0,
         };
     }

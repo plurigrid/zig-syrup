@@ -250,7 +250,7 @@ pub const Fiber = struct {
     pub fn init(allocator: std.mem.Allocator, term: Trit) Fiber {
         return .{
             .terminal = term,
-            .trajectories = .empty,
+            .trajectories = .{},
             .allocator = allocator,
         };
     }

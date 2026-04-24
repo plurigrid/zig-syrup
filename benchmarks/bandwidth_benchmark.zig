@@ -2,34 +2,6 @@
 /// Measure encoding/decoding bandwidth for zig-syrup
 /// Reports throughput in MB/s and operations/second
 const std = @import("std");
-
-fn nanoTimestamp() i128 {
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i128, @intCast(ts.sec)) * 1_000_000_000 + @as(i128, @intCast(ts.nsec));
-}
-
-fn posixWrite(fd: std.posix.fd_t, bytes: []const u8) !usize {
-    const rc = std.c.write(fd, bytes.ptr, bytes.len);
-    if (rc < 0) return error.WriteError;
-    return @intCast(rc);
-}
-
-const FixedBufWriter = struct {
-    buf: []u8,
-    pos: *usize,
-
-    pub fn print(self: FixedBufWriter, comptime fmt: []const u8, args: anytype) !void {
-        const s = try std.fmt.bufPrint(self.buf[self.pos.*..], fmt, args);
-        self.pos.* += s.len;
-    }
-    pub fn writeAll(self: FixedBufWriter, bytes: []const u8) !void {
-        if (self.pos.* + bytes.len > self.buf.len) return error.NoSpaceLeft;
-        @memcpy(self.buf[self.pos.*..][0..bytes.len], bytes);
-        self.pos.* += bytes.len;
-    }
-};
-
 const syrup = @import("syrup");
 const Value = syrup.Value;
 
@@ -169,11 +141,11 @@ fn benchmarkEncoding(name: []const u8, value: Value, iterations: usize) Benchmar
     }
 
     // Measurement
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
     for (0..iterations) |_| {
         _ = value.encodeBuf(&buf) catch unreachable;
     }
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     const encoded = value.encodeBuf(&buf) catch unreachable;
     const bytes_per_op = encoded.len;
@@ -202,12 +174,12 @@ fn benchmarkRoundtrip(name: []const u8, value: Value, iterations: usize) Benchma
     }
 
     // Measurement
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
     for (0..iterations) |_| {
         const enc = value.encodeBuf(&buf) catch unreachable;
         _ = enc;
     }
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     const encoded = value.encodeBuf(&buf) catch unreachable;
     const bytes_per_op = encoded.len * 2;
@@ -230,8 +202,8 @@ pub fn main() !void {
     // Use stdout via posix
     const stdout = std.posix.STDOUT_FILENO;
     var out_buf: [8192]u8 = undefined;
-    var pos: usize = 0;
-    const writer = FixedBufWriter{ .buf = &out_buf, .pos = &pos };
+    var fbs = std.io.fixedBufferStream(&out_buf);
+    const writer = fbs.writer();
 
     try writer.writeAll("Warming up...\n\n");
 
@@ -294,5 +266,5 @@ pub fn main() !void {
     try writer.writeAll("Zig:     Compiled/AOT     - ~800-3000 MB/s (this)\n");
 
     // Write to stdout
-    _ = try posixWrite(stdout, out_buf[0..pos]);
+    _ = try std.posix.write(stdout, fbs.getWritten());
 }

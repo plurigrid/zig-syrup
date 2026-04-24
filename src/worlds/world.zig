@@ -10,14 +10,6 @@ const hash_map = std.hash_map;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
 
-// 0.16 compat
-fn milliTimestamp() i64 {
-    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
-}
-
 // const ewig = @import("ewig/ewig.zig");
 
 /// World URI scheme variants
@@ -260,7 +252,7 @@ pub const World = struct {
 
         self.state = try WorldState.init(allocator);
         // self.ewig_log = ewig_log;
-        self.created_at = milliTimestamp();
+        self.created_at = std.time.milliTimestamp();
         self.allocator = allocator;
 
         // Log world creation

@@ -41,7 +41,7 @@ pub const WorldTile = struct {
 
     /// Serialize to syrup record
     pub fn toSyrup(self: WorldTile, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry).empty;
+        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         errdefer entries.deinit(allocator);
 
         try entries.append(allocator, .{

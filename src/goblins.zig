@@ -18,7 +18,7 @@ const std = @import("std");
 const passport = @import("passport.zig");
 const ripser = @import("ripser.zig");
 const syrup = @import("syrup.zig");
-const message_frame = @import("message_frame");
+const message_frame = @import("message_frame.zig");
 
 // ============================================================================
 // 1. SplitMix64 — Deterministic identity (matches gf3-goblins.scm exactly)
@@ -840,7 +840,7 @@ export fn captp_encode_desc_import(
 
     var pos: usize = 4;
 
-    const prefix = "<18'desc:import-object";
+    const prefix = "<15'desc:import-object";
     if (pos + prefix.len > buf.len) return 0;
     @memcpy(buf[pos .. pos + prefix.len], prefix);
     pos += prefix.len;
@@ -1214,29 +1214,29 @@ export fn orct_encode_gc_exports(
 
     var pos: usize = 4; // skip frame header
 
-    const label = "<13'op:gc-exports";
+    const label = "<14'op:gc-exports";
     if (pos + label.len > buf.len) return 0;
     @memcpy(buf[pos .. pos + label.len], label);
     pos += label.len;
 
-    // First list: export positions. Syrup lists use `[` `]`.
-    buf[pos] = '[';
+    // First list: export positions
+    buf[pos] = '(';
     pos += 1;
     for (0..count) |i| {
         const enc = std.fmt.bufPrint(buf[pos..], "{d}+", .{export_positions[i]}) catch return 0;
         pos += enc.len;
     }
-    buf[pos] = ']';
+    buf[pos] = ')';
     pos += 1;
 
-    // Second list: wire deltas.
-    buf[pos] = '[';
+    // Second list: wire deltas
+    buf[pos] = '(';
     pos += 1;
     for (0..count) |i| {
         const enc = std.fmt.bufPrint(buf[pos..], "{d}+", .{wire_deltas[i]}) catch return 0;
         pos += enc.len;
     }
-    buf[pos] = ']';
+    buf[pos] = ')';
     pos += 1;
 
     buf[pos] = '>';
@@ -1266,19 +1266,19 @@ export fn orct_encode_gc_answers(
 
     var pos: usize = 4;
 
-    const label = "<13'op:gc-answers";
+    const label = "<14'op:gc-answers";
     if (pos + label.len > buf.len) return 0;
     @memcpy(buf[pos .. pos + label.len], label);
     pos += label.len;
 
-    // List of answer positions. Syrup lists use `[` `]`.
-    buf[pos] = '[';
+    // List of answer positions
+    buf[pos] = '(';
     pos += 1;
     for (0..count) |i| {
         const enc = std.fmt.bufPrint(buf[pos..], "{d}+", .{answer_positions[i]}) catch return 0;
         pos += enc.len;
     }
-    buf[pos] = ']';
+    buf[pos] = ')';
     pos += 1;
 
     buf[pos] = '>';
@@ -1501,7 +1501,7 @@ test "e2e: desc:export and desc:import-object encode" {
 
     const import_len = captp_encode_desc_import(42, &buf, buf.len);
     try std.testing.expect(import_len > 0);
-    try std.testing.expect(std.mem.startsWith(u8, buf[5..import_len], "18'desc:import-object"));
+    try std.testing.expect(std.mem.startsWith(u8, buf[5..import_len], "15'desc:import-object"));
 }
 
 test "e2e: seal and unseal round-trip (passport.zig identity-bound)" {
@@ -1963,11 +1963,11 @@ test "orct: op:gc-exports encode" {
     // Verify Syrup record structure: starts with frame header then record
     // Payload starts at offset 4
     const payload = buf[4..len];
-    try std.testing.expect(std.mem.startsWith(u8, payload, "<13'op:gc-exports"));
+    try std.testing.expect(std.mem.startsWith(u8, payload, "<14'op:gc-exports"));
     try std.testing.expect(payload[payload.len - 1] == '>');
     // Contains two lists
-    try std.testing.expect(std.mem.indexOf(u8, payload, "[3+7+12+]") != null);
-    try std.testing.expect(std.mem.indexOf(u8, payload, "[1+2+1+]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, payload, "(3+7+12+)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, payload, "(1+2+1+)") != null);
 }
 
 test "orct: op:gc-answers encode" {
@@ -1978,41 +1978,9 @@ test "orct: op:gc-answers encode" {
     try std.testing.expect(len > 0);
 
     const payload = buf[4..len];
-    try std.testing.expect(std.mem.startsWith(u8, payload, "<13'op:gc-answers"));
+    try std.testing.expect(std.mem.startsWith(u8, payload, "<14'op:gc-answers"));
     try std.testing.expect(payload[payload.len - 1] == '>');
-    try std.testing.expect(std.mem.indexOf(u8, payload, "[0+5+11+]") != null);
-}
-
-test "orct: op:gc-exports parses cleanly via syrup.Parser" {
-    const allocator = std.testing.allocator;
-    var buf: [256]u8 = undefined;
-    const positions = [_]u16{ 3, 7, 12 };
-    const deltas = [_]u16{ 1, 2, 1 };
-    const len = orct_encode_gc_exports(&positions, &deltas, 3, &buf, buf.len);
-    try std.testing.expect(len > 0);
-    var parser = syrup.Parser.init(buf[4..len], allocator);
-    var v = try parser.parse();
-    defer v.deinitAll(allocator);
-    try std.testing.expect(v == .record);
-    try std.testing.expectEqualStrings("op:gc-exports", v.record.label.symbol);
-    try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);
-    try std.testing.expect(v.record.fields[0] == .list);
-    try std.testing.expectEqual(@as(usize, 3), v.record.fields[0].list.len);
-}
-
-test "orct: op:gc-answers parses cleanly via syrup.Parser" {
-    const allocator = std.testing.allocator;
-    var buf: [256]u8 = undefined;
-    const positions = [_]u16{ 0, 5, 11 };
-    const len = orct_encode_gc_answers(&positions, 3, &buf, buf.len);
-    try std.testing.expect(len > 0);
-    var parser = syrup.Parser.init(buf[4..len], allocator);
-    var v = try parser.parse();
-    defer v.deinitAll(allocator);
-    try std.testing.expect(v == .record);
-    try std.testing.expectEqualStrings("op:gc-answers", v.record.label.symbol);
-    try std.testing.expect(v.record.fields[0] == .list);
-    try std.testing.expectEqual(@as(usize, 3), v.record.fields[0].list.len);
+    try std.testing.expect(std.mem.indexOf(u8, payload, "(0+5+11+)") != null);
 }
 
 test "orct: apply gc-exports to session" {

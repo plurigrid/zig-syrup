@@ -15,14 +15,6 @@ const std = @import("std");
 const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 
-// 0.16 compat
-fn milliTimestamp() i64 {
-    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
-}
-
 /// World identifier (Grove sphere index)
 pub const WorldId = u64;
 
@@ -134,7 +126,7 @@ pub const WorldDamage = struct {
         return .{
             .world_id = world_id,
             .dirty_tiles = .{},
-            .damage_regions = .empty,
+            .damage_regions = .{},
             .generation = 0,
             .full_redraw = false,
             .allocator = allocator,
@@ -182,7 +174,7 @@ pub const WorldDamage = struct {
         var tile_it = self.dirty_tiles.keyIterator();
         while (tile_it.next()) |coord| {
             const entry = try layers.getOrPut(self.allocator, coord.z);
-            if (!entry.found_existing) entry.value_ptr.* = .empty;
+            if (!entry.found_existing) entry.value_ptr.* = .{};
             try entry.value_ptr.append(self.allocator, coord.*);
         }
 
@@ -217,7 +209,7 @@ pub const WorldDamage = struct {
     pub fn toSyrup(self: *WorldDamage, allocator: Allocator) !syrup.Value {
         const regions = try self.coalesce();
 
-        var region_values: std.ArrayListUnmanaged(syrup.Value) = .empty;
+        var region_values = std.ArrayListUnmanaged(syrup.Value){};
         defer region_values.deinit(allocator);
 
         for (regions) |r| {
@@ -287,7 +279,7 @@ pub const DamageTracker = struct {
             .region = AABB.fromTile(coord),
             .cause = cause,
             .world_id = self.active_world,
-            .timestamp = milliTimestamp(),
+            .timestamp = std.time.milliTimestamp(),
         });
     }
 
@@ -299,7 +291,7 @@ pub const DamageTracker = struct {
             .region = region,
             .cause = cause,
             .world_id = self.active_world,
-            .timestamp = milliTimestamp(),
+            .timestamp = std.time.milliTimestamp(),
         });
     }
 
@@ -316,7 +308,7 @@ pub const DamageTracker = struct {
                 .region = .{ .min_x = 0, .min_y = 0, .max_x = 0, .max_y = 0 },
                 .cause = .world_transition,
                 .world_id = new_world,
-                .timestamp = milliTimestamp(),
+                .timestamp = std.time.milliTimestamp(),
             });
         }
     }
@@ -665,7 +657,7 @@ pub const TerminalPane = struct {
     /// Swap buffers after render, return damaged regions.
     /// Uses row_dirty bitmap to skip clean rows entirely ("sphere tracing").
     pub fn commit(self: *TerminalPane, allocator: Allocator) ![]AABB {
-        var regions = std.ArrayListUnmanaged(AABB).empty;
+        var regions = std.ArrayListUnmanaged(AABB){};
 
         // Only iterate rows where row_dirty is set
         var y: u16 = 0;
@@ -812,7 +804,7 @@ pub const TerminalFrame = struct {
 
     /// Commit all panes, return total edit regions for tree-sitter
     pub fn commitFrame(self: *TerminalFrame, allocator: Allocator) ![]TSEdit {
-        var edits = std.ArrayListUnmanaged(TSEdit).empty;
+        var edits = std.ArrayListUnmanaged(TSEdit){};
         self.frame_gen +%= 1;
 
         var it = self.panes.valueIterator();

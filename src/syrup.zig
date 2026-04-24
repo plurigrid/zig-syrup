@@ -93,8 +93,9 @@ const FixedBufWriter = struct {
     }
 
     pub fn print(self: *FixedBufWriter, comptime fmt: []const u8, args: anytype) Error!void {
-        const slice = std.fmt.bufPrint(self.buf[self.pos.*..], fmt, args) catch return error.NoSpaceLeft;
-        self.pos.* += slice.len;
+        var tmp: [4096]u8 = undefined;
+        const written = std.fmt.bufPrint(&tmp, fmt, args) catch return error.NoSpaceLeft;
+        try self.writeAll(written);
     }
 
     pub fn write(self: *FixedBufWriter, data: []const u8) Error!usize {
@@ -123,7 +124,7 @@ pub const BigInt = struct {
     }
 
     fn compareMagnitudes(a: []const u8, b: []const u8) Order {
-        // Strip leading zeros using std.mem.trimStart
+        // Strip leading zeros using std.mem.trimLeft
         const a_trimmed = std.mem.trimStart(u8, a, &.{0});
         const b_trimmed = std.mem.trimStart(u8, b, &.{0});
         const len_cmp = std.math.order(a_trimmed.len, b_trimmed.len);
@@ -292,7 +293,8 @@ pub const Value = union(enum) {
             .record => |r| {
                 for (r.fields) |f| f.deinitAll(allocator);
                 allocator.free(r.fields);
-                allocator.destroy(@constCast(r.label));
+                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
+                allocator.free(label_slice);
             },
             .list => |items| {
                 for (items) |item| item.deinitAll(allocator);
@@ -311,11 +313,13 @@ pub const Value = union(enum) {
             },
             .tagged => |t| {
                 t.payload.deinitAll(allocator);
-                allocator.destroy(@constCast(t.payload));
+                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
+                allocator.free(payload_slice);
             },
             .@"error" => |e| {
                 e.data.deinitAll(allocator);
-                allocator.destroy(@constCast(e.data));
+                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
+                allocator.free(data_slice);
             },
             .string => |s| allocator.free(s),
             .bytes => |b| allocator.free(b),
@@ -332,7 +336,8 @@ pub const Value = union(enum) {
             .record => |r| {
                 for (r.fields) |f| f.deinitContainers(allocator);
                 allocator.free(r.fields);
-                allocator.destroy(@constCast(r.label));
+                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
+                allocator.free(label_slice);
             },
             .list => |items| {
                 for (items) |item| item.deinitContainers(allocator);
@@ -350,10 +355,12 @@ pub const Value = union(enum) {
                 allocator.free(entries);
             },
             .tagged => |t| {
-                allocator.destroy(@constCast(t.payload));
+                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
+                allocator.free(payload_slice);
             },
             .@"error" => |e| {
-                allocator.destroy(@constCast(e.data));
+                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
+                allocator.free(data_slice);
             },
             else => {},
         }
@@ -2430,20 +2437,20 @@ pub const CapTPDescriptors = struct {
     /// Pre-encoded descriptor labels for single-byte lookup
     pub const labels = struct {
         pub const op_deliver = "10'op:deliver";
-        pub const op_deliver_only = "15'op:deliver-only";
+        pub const op_deliver_only = "14'op:deliver-only";
         pub const op_pick = "7'op:pick";
         pub const op_abort = "8'op:abort";
         pub const op_listen = "9'op:listen";
-        pub const op_gc_export = "13'op:gc-exports";
-        pub const op_gc_answer = "13'op:gc-answers";
+        pub const op_gc_export = "12'op:gc-export";
+        pub const op_gc_answer = "12'op:gc-answer";
         pub const desc_export = "11'desc:export";
-        pub const desc_import = "18'desc:import-object";
-        pub const desc_promise = "19'desc:import-promise";
+        pub const desc_import = "15'desc:import-object";
+        pub const desc_promise = "16'desc:import-promise";
         pub const desc_answer = "11'desc:answer";
         pub const desc_tag = "8'desc:tag";
         pub const desc_error = "10'desc:error";
-        pub const desc_handoff_give = "17'desc:handoff-give";
-        pub const desc_handoff_receive = "20'desc:handoff-receive";
+        pub const desc_handoff_give = "16'desc:handoff-give";
+        pub const desc_handoff_receive = "19'desc:handoff-receive";
     };
 
     /// Pre-computed record starters for common descriptors

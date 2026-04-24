@@ -6,14 +6,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const syrup = @import("syrup");
-
-// 0.16 compat
-fn nanoTimestamp() i128 {
-    if (@hasDecl(std.time, "nanoTimestamp")) return @field(std.time, "nanoTimestamp")();
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i128, @intCast(ts.sec)) * std.time.ns_per_s + @as(i128, @intCast(ts.nsec));
-}
 const World = @import("world.zig").World;
 const WorldVariant = @import("world.zig").WorldVariant;
 const ABTest = @import("ab_test.zig").ABTest;
@@ -185,7 +177,7 @@ pub const BenchmarkAdapter = struct {
         return .{
             .allocator = allocator,
             .memory_tracker = MemoryTracker.init(),
-            .results = .empty,
+            .results = .{},
         };
     }
 
@@ -200,7 +192,7 @@ pub const BenchmarkAdapter = struct {
         iterations: usize,
         comptime benchmark_type: BenchmarkType,
     ) !WorldBenchmark {
-        const start_time = nanoTimestamp();
+        const start_time = std.time.nanoTimestamp();
 
         // Track memory at start
         const mem_start = self.memory_tracker.getStats();
@@ -232,7 +224,7 @@ pub const BenchmarkAdapter = struct {
             },
         }
 
-        const end_time = nanoTimestamp();
+        const end_time = std.time.nanoTimestamp();
         const total_ns = end_time - start_time;
         const avg_ns = @divFloor(total_ns, iterations);
         const ops_per_sec = if (avg_ns > 0) @divFloor(@as(i128, 1_000_000_000), avg_ns) else 0;
@@ -320,7 +312,7 @@ pub const BenchmarkAdapter = struct {
         variant_count: usize,
         assignments_per_variant: usize,
     ) !ABTestBenchmark {
-        const start_time = nanoTimestamp();
+        const start_time = std.time.nanoTimestamp();
 
         // Create A/B test with default config
         const config = ABTestConfig{
@@ -343,7 +335,7 @@ pub const BenchmarkAdapter = struct {
             _ = try ab_test.assignPlayer(player_id, .RoundRobin, null);
         }
 
-        const end_time = nanoTimestamp();
+        const end_time = std.time.nanoTimestamp();
         const total_ns = end_time - start_time;
 
         return ABTestBenchmark{

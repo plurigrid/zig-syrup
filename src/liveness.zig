@@ -13,14 +13,6 @@ const syrup = @import("syrup");
 const acp = @import("acp");
 
 const Allocator = std.mem.Allocator;
-
-// 0.16 compat
-fn nanoTimestamp() i128 {
-    if (@hasDecl(std.time, "nanoTimestamp")) return @field(std.time, "nanoTimestamp")();
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i128, @intCast(ts.sec)) * std.time.ns_per_s + @as(i128, @intCast(ts.nsec));
-}
 const posix = std.posix;
 
 // ============================================================================
@@ -48,7 +40,7 @@ pub const ProbeError = error{
 
 /// Send "echo <marker>" and verify marker appears in output
 pub fn echoProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
 
     // Unique marker to avoid matching stale output
     var marker_buf: [32]u8 = undefined;
@@ -66,7 +58,7 @@ pub fn echoProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32) !ProbeRe
     var output_buf: [1024]u8 = undefined;
     const output = try readWithTimeout(fd, &output_buf, timeout_ms);
 
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     // Check if marker is in output
     if (std.mem.indexOf(u8, output, marker)) |_| {
@@ -93,7 +85,7 @@ pub fn echoProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32) !ProbeRe
 /// Send DSR (Device Status Report) and expect CPR (Cursor Position Report)
 /// Request: ESC[6n → Response: ESC[{row};{col}R
 pub fn ansiCursorProbe(fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
 
     // Send cursor position request (DSR)
     const dsr = "\x1b[6n";
@@ -105,7 +97,7 @@ pub fn ansiCursorProbe(fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
     var buf: [32]u8 = undefined;
     const output = try readWithTimeout(fd, &buf, timeout_ms);
 
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     // Check for CPR response: ESC[{n};{m}R
     if (std.mem.indexOf(u8, output, "\x1b[")) |esc_pos| {
@@ -131,7 +123,7 @@ pub fn ansiCursorProbe(fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
 
 /// Check if fd is writable using poll()
 pub fn fdPollProbe(fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
 
     var fds = [_]posix.pollfd{
         .{ .fd = fd, .events = posix.POLL.OUT, .revents = 0 },
@@ -142,7 +134,7 @@ pub fn fdPollProbe(fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
         return ProbeResult{ .alive = false, .message = @errorName(err) };
     };
 
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     if (ready > 0 and (fds[0].revents & posix.POLL.OUT) != 0) {
         return ProbeResult{
@@ -173,7 +165,7 @@ pub fn fdPollProbe(fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
 
 /// Send ACP initialize request, verify response
 pub fn acpInitializeProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
 
     // Build initialize message
     const msg = acp.Message{
@@ -201,7 +193,7 @@ pub fn acpInitializeProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32)
     var response_buf: [4096]u8 = undefined;
     const response = try readWithTimeout(fd, &response_buf, timeout_ms);
 
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     // Try to decode as Syrup
     const decoded = syrup.decode(allocator, response) catch {
@@ -241,7 +233,7 @@ pub fn acpInitializeProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32)
 
 /// Send "echo $$" to get shell PID, verify numeric response
 pub fn shellPidProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32) !ProbeResult {
-    const start = nanoTimestamp();
+    const start = std.time.nanoTimestamp();
 
     // Send PID request
     const cmd = "echo $$\n";
@@ -253,7 +245,7 @@ pub fn shellPidProbe(allocator: Allocator, fd: posix.fd_t, timeout_ms: u32) !Pro
     var buf: [256]u8 = undefined;
     const output = try readWithTimeout(fd, &buf, timeout_ms);
 
-    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
 
     // Look for numeric PID in output
     var pid_found = false;
@@ -297,7 +289,7 @@ pub const HeartbeatState = struct {
 
     pub fn recordSuccess(self: *HeartbeatState) void {
         self.consecutive_failures = 0;
-        self.last_success_ns = nanoTimestamp();
+        self.last_success_ns = std.time.nanoTimestamp();
         self.total_probes += 1;
     }
 

@@ -14,18 +14,6 @@
 
 const std = @import("std");
 
-fn nanoTimestamp() i128 {
-    var ts: std.c.timespec = undefined;
-    _ = std.c.clock_gettime(.REALTIME, &ts);
-    return @as(i128, @intCast(ts.sec)) * 1_000_000_000 + @as(i128, @intCast(ts.nsec));
-}
-
-fn posixWrite(fd: std.posix.fd_t, bytes: []const u8) !usize {
-    const rc = std.c.write(fd, bytes.ptr, bytes.len);
-    if (rc < 0) return error.WriteError;
-    return @intCast(rc);
-}
-
 const GOLDEN: u64 = 0x9e3779b97f4a7c15;
 const MIX1: u64 = 0xbf58476d1ce4e5b9;
 const MIX2: u64 = 0x94d049bb133111eb;
@@ -367,7 +355,7 @@ fn l6_threaded_fused(n: u64, n_threads: usize) !u64 {
 // ============================================================================
 
 fn writeAll(buf: []const u8) void {
-    _ = posixWrite(std.posix.STDOUT_FILENO, buf) catch {};
+    std.debug.print("{s}", .{buf});
 }
 
 fn printBuf(comptime fmt: []const u8, args: anytype) void {
@@ -397,9 +385,9 @@ fn bench(comptime label: []const u8, n: u64, f: anytype) BenchResult {
     // Warmup
     std.mem.doNotOptimizeAway(f(n / 100 + 1));
 
-    const t0 = nanoTimestamp();
+    const t0 = std.time.nanoTimestamp();
     const xor = f(n);
-    const t1 = nanoTimestamp();
+    const t1 = std.time.nanoTimestamp();
     std.mem.doNotOptimizeAway(xor);
     return .{ .label = label, .ns = t1 - t0, .n = n, .xor = xor };
 }
@@ -468,9 +456,9 @@ pub fn main() !void {
             if (nt > cpu_count) continue;
             _ = l6_threaded_fused(n / 100 + 8, nt) catch 0;
 
-            const t0 = nanoTimestamp();
+            const t0 = std.time.nanoTimestamp();
             const xor = l6_threaded_fused(n, nt) catch 0;
-            const t1 = nanoTimestamp();
+            const t1 = std.time.nanoTimestamp();
             const ns = t1 - t0;
             const rate_m: i128 = if (ns > 0) @divFloor(@as(i128, n) * 1000, ns) else 0;
             const ok: []const u8 = if (xor == ref_fused[si]) "" else " !";
@@ -482,9 +470,9 @@ pub fn main() !void {
     writeAll("\n\n  -- 1 BILLION colors (L6, all threads) --\n");
     const billion: u64 = 1_000_000_000;
     _ = l6_threaded_fused(1_000_000, cpu_count) catch 0;
-    const t0b = nanoTimestamp();
+    const t0b = std.time.nanoTimestamp();
     const xor_b = l6_threaded_fused(billion, cpu_count) catch 0;
-    const t1b = nanoTimestamp();
+    const t1b = std.time.nanoTimestamp();
     const ns_b = t1b - t0b;
     const rate_b: i128 = if (ns_b > 0) @divFloor(@as(i128, billion) * 1000, ns_b) else 0;
     const ms_b = @divFloor(ns_b, 1_000_000);

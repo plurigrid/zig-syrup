@@ -50,12 +50,12 @@ pub const CellSlab = struct {
 pub const CombinatorialComplex = struct {
     const Self = @This();
 
-    slabs: std.ArrayListUnmanaged(*CellSlab) = .empty,
+    slabs: std.ArrayListUnmanaged(*CellSlab) = .{},
     next_id: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     max_rank: u8 = 0,
     trit_sum: std.atomic.Value(i32) = std.atomic.Value(i32).init(0),
     allocator: Allocator,
-    rank_index: [256]std.ArrayListUnmanaged(CellId) = [_]std.ArrayListUnmanaged(CellId){.empty} ** 256,
+    rank_index: [256]std.ArrayListUnmanaged(CellId) = [_]std.ArrayListUnmanaged(CellId){.{}} ** 256,
 
     pub fn init(allocator: Allocator) Self {
         return .{ .allocator = allocator };

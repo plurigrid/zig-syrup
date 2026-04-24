@@ -887,42 +887,11 @@ test "lerp clamps out-of-range parameter" {
 
 // --- Rendering to buffer tests ---
 
-const FbsCompat = struct {
-    buf: []u8,
-    pos: usize = 0,
-    pub const Error = error{NoSpaceLeft};
-    pub fn writeByte(self: *FbsCompat, b: u8) Error!void {
-        if (self.pos >= self.buf.len) return error.NoSpaceLeft;
-        self.buf[self.pos] = b;
-        self.pos += 1;
-    }
-    pub fn writeAll(self: *FbsCompat, s: []const u8) Error!void {
-        if (self.pos + s.len > self.buf.len) return error.NoSpaceLeft;
-        @memcpy(self.buf[self.pos..][0..s.len], s);
-        self.pos += s.len;
-    }
-    pub fn writeByteNTimes(self: *FbsCompat, b: u8, n: usize) Error!void {
-        if (self.pos + n > self.buf.len) return error.NoSpaceLeft;
-        @memset(self.buf[self.pos..][0..n], b);
-        self.pos += n;
-    }
-    pub fn print(self: *FbsCompat, comptime fmt: []const u8, args: anytype) Error!void {
-        const slice = std.fmt.bufPrint(self.buf[self.pos..], fmt, args) catch return error.NoSpaceLeft;
-        self.pos += slice.len;
-    }
-    pub fn write(self: *FbsCompat, s: []const u8) Error!usize {
-        try self.writeAll(s);
-        return s.len;
-    }
-    pub fn getWritten(self: *FbsCompat) []u8 {
-        return self.buf[0..self.pos];
-    }
-};
-
 test "renderBlock writes valid ANSI" {
     var buf: [128]u8 = undefined;
-    var fbs = FbsCompat{ .buf = &buf };
-    try renderBlock(&fbs, balanced_states[0]);
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    try renderBlock(writer, balanced_states[0]);
     const written = fbs.getWritten();
     try std.testing.expect(written.len > 0);
     try std.testing.expect(std.mem.startsWith(u8, written, "\x1b[48;2;"));
@@ -931,8 +900,9 @@ test "renderBlock writes valid ANSI" {
 
 test "renderTrit writes bracketed trit string" {
     var buf: [128]u8 = undefined;
-    var fbs = FbsCompat{ .buf = &buf };
-    try renderTrit(&fbs, TriadicColor{ .t1 = 1, .t2 = 0, .t3 = -1 });
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    try renderTrit(writer, TriadicColor{ .t1 = 1, .t2 = 0, .t3 = -1 });
     const written = fbs.getWritten();
     // Should contain [+0-]
     try std.testing.expect(std.mem.indexOf(u8, written, "+0-") != null);
@@ -940,8 +910,9 @@ test "renderTrit writes bracketed trit string" {
 
 test "renderPalette writes 3 rows" {
     var buf: [2048]u8 = undefined;
-    var fbs = FbsCompat{ .buf = &buf };
-    try renderPalette(&fbs);
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    try renderPalette(writer);
     const written = fbs.getWritten();
     // Should contain "t1=-1", "t1= 0", "t1=+1"
     try std.testing.expect(std.mem.indexOf(u8, written, "t1=-1") != null);

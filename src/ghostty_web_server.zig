@@ -21,7 +21,7 @@ const FrameAccumulator = websocket_framing.FrameAccumulator;
 
 /// WebSocket client connection state
 pub const WebSocketConnection = struct {
-    stream: compat.Stream,
+    stream: std.net.Stream,
     accumulator: FrameAccumulator,
     term_width: u16 = 80,
     term_height: u16 = 24,
@@ -204,7 +204,7 @@ const EventStats = struct {
 
 pub const Server = struct {
     allocator: std.mem.Allocator,
-    listener: compat.Server,
+    listener: std.net.Server,
     port: u16,
     max_clients: usize = 16,
     clients: std.ArrayListUnmanaged(WebSocketConnection),
@@ -213,7 +213,7 @@ pub const Server = struct {
     stats: EventStats = .{},
 
     pub fn init(allocator: std.mem.Allocator, port: u16) !Server {
-        const address = try compat.Address.parseIp("127.0.0.1", port);
+        const address = try std.net.Address.parseIp("127.0.0.1", port);
         const listener = try address.listen(.{
             .reuse_address = true,
         });
@@ -222,7 +222,7 @@ pub const Server = struct {
             .allocator = allocator,
             .listener = listener,
             .port = port,
-            .clients = compat.emptyList(WebSocketConnection),
+            .clients = std.ArrayListUnmanaged(WebSocketConnection){},
         };
     }
 
@@ -266,7 +266,7 @@ pub const Server = struct {
                 self.allocator,
                 16 * 1024, // 16KB ring buffer for incoming frames
             ),
-            .last_activity = compat.milliTimestamp(),
+            .last_activity = std.time.milliTimestamp(),
         };
 
         // Perform WebSocket upgrade
@@ -337,14 +337,13 @@ pub const Server = struct {
             }
 
             // Periodic keepalive
-            const now = compat.milliTimestamp();
+            const now = std.time.milliTimestamp();
             if (@mod(now, 30000) == 0) { // Every 30 seconds
                 try self.broadcastPing();
             }
 
             // Small sleep to prevent busy loop
-            var req: std.c.timespec = .{ .sec = 0, .nsec = 100 * std.time.ns_per_ms };
-            _ = std.c.nanosleep(&req, null);
+            std.posix.nanosleep(0, 100 * std.time.ns_per_ms);
         }
     }
 
@@ -375,7 +374,7 @@ pub const Server = struct {
             },
         }
 
-        client.last_activity = compat.milliTimestamp();
+        client.last_activity = std.time.milliTimestamp();
     }
 
     /// Process input event (keyboard/mouse)
@@ -472,11 +471,15 @@ pub const NatsAdvertiser = struct {
 
     pub fn advertise(self: NatsAdvertiser, allocator: std.mem.Allocator) ![]u8 {
         var msg_buf: [256]u8 = undefined;
-        const msg = try std.fmt.bufPrint(
-            &msg_buf,
+        var stream = std.io.fixedBufferStream(&msg_buf);
+        var writer = stream.writer();
+
+        try writer.print(
             "{{ \"service\": \"ghostty-emacs\", \"port\": {}, \"host\": \"{s}\", \"protocol\": \"websocket\", \"capabilities\": [\"vt\", \"mouse\", \"focus\"] }}",
             .{ self.port, self.host },
         );
+
+        const msg = stream.getWritten();
         const result = try allocator.alloc(u8, msg.len);
         @memcpy(result, msg);
         return result;

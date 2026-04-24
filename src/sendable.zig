@@ -52,27 +52,9 @@ test "sendable encoding" {
         .trit = 1,
         .payload = syrup.string("test"),
     };
-    var list: std.ArrayListUnmanaged(u8) = .empty;
+    var list = std.ArrayList(u8){};
     defer list.deinit(allocator);
-    const W = struct {
-        buf: *std.ArrayListUnmanaged(u8),
-        alloc: std.mem.Allocator,
-        pub fn writeByte(self: @This(), b: u8) !void {
-            try self.buf.append(self.alloc, b);
-        }
-        pub fn writeAll(self: @This(), s: []const u8) !void {
-            try self.buf.appendSlice(self.alloc, s);
-        }
-        pub fn writeByteNTimes(self: @This(), b: u8, n: usize) !void {
-            for (0..n) |_| try self.buf.append(self.alloc, b);
-        }
-        pub fn print(self: @This(), comptime fmt: []const u8, args: anytype) !void {
-            var tmp: [64]u8 = undefined;
-            const slice = std.fmt.bufPrint(&tmp, fmt, args) catch unreachable;
-            try self.buf.appendSlice(self.alloc, slice);
-        }
-    };
-    try sc.encode(W{ .buf = &list, .alloc = allocator });
+    try sc.encode(list.writer(allocator));
     try std.testing.expect(list.items.len > 0);
 }
 

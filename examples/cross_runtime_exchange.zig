@@ -122,25 +122,11 @@ const TestCase = struct {
     value: Value,
 };
 
-const FixedBufWriter = struct {
-    buf: []u8,
-    pos: *usize,
-    pub fn print(self: @This(), comptime fmt: []const u8, args: anytype) !void {
-        const s = try std.fmt.bufPrint(self.buf[self.pos.*..], fmt, args);
-        self.pos.* += s.len;
-    }
-    pub fn writeAll(self: @This(), bytes: []const u8) !void {
-        if (self.pos.* + bytes.len > self.buf.len) return error.NoSpaceLeft;
-        @memcpy(self.buf[self.pos.*..][0..bytes.len], bytes);
-        self.pos.* += bytes.len;
-    }
-};
-
 pub fn main() !void {
     // Build output in buffer
     var out_buf: [16384]u8 = undefined;
-    var pos: usize = 0;
-    const writer = FixedBufWriter{ .buf = &out_buf, .pos = &pos };
+    var fbs = std.io.fixedBufferStream(&out_buf);
+    const writer = fbs.writer();
 
     try writer.writeAll("╔══════════════════════════════════════════════════════════════════╗\n");
     try writer.writeAll("║     Zig (zig-syrup) Cross-Runtime Exchange                        ║\n");
@@ -234,5 +220,5 @@ pub fn main() !void {
     try writer.writeAll("  • Real-time safe (no GC pauses)\n");
 
     // Write everything to stdout
-    _ = std.c.write(std.posix.STDOUT_FILENO, out_buf[0..pos].ptr, pos);
+    _ = try std.posix.write(std.posix.STDOUT_FILENO, fbs.getWritten());
 }

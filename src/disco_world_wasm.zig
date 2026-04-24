@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const WORLD_SOURCE = @embedFile("disco_wire_world");
+const WORLD_SOURCE = @embedFile("disco_wire.world");
 
 const SUMMARY =
     "Disco wire world: retty native, restty browser host, dom_backend as " ++
