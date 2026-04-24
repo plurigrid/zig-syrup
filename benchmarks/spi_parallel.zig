@@ -13,6 +13,18 @@
 //!   3. Full triadic (ChaCha + SplitMix + Rybka, zig-syrup extension)
 
 const std = @import("std");
+
+fn nanoTimestamp() i128 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i128, @intCast(ts.sec)) * 1_000_000_000 + @as(i128, @intCast(ts.nsec));
+}
+
+fn posixWrite(fd: std.posix.fd_t, bytes: []const u8) !usize {
+    const rc = std.c.write(fd, bytes.ptr, bytes.len);
+    if (rc < 0) return error.WriteError;
+    return @intCast(rc);
+}
 const splitmix_trit = @import("splitmix_trit");
 
 const SEED: u64 = 42;
@@ -46,13 +58,13 @@ const WorkerResult = struct {
 
 fn workerSplitMix(seed: u64, start: u64, count: u64) WorkerResult {
     var xor: u64 = 0;
-    const t0 = std.time.nanoTimestamp();
+    const t0 = nanoTimestamp();
     var i: u64 = start;
     const end_idx = start + count;
     while (i < end_idx) : (i += 1) {
         xor ^= splitmix64_at(seed, i);
     }
-    const t1 = std.time.nanoTimestamp();
+    const t1 = nanoTimestamp();
     // Prevent dead code elimination
     std.mem.doNotOptimizeAway(xor);
     return .{ .xor_fingerprint = xor, .count = count, .elapsed_ns = t1 - t0 };
@@ -60,7 +72,7 @@ fn workerSplitMix(seed: u64, start: u64, count: u64) WorkerResult {
 
 fn workerColorAt(seed: u64, start: u64, count: u64) WorkerResult {
     var xor: u64 = 0;
-    const t0 = std.time.nanoTimestamp();
+    const t0 = nanoTimestamp();
     var i: u64 = start;
     const end_idx = start + count;
     while (i < end_idx) : (i += 1) {
@@ -68,21 +80,21 @@ fn workerColorAt(seed: u64, start: u64, count: u64) WorkerResult {
         const rgb = to_rgb(val);
         xor ^= @as(u64, rgb.r) << 16 | @as(u64, rgb.g) << 8 | @as(u64, rgb.b);
     }
-    const t1 = std.time.nanoTimestamp();
+    const t1 = nanoTimestamp();
     std.mem.doNotOptimizeAway(xor);
     return .{ .xor_fingerprint = xor, .count = count, .elapsed_ns = t1 - t0 };
 }
 
 fn workerTriadic(seed: u64, start: u64, count: u64) WorkerResult {
     var xor: u64 = 0;
-    const t0 = std.time.nanoTimestamp();
+    const t0 = nanoTimestamp();
     var i: u64 = start;
     const end_idx = start + count;
     while (i < end_idx) : (i += 1) {
         const rgb = splitmix_trit.SplitMixRGB.colorAt(seed, i);
         xor ^= @as(u64, rgb.r) << 16 | @as(u64, rgb.g) << 8 | @as(u64, rgb.b);
     }
-    const t1 = std.time.nanoTimestamp();
+    const t1 = nanoTimestamp();
     std.mem.doNotOptimizeAway(xor);
     return .{ .xor_fingerprint = xor, .count = count, .elapsed_ns = t1 - t0 };
 }
@@ -110,7 +122,7 @@ fn runParallel(
     var results = try alloc.alloc(WorkerResult, n_threads);
     defer alloc.free(results);
 
-    const t0 = std.time.nanoTimestamp();
+    const t0 = nanoTimestamp();
 
     for (0..n_threads) |tid| {
         const start = chunk * tid + @min(tid, remainder);
@@ -125,7 +137,7 @@ fn runParallel(
     }
 
     for (handles) |h| h.join();
-    const t1 = std.time.nanoTimestamp();
+    const t1 = nanoTimestamp();
 
     // XOR-fold all thread fingerprints (commutative — order doesn't matter)
     var combined_xor: u64 = 0;
@@ -139,7 +151,7 @@ fn runParallel(
 }
 
 fn writeAll(buf: []const u8) void {
-    _ = std.posix.write(std.posix.STDOUT_FILENO, buf) catch {};
+    _ = posixWrite(std.posix.STDOUT_FILENO, buf) catch {};
 }
 
 fn printBuf(comptime fmt: []const u8, args: anytype) void {

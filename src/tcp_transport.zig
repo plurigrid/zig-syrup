@@ -5,7 +5,8 @@
 //! Designed for the C ABI boundary (libspatial_propagator dylib).
 
 const std = @import("std");
-const net = std.net;
+const compat = @import("compat");
+const net = compat;
 const posix = std.posix;
 const frame = @import("message_frame");
 const Allocator = std.mem.Allocator;
@@ -18,7 +19,11 @@ pub const TransportError = error{
     BufferFull,
     NotConnected,
     AlreadyListening,
-} || frame.FrameError || std.posix.ReadError || std.posix.WriteError || std.posix.ConnectError;
+    IoNotInitialized,
+    ReadFailed,
+    WriteFailed,
+    Unexpected,
+} || frame.FrameError;
 
 /// A single peer connection with framed message I/O.
 pub const Connection = struct {

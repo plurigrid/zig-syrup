@@ -271,7 +271,7 @@ pub const Lexer = struct {
 
     /// Tokenize entire source
     pub fn tokenize(self: *Self, allocator: std.mem.Allocator) ![]Token {
-        var tokens = std.ArrayListUnmanaged(Token){};
+        var tokens = std.ArrayListUnmanaged(Token).empty;
         defer tokens.deinit(allocator);
         while (true) {
             const tok = self.nextToken();
@@ -288,7 +288,7 @@ pub const Lexer = struct {
 
 test "lex basic tokens" {
     var lexer = Lexer.init("(def foo [X])");
-    var tokens = std.ArrayListUnmanaged(Token){};
+    var tokens = std.ArrayListUnmanaged(Token).empty;
     defer tokens.deinit(std.testing.allocator);
 
     while (true) {

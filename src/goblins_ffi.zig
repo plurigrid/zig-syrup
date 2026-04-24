@@ -15,10 +15,11 @@
 //! Syrup is the wire format that connects them.
 
 const std = @import("std");
-const passport = @import("passport.zig");
-const ripser = @import("ripser.zig");
-const syrup = @import("syrup.zig");
-const message_frame = @import("message_frame.zig");
+const compat = @import("compat");
+const passport = @import("passport");
+const ripser = @import("ripser");
+const syrup = @import("syrup");
+const message_frame = @import("message_frame");
 
 // ============================================================================
 // 1. SplitMix64 — Deterministic identity (matches gf3-goblins.scm exactly)
@@ -311,10 +312,10 @@ export fn gf3_tcp_connect(host: [*:0]const u8, port: u16) i32 {
 
     // Parse address
     const host_slice = std.mem.sliceTo(host, 0);
-    const addr = std.net.Address.parseIp4(host_slice, port) catch return -1;
+    const addr = compat.Address.parseIp4(host_slice, port) catch return -1;
 
     // Connect
-    const stream = std.net.tcpConnectToAddress(addr) catch return -1;
+    const stream = compat.tcpConnectToAddress(addr) catch return -1;
     connection_pool[slot] = tcp_transport.Connection.init(std.heap.page_allocator, stream);
 
     return @intCast(slot);

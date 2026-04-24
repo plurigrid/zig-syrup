@@ -479,7 +479,7 @@ pub const TreeDecomposition = struct {
         for (0..bh) |by| {
             for (0..bw) |bx| {
                 const bag_idx = by * bw + bx;
-                var tile_indices = std.ArrayListUnmanaged(u32){};
+                var tile_indices = std.ArrayListUnmanaged(u32).empty;
 
                 // Collect tiles in this 2x2 region
                 const x_start = @as(u32, @intCast(bx)) * 2;
@@ -499,7 +499,7 @@ pub const TreeDecomposition = struct {
                 const parent: ?u32 = if (bag_idx > 0) @intCast(bag_idx - 1) else null;
 
                 // Children (next bag in chain)
-                var children = std.ArrayListUnmanaged(u32){};
+                var children = std.ArrayListUnmanaged(u32).empty;
                 if (bag_idx + 1 < n_bags) {
                     try children.append(allocator, @intCast(bag_idx + 1));
                 }

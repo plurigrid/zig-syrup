@@ -311,52 +311,54 @@ pub const ColoredSexp = struct {
 
     /// Render to ANSI-colored string for terminal display
     pub fn renderAnsi(self: ColoredSexp, allocator: Allocator) ![]u8 {
-        var buf = std.ArrayListUnmanaged(u8){};
-        const writer = buf.writer(allocator);
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        errdefer buf.deinit(allocator);
 
         for (self.tokens) |token| {
             // Write color escape
             var ansi_buf: [19]u8 = undefined;
             const ansi = token.color.toAnsiFg(&ansi_buf);
-            try writer.writeAll(ansi);
+            try buf.appendSlice(allocator, ansi);
 
             // Write text
-            try writer.writeAll(token.text);
+            try buf.appendSlice(allocator, token.text);
         }
 
         // Reset colors
-        try writer.writeAll("\x1b[0m");
+        try buf.appendSlice(allocator, "\x1b[0m");
 
         return buf.toOwnedSlice(allocator);
     }
 
     /// Render to HTML with inline styles
     pub fn renderHtml(self: ColoredSexp, allocator: Allocator) ![]u8 {
-        var buf = std.ArrayListUnmanaged(u8){};
-        const writer = buf.writer(allocator);
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        errdefer buf.deinit(allocator);
 
-        try writer.writeAll("<pre style=\"font-family: monospace; background: #1a1a2e;\">");
+        try buf.appendSlice(allocator, "<pre style=\"font-family: monospace; background: #1a1a2e;\">");
 
         for (self.tokens) |token| {
             var hex_buf: [7]u8 = undefined;
             const hex = token.color.toHex(&hex_buf);
 
-            try writer.print("<span style=\"color: {s}\">", .{hex});
+            var span_buf: [64]u8 = undefined;
+            const span = std.fmt.bufPrint(&span_buf, "<span style=\"color: {s}\">", .{hex}) catch unreachable;
+            try buf.appendSlice(allocator, span);
 
             // Escape HTML entities
             for (token.text) |c| {
                 switch (c) {
-                    '<' => try writer.writeAll("&lt;"),
-                    '>' => try writer.writeAll("&gt;"),
-                    '&' => try writer.writeAll("&amp;"),
-                    else => try writer.writeByte(c),
+                    '<' => try buf.appendSlice(allocator, "&lt;"),
+                    '>' => try buf.appendSlice(allocator, "&gt;"),
+                    '&' => try buf.appendSlice(allocator, "&amp;"),
+                    else => try buf.append(allocator, c),
                 }
             }
 
-            try writer.writeAll("</span>");
+            try buf.appendSlice(allocator, "</span>");
         }
 
-        try writer.writeAll("</pre>");
+        try buf.appendSlice(allocator, "</pre>");
         return buf.toOwnedSlice(allocator);
     }
 
@@ -414,6 +416,19 @@ pub const ColoredParser = struct {
         };
     }
 
+    /// Init with plastic angle palette — for branching/tree structures
+    /// (interaction nets, game trees, proof nets) where arity matters.
+    pub fn initPlastic(source: []const u8, allocator: Allocator) !ColoredParser {
+        const purple_hue = 271.0;
+        const palette = try plasticSpiral(8, purple_hue, 0.7, 0.55, allocator);
+        return .{
+            .source = source,
+            .palette = palette,
+            .allocator = allocator,
+            .angle_mode = .plastic,
+        };
+    }
+
     pub fn withPalette(source: []const u8, palette: []const RGB, allocator: Allocator) ColoredParser {
         return .{
             .source = source,
@@ -424,7 +439,7 @@ pub const ColoredParser = struct {
     }
 
     pub fn parse(self: *ColoredParser) !ColoredSexp {
-        var tokens = std.ArrayListUnmanaged(ColoredToken){};
+        var tokens = std.ArrayListUnmanaged(ColoredToken).empty;
         var depth: usize = 0;
         var trit_sum: i32 = 0;
         var i: usize = 0;

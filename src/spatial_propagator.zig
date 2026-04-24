@@ -7,6 +7,7 @@ const syrup = @import("syrup");
 const rainbow = @import("rainbow");
 const propagator = @import("propagator");
 const cell_dispatch = @import("cell_dispatch");
+const compat = @import("compat");
 const Allocator = std.mem.Allocator;
 
 // =============================================================================
@@ -113,7 +114,7 @@ pub const SpatialNode = struct {
         return .{
             .info = info,
             .allocator = allocator,
-            .adjacent = std.ArrayListUnmanaged(u32){},
+            .adjacent = compat.emptyList(u32),
         };
     }
 
@@ -137,11 +138,11 @@ pub const SpatialNode = struct {
 pub const SpatialNetwork = struct {
     nodes: std.ArrayListUnmanaged(SpatialNode),
     allocator: Allocator,
-    lock: std.Thread.RwLock = .{},
+    lock: compat.RwLock = .{},
 
     pub fn init(allocator: Allocator) SpatialNetwork {
         return .{
-            .nodes = std.ArrayListUnmanaged(SpatialNode){},
+            .nodes = compat.emptyList(SpatialNode),
             .allocator = allocator,
         };
     }

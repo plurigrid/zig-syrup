@@ -126,7 +126,7 @@ pub const Parser = struct {
     fn parseFunctionArgs(self: *Self, polarity: Polarity, name: []const u8) ParseError!Term {
         _ = try self.expect(.lparen);
 
-        var args = std.ArrayListUnmanaged(Term){};
+        var args = std.ArrayListUnmanaged(Term).empty;
         defer args.deinit(self.allocator);
 
         while (true) {
@@ -159,7 +159,7 @@ pub const Parser = struct {
         const parsed = parsePolarity(func_tok.text);
 
         // Parse arguments
-        var args = std.ArrayListUnmanaged(Term){};
+        var args = std.ArrayListUnmanaged(Term).empty;
         defer args.deinit(self.allocator);
 
         while (true) {
@@ -183,10 +183,10 @@ pub const Parser = struct {
     pub fn parseStar(self: *Self) ParseError!Star {
         _ = try self.expect(.lbracket);
 
-        var rays = std.ArrayListUnmanaged(Ray){};
+        var rays = std.ArrayListUnmanaged(Ray).empty;
         defer rays.deinit(self.allocator);
 
-        var bans = std.ArrayListUnmanaged(ast.Ban){};
+        var bans = std.ArrayListUnmanaged(ast.Ban).empty;
         defer bans.deinit(self.allocator);
 
         var in_bans = false;
@@ -246,7 +246,7 @@ pub const Parser = struct {
     pub fn parseConstellation(self: *Self) ParseError!Constellation {
         _ = try self.expect(.lbrace);
 
-        var stars = std.ArrayListUnmanaged(Star){};
+        var stars = std.ArrayListUnmanaged(Star).empty;
         defer stars.deinit(self.allocator);
 
         while (true) {
@@ -310,7 +310,7 @@ pub const Parser = struct {
                     },
                     .kw_show => {
                         self.advance();
-                        var exprs = std.ArrayListUnmanaged(Expr){};
+                        var exprs = std.ArrayListUnmanaged(Expr).empty;
                         defer exprs.deinit(self.allocator);
 
                         while (true) {
@@ -411,7 +411,7 @@ pub const Parser = struct {
 
     /// Parse a complete program
     pub fn parseProgram(self: *Self) ParseError![]Expr {
-        var exprs = std.ArrayListUnmanaged(Expr){};
+        var exprs = std.ArrayListUnmanaged(Expr).empty;
         defer exprs.deinit(self.allocator);
 
         while (true) {

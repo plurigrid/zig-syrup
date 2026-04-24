@@ -28,6 +28,20 @@
 
 const std = @import("std");
 
+// 0.16 compat: std.time.{nano,milli}Timestamp removed; use clock_gettime.
+fn nanoTimestamp() i128 {
+    if (@hasDecl(std.time, "nanoTimestamp")) return @field(std.time, "nanoTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i128, @intCast(ts.sec)) * std.time.ns_per_s + @as(i128, @intCast(ts.nsec));
+}
+fn milliTimestamp() i64 {
+    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+}
+
 // ============================================================================
 // COMPILE-TIME FEATURE DETECTION
 // ============================================================================
@@ -629,7 +643,7 @@ pub const StreamSynchronizer = struct {
         return .{
             .streams = [_]?SyncStreamInfo{null} ** MAX_STREAMS,
             .n_streams = 0,
-            .epoch_start = std.time.nanoTimestamp(),
+            .epoch_start = nanoTimestamp(),
             .sample_counts = [_]u64{0} ** MAX_STREAMS,
         };
     }
@@ -645,7 +659,7 @@ pub const StreamSynchronizer = struct {
 
     /// Get unified timestamp for a sample from a given stream
     pub fn timestamp(self: *StreamSynchronizer, stream_idx: u8) UnifiedTimestamp {
-        const now_ns = std.time.nanoTimestamp();
+        const now_ns = nanoTimestamp();
         const elapsed_s: f64 = @as(f64, @floatFromInt(now_ns - self.epoch_start)) / 1e9;
 
         const stream = self.streams[stream_idx] orelse {
@@ -750,7 +764,7 @@ pub fn localClock() f64 {
     if (has_liblsl) {
         return c.lsl_local_clock();
     }
-    return @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
+    return @as(f64, @floatFromInt(milliTimestamp())) / 1000.0;
 }
 
 // ============================================================================

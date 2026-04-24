@@ -22,7 +22,7 @@ pub const xev = struct {
 
         pub fn init(allocator: Allocator) Loop {
             return .{
-                .submissions = .{},
+                .submissions = .empty,
                 .allocator = allocator,
             };
         }

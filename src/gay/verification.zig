@@ -188,8 +188,8 @@ pub const StreamingVerifier = struct {
             .hidden_dim = hidden_dim,
             .chunks_pushed = 0,
             .running_fp = 0,
-            .chunk_fps = .{},
-            .expected_chunk_fps = .{},
+            .chunk_fps = .empty,
+            .expected_chunk_fps = .empty,
             .verified_chunks = 0,
             .all_verified = true,
         };

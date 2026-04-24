@@ -14,6 +14,14 @@ const std = @import("std");
 const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 
+// 0.16 compat: std.time.timestamp removed
+fn timestamp() i64 {
+    if (@hasDecl(std.time, "timestamp")) return @field(std.time, "timestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @intCast(ts.sec);
+}
+
 // ============================================================================
 // CONTINUATION TYPES
 // ============================================================================
@@ -25,7 +33,16 @@ pub const ContinuationId = struct {
 
     pub fn generate() ContinuationId {
         var buf: [16]u8 = undefined;
-        std.crypto.random.bytes(&buf);
+        if (@hasDecl(std.crypto, "random") and @hasDecl(@TypeOf(@field(std.crypto, "random")), "bytes")) {
+            @field(std.crypto, "random").bytes(&buf);
+        } else {
+            // Fallback: time-seeded PRNG
+            var ts: std.c.timespec = undefined;
+            _ = std.c.clock_gettime(.REALTIME, &ts);
+            const seed: u64 = @bitCast(@as(i64, @intCast(ts.sec)) ^ @as(i64, @intCast(ts.nsec)));
+            var prng = std.Random.DefaultPrng.init(seed);
+            prng.random().bytes(&buf);
+        }
         return .{ .uuid = std.mem.readInt(u128, &buf, .little) };
     }
 
@@ -109,7 +126,7 @@ pub const Step = struct {
     error_msg: ?[]const u8 = null,
 
     pub fn toSyrup(self: Step, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
+        var entries: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{
@@ -156,7 +173,7 @@ pub const ContinuationState = struct {
 
     /// Create a new continuation state
     pub fn init(allocator: Allocator, steps: []const Step) !ContinuationState {
-        const now = std.time.timestamp();
+        const now = timestamp();
         _ = allocator;
         return .{
             .id = ContinuationId.generate(),
@@ -170,7 +187,7 @@ pub const ContinuationState = struct {
 
     /// Serialize to Syrup record: <cont id steps current status metadata>
     pub fn toSyrup(self: ContinuationState, allocator: Allocator) !syrup.Value {
-        var step_values = std.ArrayListUnmanaged(syrup.Value){};
+        var step_values: std.ArrayListUnmanaged(syrup.Value) = .empty;
         defer step_values.deinit(allocator);
 
         for (self.steps) |step| {
@@ -310,7 +327,7 @@ pub const GroveSpheres = struct {
 
     pub fn init(allocator: Allocator) GroveSpheres {
         return .{
-            .worlds = .{},
+            .worlds = .empty,
             .allocator = allocator,
         };
     }
@@ -385,7 +402,7 @@ pub const Pipeline = struct {
         switch (result) {
             .success => {
                 self.state.current_step += 1;
-                self.state.updated_at = std.time.timestamp();
+                self.state.updated_at = timestamp();
                 if (self.state.isComplete()) {
                     self.state.status = .completed;
                 }

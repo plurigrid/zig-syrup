@@ -7,6 +7,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const syrup = @import("syrup");
 
+// 0.16 compat
+fn milliTimestamp() i64 {
+    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+}
+
 /// Persistent vector with structural sharing
 /// Based on RRB-Trees (Relaxed Radix Balanced Trees)
 pub fn PersistentVector(comptime T: type) type {
@@ -147,7 +155,7 @@ pub fn PersistentVector(comptime T: type) type {
 
         /// Serialize to syrup
         pub fn toSyrup(self: Self, allocator: Allocator) !syrup.Value {
-            var items = std.ArrayListUnmanaged(syrup.Value){};
+            var items: std.ArrayListUnmanaged(syrup.Value) = .empty;
             defer items.deinit(allocator);
 
             for (0..self.len) |i| {
@@ -304,12 +312,12 @@ pub fn VersionedState(comptime T: type) type {
         pub fn init(allocator: Allocator, initial: T) !Self {
             var self = Self{
                 .allocator = allocator,
-                .versions = .{},
+                .versions = .empty,
                 .current = 0,
             };
 
             try self.versions.append(allocator, .{
-                .timestamp = std.time.milliTimestamp(),
+                .timestamp = milliTimestamp(),
                 .data = initial,
                 .parent = null,
             });
@@ -330,7 +338,7 @@ pub fn VersionedState(comptime T: type) type {
         /// Commit new state
         pub fn commit(self: *Self, data: T) !void {
             try self.versions.append(self.allocator, .{
-                .timestamp = std.time.milliTimestamp(),
+                .timestamp = milliTimestamp(),
                 .data = data,
                 .parent = self.current,
             });
@@ -379,7 +387,7 @@ pub fn VersionedState(comptime T: type) type {
         pub fn branch(self: *Self) !usize {
             const branch_point = self.current;
             try self.versions.append(self.allocator, .{
-                .timestamp = std.time.milliTimestamp(),
+                .timestamp = milliTimestamp(),
                 .data = self.versions.items[branch_point].data,
                 .parent = branch_point,
             });

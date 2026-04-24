@@ -28,6 +28,19 @@ Tree diffusion on hierarchical byte streams, formalized as categorical models.
 | `spectral-mixing-bounds.json` | color-gf3-tiling | O(log m) tree content, O(n^2) reel order, Apollonian gap ~0.908 |
 | `gf3-conservation.json` | reel-diffusion-flow | All triads sum to 0 mod 3 across all framework levels |
 
+## Archive strata
+
+`.topos/` also serves as the preservation layer for repository material that should not disappear but no longer belongs in the first-class Zig package layout.
+
+| Path | Purpose |
+|------|---------|
+| `artifacts/bin/` | built executables and empty launcher remnants kept for provenance |
+| `artifacts/build/` | object files, archives, dylibs, and other build byproducts |
+| `artifacts/data/` | preserved databases and non-package data blobs |
+| `artifacts/html/` | standalone HTML outputs and visual captures |
+| `artifacts/test/` | captured stdout, text outputs, and ad hoc verification traces |
+| `scratch/zig/` | one-off Zig investigations that are worth keeping but not promoting |
+
 ## The Span Principle
 
 ```

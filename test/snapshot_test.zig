@@ -13,7 +13,11 @@ fn expectEncodeExact(val: syrup.Value, expected: []const u8) !void {
 }
 
 fn expectDecodeEquals(bytes: []const u8, expected: syrup.Value) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const GPAType = if (@hasDecl(std.heap, "GeneralPurposeAllocator"))
+        @field(std.heap, "GeneralPurposeAllocator")(.{})
+    else
+        std.heap.DebugAllocator(.{});
+    var gpa: GPAType = .init;
     defer _ = gpa.deinit();
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();
@@ -22,7 +26,11 @@ fn expectDecodeEquals(bytes: []const u8, expected: syrup.Value) !void {
 }
 
 fn expectRoundtrip(bytes: []const u8) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const GPAType = if (@hasDecl(std.heap, "GeneralPurposeAllocator"))
+        @field(std.heap, "GeneralPurposeAllocator")(.{})
+    else
+        std.heap.DebugAllocator(.{});
+    var gpa: GPAType = .init;
     defer _ = gpa.deinit();
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();

@@ -659,7 +659,7 @@ pub const Mesh2D = struct {
         }
 
         // Boundary edges
-        var boundary = std.ArrayListUnmanaged(BoundaryEdge){};
+        var boundary: std.ArrayListUnmanaged(BoundaryEdge) = .empty;
 
         // Bottom (y=0)
         for (0..nx) |i| {
@@ -707,11 +707,11 @@ pub const PoissonAssembler = struct {
         const n_elements = self.mesh.elements.len;
 
         // Triplet accumulation
-        var rows = std.ArrayListUnmanaged(u32){};
+        var rows: std.ArrayListUnmanaged(u32) = .empty;
         defer rows.deinit(self.allocator);
-        var cols = std.ArrayListUnmanaged(u32){};
+        var cols: std.ArrayListUnmanaged(u32) = .empty;
         defer cols.deinit(self.allocator);
-        var vals = std.ArrayListUnmanaged(f64){};
+        var vals: std.ArrayListUnmanaged(f64) = .empty;
         defer vals.deinit(self.allocator);
 
         for (0..n_elements) |e| {

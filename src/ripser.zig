@@ -320,7 +320,7 @@ pub const PersistenceDiagram = struct {
 
     pub fn init(allocator: Allocator) PersistenceDiagram {
         return .{
-            .pairs = .{},
+            .pairs = .empty,
             .max_dimension = 0,
             .allocator = allocator,
         };
@@ -337,7 +337,7 @@ pub const PersistenceDiagram = struct {
 
     /// Return all pairs in a specific dimension.
     pub fn pairsInDimension(self: PersistenceDiagram, dim: usize, allocator: Allocator) ![]PersistencePair {
-        var result: std.ArrayListUnmanaged(PersistencePair) = .{};
+        var result: std.ArrayListUnmanaged(PersistencePair) = .empty;
         for (self.pairs.items) |p| {
             if (p.dimension == dim) try result.append(allocator, p);
         }
@@ -455,7 +455,7 @@ const SparseColumn = struct {
     entries: std.ArrayListUnmanaged(SimplexEntry),
 
     fn create() SparseColumn {
-        return .{ .entries = .{} };
+        return .{ .entries = .empty };
     }
 
     fn deinit(self: *SparseColumn, allocator: Allocator) void {
@@ -604,7 +604,7 @@ fn computeHigherDimension(
     if (num_simplices == 0) return;
 
     // Enumerate simplices with diameter within threshold
-    var simplices: std.ArrayListUnmanaged(SimplexEntry) = .{};
+    var simplices: std.ArrayListUnmanaged(SimplexEntry) = .empty;
     defer simplices.deinit(allocator);
 
     for (0..num_simplices) |si| {
@@ -694,8 +694,8 @@ fn computeHigherDimension(
 // ============================================================================
 
 /// Serialize a persistence diagram to a Syrup Value.
-pub fn toSyrup(diagram: PersistenceDiagram, allocator: Allocator) !@import("syrup.zig").Value {
-    const syrup = @import("syrup.zig");
+pub fn toSyrup(diagram: PersistenceDiagram, allocator: Allocator) !@import("syrup").Value {
+    const syrup = @import("syrup");
 
     const pair_values = try allocator.alloc(syrup.Value, diagram.pairs.items.len);
     for (diagram.pairs.items, 0..) |pair, idx| {
@@ -726,8 +726,8 @@ pub fn toSyrup(diagram: PersistenceDiagram, allocator: Allocator) !@import("syru
 }
 
 /// Serialize a distance matrix to a Syrup Value.
-pub fn distanceMatrixToSyrup(dm: DistanceMatrix, allocator: Allocator) !@import("syrup.zig").Value {
-    const syrup = @import("syrup.zig");
+pub fn distanceMatrixToSyrup(dm: DistanceMatrix, allocator: Allocator) !@import("syrup").Value {
+    const syrup = @import("syrup");
 
     const label = try allocator.create(syrup.Value);
     label.* = syrup.Value{ .symbol = "distance-matrix" };

@@ -1,5 +1,6 @@
 pub const splitmix = @import("splitmix.zig");
 pub const color = @import("color.zig");
+pub const cgt_corpus = @import("cgt_corpus.zig");
 pub const swarm_triad = @import("swarm_triad.zig");
 pub const gaymc = @import("gaymc.zig");
 pub const propagator = @import("propagator.zig");
@@ -32,6 +33,7 @@ test {
     comptime {
         _ = splitmix;
         _ = color;
+        _ = cgt_corpus;
         _ = swarm_triad;
         _ = gaymc;
         _ = propagator;

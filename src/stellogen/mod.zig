@@ -67,7 +67,7 @@ pub fn interpret(allocator: std.mem.Allocator, source: []const u8) !Constellatio
     const program = try parser.parse(allocator, source);
 
     // Build constellation from program
-    var stars = std.ArrayListUnmanaged(Star){};
+    var stars = std.ArrayListUnmanaged(Star).empty;
     defer stars.deinit(allocator);
 
     for (program) |expr| {

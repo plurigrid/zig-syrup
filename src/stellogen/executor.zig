@@ -69,7 +69,7 @@ pub fn fuse(
     defer subst.deinit();
 
     // Collect remaining rays from both stars (excluding the matched pair)
-    var merged_rays = std.ArrayListUnmanaged(Ray){};
+    var merged_rays = std.ArrayListUnmanaged(Ray).empty;
     defer merged_rays.deinit(allocator);
 
     // Add state rays (except the matched one)
@@ -89,7 +89,7 @@ pub fn fuse(
     }
 
     // Merge bans and check coherence
-    var merged_bans = std.ArrayListUnmanaged(ast.Ban){};
+    var merged_bans = std.ArrayListUnmanaged(ast.Ban).empty;
     defer merged_bans.deinit(allocator);
 
     for (state.bans) |ban| {
@@ -132,9 +132,9 @@ pub fn execute(
     linear: bool,
 ) !Constellation {
     // Separate states and actions
-    var states = std.ArrayListUnmanaged(Star){};
+    var states = std.ArrayListUnmanaged(Star).empty;
     defer states.deinit(allocator);
-    var actions = std.ArrayListUnmanaged(Star){};
+    var actions = std.ArrayListUnmanaged(Star).empty;
     defer actions.deinit(allocator);
 
     for (constellation.stars) |star| {
@@ -150,7 +150,7 @@ pub fn execute(
     while (changed) {
         changed = false;
 
-        var new_states = std.ArrayListUnmanaged(Star){};
+        var new_states = std.ArrayListUnmanaged(Star).empty;
         defer new_states.deinit(allocator);
 
         var action_used = std.AutoHashMap(usize, bool).init(allocator);
@@ -189,7 +189,7 @@ pub fn execute(
 
         // Remove used actions in linear mode
         if (linear) {
-            var remaining_actions = std.ArrayListUnmanaged(Star){};
+            var remaining_actions = std.ArrayListUnmanaged(Star).empty;
             defer remaining_actions.deinit(allocator);
             for (actions.items, 0..) |action, ai| {
                 if (!(action_used.get(ai) orelse false)) {
@@ -202,7 +202,7 @@ pub fn execute(
     }
 
     // Recombine into constellation
-    var result_stars = std.ArrayListUnmanaged(Star){};
+    var result_stars = std.ArrayListUnmanaged(Star).empty;
     defer result_stars.deinit(allocator);
 
     // Only include non-empty states in result
@@ -253,7 +253,9 @@ test "basic fusion" {
     const x = ast.makeVar("X");
     const a = ast.makeAtom(.null, "a");
     const neg_fx = try ast.makeFunc(allocator, .neg, "f", &.{x});
+    defer allocator.free(neg_fx.function.args);
     const pos_fa = try ast.makeFunc(allocator, .pos, "f", &.{a});
+    defer allocator.free(pos_fa.function.args);
 
     const state = Star{
         .content = &.{ neg_fx, x },
@@ -269,12 +271,16 @@ test "basic fusion" {
     try std.testing.expect(result != null);
 
     const merged = result.?.merged_star;
+    defer allocator.free(merged.content);
+    defer allocator.free(merged.bans);
     try std.testing.expectEqual(@as(usize, 1), merged.content.len);
     try std.testing.expect(merged.content[0].eql(a));
 }
 
 test "execute simple constellation" {
-    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     // Natural number: 0 + Y = Y
     // Query: -add(0, 2, R) R

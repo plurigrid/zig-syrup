@@ -25,6 +25,7 @@ Run: `zig build mcp-server`
 | goblins_ffi | `src/goblins_ffi.zig` | C ABI for Guile Goblins (SplitMix64, GF(3), Ripser, Syrup) |
 | virion | `src/virion.zig` | Skill propagation via non-monotonic lattice (gain-of-function) |
 | propagator | `src/propagator.zig` | Radul-Sussman partial information lattice |
+| backward_fiber | `src/backward_fiber.zig` | Hedges/Smithe Bayesian chain rule as backward fiber; linear-Gaussian `ChainFiber` with GF(3) trit compose |
 | message_frame | `src/message_frame.zig` | Length-prefix framing (4-byte BE, 4MB limit) |
 | tcp_transport | `src/tcp_transport.zig` | TCP netlayer for OCapN |
 | czernowitz | `src/czernowitz.zig` | Location codes + speculator metadata |

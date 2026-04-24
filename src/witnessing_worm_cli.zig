@@ -16,7 +16,9 @@ const posix = std.posix;
 fn writeAll(bytes: []const u8) void {
     var total: usize = 0;
     while (total < bytes.len) {
-        total += posix.write(posix.STDOUT_FILENO, bytes[total..]) catch return;
+        const rc = std.c.write(posix.STDOUT_FILENO, bytes.ptr + total, bytes.len - total);
+        if (rc <= 0) return;
+        total += @intCast(rc);
     }
 }
 
@@ -25,14 +27,9 @@ fn print(buf: []u8, comptime fmt: []const u8, args: anytype) void {
     writeAll(slice);
 }
 
-pub fn main() !void {
-    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Parse args
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     const seed: u64 = if (args.len > 1) std.fmt.parseInt(u64, args[1], 10) catch 1069 else 1069;
     const n_epochs: u32 = if (args.len > 2) std.fmt.parseInt(u32, args[2], 10) catch 8 else 8;

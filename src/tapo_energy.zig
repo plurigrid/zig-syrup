@@ -27,6 +27,19 @@ const crypto = std.crypto;
 const Sha256 = crypto.hash.sha2.Sha256;
 const Sha1 = crypto.hash.Sha1;
 
+// 0.16 compat: std.crypto.random removed; fall back to DefaultPrng seeded from clock.
+fn randomBytes(out: []u8) void {
+    if (@hasDecl(std.crypto, "random") and @hasDecl(@TypeOf(@field(std.crypto, "random")), "bytes")) {
+        @field(std.crypto, "random").bytes(out);
+        return;
+    }
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    const seed: u64 = @bitCast(@as(i64, @intCast(ts.sec)) ^ @as(i64, @intCast(ts.nsec)));
+    var prng = std.Random.DefaultPrng.init(seed);
+    prng.random().bytes(out);
+}
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -164,7 +177,7 @@ pub const EnergyReading = struct {
 
     /// Serialize to Syrup dictionary
     pub fn toSyrup(self: EnergyReading, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
+        var entries: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{
@@ -270,7 +283,7 @@ pub const ReadingRing = struct {
     /// Serialize ring summary to Syrup
     pub fn summaryToSyrup(self: *const ReadingRing, allocator: Allocator) !syrup.Value {
         const dist = self.tritDistribution();
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
+        var entries: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{
@@ -338,7 +351,7 @@ pub const KlapSession = struct {
             .local_seed = undefined,
             .auth_hash = computeAuthHash(username, password),
         };
-        crypto.random.bytes(&self.local_seed);
+        randomBytes(&self.local_seed);
         return self;
     }
 

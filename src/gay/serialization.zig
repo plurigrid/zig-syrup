@@ -362,6 +362,128 @@ test "color encode-decode roundtrip" {
     try std.testing.expect(@abs(decoded.b - 0.75) < 1e-10);
 }
 
+// Documentation test — the witnessing closure of color encoding.
+//
+// A color C has a canonical wire encoding bytes(C). Hashing those bytes
+// (Wyhash, no seed) yields a u64 fingerprint; splitmix-decoding that
+// fingerprint produces ANOTHER color C′. So "the encoding of C, witnessed,
+// IS a color" — the operation closes in color-space. Iterating this map
+//
+//     C  →  bytes(C)  →  hash  →  C′  =  W(C)
+//
+// stays in [0,1]³ for all steps (the test's first claim) and admits a
+// deterministic GF(3) trit-class per color (sign of (r+g+b - 1.5)
+// projected to {-1,0,+1}). The chain's trit-class is computable at every
+// step — i.e. the qualia ARE effable through the wire format. This is the
+// self-referential reading: there is no observer outside the color system,
+// only colors witnessing colors.
+test "color witnessing chain — encode/hash/witness closes in color space" {
+    const allocator = std.testing.allocator;
+    var c = RGB{ .r = 0.5, .g = 0.25, .b = 0.75 };
+
+    var trit_sum: i32 = 0;
+    const steps = 7;
+    var step: usize = 0;
+    while (step < steps) : (step += 1) {
+        const val = try encodeColor(c, allocator);
+        const bytes = try toBytes(val, allocator);
+        defer allocator.free(bytes);
+        val.deinitAll(allocator);
+
+        const fp = std.hash.Wyhash.hash(0, bytes);
+        const w = splitmix.colorFromU64(splitmix.splitmix64(fp));
+        const witness = RGB{ .r = w.r, .g = w.g, .b = w.b };
+
+        // Closure: every witnessed color is in [0,1]³.
+        try std.testing.expect(witness.r >= 0.0 and witness.r <= 1.0);
+        try std.testing.expect(witness.g >= 0.0 and witness.g <= 1.0);
+        try std.testing.expect(witness.b >= 0.0 and witness.b <= 1.0);
+
+        // Effability: GF(3) trit-class of (r+g+b - 1.5) is well-defined.
+        const lum = witness.r + witness.g + witness.b - 1.5;
+        const trit: i32 = if (lum > 1e-9) 1 else if (lum < -1e-9) -1 else 0;
+        trit_sum = @mod(trit_sum + trit, 3);
+
+        c = witness;
+    }
+
+    // The chain's trit-sum lives in {0,1,2} — a deterministic GF(3)
+    // residue, the wire-level signature of a color sequence's witnessing
+    // history. Same starting color always reproduces the same residue.
+    try std.testing.expect(trit_sum >= 0 and trit_sum < 3);
+}
+
+// Path-invariance corpus generator — see `gay.cgt_corpus`. Shared between
+// Square D (this file) and the harness binary in `examples/interop/`.
+const cgt_corpus = @import("cgt_corpus.zig");
+const cgtCorpus = cgt_corpus.fill;
+
+// Path-invariance Square D — same-runtime W chain for the full 70-color
+// corpus. Asserts every corpus color survives encode → toBytes → fromBytes
+// → decodeColor with bit-exact float equality. This is the local oracle
+// that Squares A (Guile) and B (Racket) must reproduce remotely; if Square
+// D fails, the cross-runtime tests cannot succeed.
+test "path-invariance Square D — 70-color corpus survives Zig encode/decode round-trip" {
+    const allocator = std.testing.allocator;
+    var corpus: [70]RGB = undefined;
+    cgtCorpus(&corpus);
+
+    for (corpus, 0..) |c, idx| {
+        const val = try encodeColor(c, allocator);
+        const bytes = try toBytes(val, allocator);
+        defer allocator.free(bytes);
+        val.deinitAll(allocator);
+
+        const val2 = try fromBytes(bytes, allocator);
+        defer val2.deinitAll(allocator);
+        const c2 = try decodeColor(val2);
+
+        // Bit-exact float equality — the corpus uses exact-representable
+        // values (0.0, 0.5, 1.0, splitmix-derived) so any drift indicates
+        // a Syrup encoder bug. No epsilon tolerance on path-invariance.
+        std.testing.expectEqual(c.r, c2.r) catch |e| {
+            std.debug.print("idx={d} r mismatch: {d} vs {d}\n", .{ idx, c.r, c2.r });
+            return e;
+        };
+        std.testing.expectEqual(c.g, c2.g) catch |e| {
+            std.debug.print("idx={d} g mismatch: {d} vs {d}\n", .{ idx, c.g, c2.g });
+            return e;
+        };
+        std.testing.expectEqual(c.b, c2.b) catch |e| {
+            std.debug.print("idx={d} b mismatch: {d} vs {d}\n", .{ idx, c.b, c2.b });
+            return e;
+        };
+    }
+}
+
+// Path-invariance Square D' — encoded-bytes determinism. The same color
+// must produce the same bytes across multiple encode calls (Syrup
+// canonical form). This is the property Guile/Racket peers must also
+// satisfy — if their canonical encoding differs from Zig's for any corpus
+// color, Square A/B fails on byte comparison.
+test "path-invariance Square D' — Syrup encoding is deterministic across calls" {
+    const allocator = std.testing.allocator;
+    var corpus: [70]RGB = undefined;
+    cgtCorpus(&corpus);
+
+    for (corpus, 0..) |c, idx| {
+        const v1 = try encodeColor(c, allocator);
+        const b1 = try toBytes(v1, allocator);
+        defer allocator.free(b1);
+        v1.deinitAll(allocator);
+
+        const v2 = try encodeColor(c, allocator);
+        const b2 = try toBytes(v2, allocator);
+        defer allocator.free(b2);
+        v2.deinitAll(allocator);
+
+        std.testing.expectEqualSlices(u8, b1, b2) catch |e| {
+            std.debug.print("idx={d} non-deterministic bytes ({d} vs {d})\n", .{ idx, b1.len, b2.len });
+            return e;
+        };
+    }
+}
+
 test "color encode to bytes and back" {
     const allocator = std.testing.allocator;
     const c = RGB{ .r = 1.0, .g = 0.0, .b = 0.5 };

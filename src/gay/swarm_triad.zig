@@ -250,7 +250,7 @@ pub const SentinelMonitor = struct {
 
     pub fn init(allocator: std.mem.Allocator) SentinelMonitor {
         return .{
-            .agents = .{},
+            .agents = .empty,
             .split_count = 0,
             .file_op_count = 0,
             .allocator = allocator,

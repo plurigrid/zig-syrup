@@ -3,13 +3,9 @@ const syrup = @import("syrup.zig");
 const compat = @import("compat.zig");
 const Value = syrup.Value;
 
-pub fn main() !void {
-    var gpa = compat.makeDebugAllocator();
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len < 2) {
         std.debug.print("Usage: {s} [encode|decode]\n", .{args[0]});
@@ -66,11 +62,19 @@ const CompatWriter = struct {
         _ = self;
         compat.stdoutWrite(bytes);
     }
+    pub fn writeByte(self: *CompatWriter, byte: u8) Error!void {
+        _ = self;
+        const one = [_]u8{byte};
+        compat.stdoutWrite(&one);
+    }
     pub fn writeBytesNTimes(self: *CompatWriter, bytes: []const u8, n: usize) Error!void {
         for (0..n) |_| try self.writeAll(bytes);
     }
     pub fn print(self: *CompatWriter, comptime fmt: []const u8, args: anytype) Error!void {
-        std.fmt.format(self, fmt, args) catch {};
+        var buf: [4096]u8 = undefined;
+        const s = std.fmt.bufPrint(&buf, fmt, args) catch return;
+        _ = self;
+        compat.stdoutWrite(s);
     }
     pub fn writeByteNTimes(self: *CompatWriter, byte: u8, n: usize) Error!void {
         var buf: [256]u8 = undefined;
@@ -87,16 +91,16 @@ const CompatWriter = struct {
 
 /// Read all of stdin into an allocated buffer (compat: no readToEndAlloc).
 fn readAllStdin(allocator: std.mem.Allocator, max_bytes: usize) ![]u8 {
-    var buf = std.ArrayList(u8).init(allocator);
-    errdefer buf.deinit();
+    var buf: std.ArrayListUnmanaged(u8) = compat.emptyList(u8);
+    errdefer buf.deinit(allocator);
     var tmp: [4096]u8 = undefined;
     while (true) {
         const n = compat.stdinRead(&tmp);
         if (n == 0) break;
         if (buf.items.len + n > max_bytes) return error.StreamTooLong;
-        try buf.appendSlice(tmp[0..n]);
+        try buf.appendSlice(allocator, tmp[0..n]);
     }
-    return buf.toOwnedSlice();
+    return buf.toOwnedSlice(allocator);
 }
 
 fn jsonToSyrup(allocator: std.mem.Allocator, json_val: std.json.Value) !Value {

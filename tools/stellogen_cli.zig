@@ -13,14 +13,27 @@ const stellogen = @import("stellogen");
 
 const VERSION = "0.1.0";
 
-fn getStdout() std.io.GenericWriter(std.fs.File, std.fs.File.WriteError, std.fs.File.write) {
-    const stdout_file = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    return .{ .context = stdout_file };
+pub var global_io: std.Io = undefined;
+
+const FdWriter = struct {
+    fd: std.posix.fd_t,
+
+    pub fn print(self: FdWriter, comptime fmt: []const u8, args: anytype) !void {
+        var buf: [4096]u8 = undefined;
+        const s = try std.fmt.bufPrint(&buf, fmt, args);
+        _ = std.c.write(self.fd, s.ptr, s.len);
+    }
+    pub fn writeAll(self: FdWriter, bytes: []const u8) !void {
+        _ = std.c.write(self.fd, bytes.ptr, bytes.len);
+    }
+};
+
+fn getStdout() FdWriter {
+    return .{ .fd = std.posix.STDOUT_FILENO };
 }
 
-fn getStderr() std.io.GenericWriter(std.fs.File, std.fs.File.WriteError, std.fs.File.write) {
-    const stderr_file = std.fs.File{ .handle = std.posix.STDERR_FILENO };
-    return .{ .context = stderr_file };
+fn getStderr() FdWriter {
+    return .{ .fd = std.posix.STDERR_FILENO };
 }
 
 fn printUsage(writer: anytype) !void {
@@ -56,15 +69,15 @@ fn printUsage(writer: anytype) !void {
 }
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-    return file.readToEndAlloc(allocator, 10 * 1024 * 1024); // 10MB max
+    const dir = std.Io.Dir.cwd();
+    return dir.readFileAlloc(global_io, path, allocator, .limited(10 * 1024 * 1024));
 }
 
 fn writeFile(path: []const u8, data: []const u8) !void {
-    const file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
-    try file.writeAll(data);
+    const dir = std.Io.Dir.cwd();
+    const file = try dir.createFile(global_io, path, .{});
+    defer file.close(global_io);
+    try file.writeStreamingAll(global_io, data);
 }
 
 fn cmdCompile(allocator: std.mem.Allocator, input_path: []const u8, output_path: []const u8, verbose: bool) !void {
@@ -210,13 +223,10 @@ fn printExpr(writer: anytype, expr: stellogen.Expr, idx: usize, indent: usize) !
     }
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+pub fn main(init: std.process.Init) !void {
+    global_io = init.io;
+    const allocator = init.gpa;
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     const stdout = getStdout();
     const stderr = getStderr();

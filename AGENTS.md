@@ -4,8 +4,14 @@
 - `src/` holds the core Zig modules (Syrup serialization, transports, terminal, identity, topology, worlds).
 - `tests/` and `test/` contain Zig test files and fixtures used by `zig build test`.
 - `examples/` contains runnable demos; `benchmarks/` and `benchmark/` hold benchmark drivers and results.
-- `docs/` and top-level `*.md` files document architecture and status (see `README.md`).
+- `docs/` holds package-facing architecture, status, research, benchmark, and operational documentation.
+- `.topos/` is the preservation boundary for historical artifacts, scratch files, and non-package residue that should not live at the repo root.
 - `tools/`, `processors/`, and `bci_orchestrator/` host supporting utilities and BCI-related pipelines.
+
+## Root Hygiene
+- Keep the repo root focused on Zig package structure.
+- Prefer root-level files like `README.md`, `LICENSE`, `build.zig`, `build.zig.zon`, `AGENTS.md`, container entrypoints, and other package-defining assets.
+- If something is worth preserving but does not fit the mold of a Zig package, move it under `.topos/` instead of deleting it.
 
 ## Build, Test, and Development Commands
 Run these from the repo root:

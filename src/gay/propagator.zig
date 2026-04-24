@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const splitmix = @import("splitmix.zig");
+pub const poly = @import("poly");
 
 // =============================================================================
 // Chromatic hash: name -> u32 color via SplitMix64
@@ -130,7 +131,7 @@ pub const SupportSet = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) SupportSet {
-        return .{ .premises = .{}, .allocator = allocator };
+        return .{ .premises = .empty, .allocator = allocator };
     }
 
     pub fn deinit(self: *SupportSet) void {
@@ -188,8 +189,8 @@ pub const PropagatorDef = struct {
     pub fn init(allocator: std.mem.Allocator, name: []const u8, activate: ActivateFn) PropagatorDef {
         return .{
             .name = name,
-            .inputs = .{},
-            .outputs = .{},
+            .inputs = .empty,
+            .outputs = .empty,
             .activate = activate,
             .color = chromaticHash(name),
             .allocator = allocator,
@@ -223,7 +224,7 @@ pub const Cell = struct {
             .name = name,
             .content = Value{ .nothing = .{} },
             .strongest = Value{ .nothing = .{} },
-            .neighbors = .{},
+            .neighbors = .empty,
             .color = chromaticHash(name),
             .allocator = allocator,
         };
@@ -244,6 +245,29 @@ pub const Cell = struct {
             }
         }
     }
+
+    /// Coalgebra readout: the cell as a q-position in `Value`.
+    pub fn readout(self: *const Cell) Value {
+        return self.content;
+    }
+
+    /// Coalgebra direction: read, write a value, or force a contradiction.
+    pub const Direction = union(enum) {
+        read: void,
+        write: Value,
+        contradict: []const u8,
+    };
+
+    /// Apply a direction to the cell (merging via `mergeValues`) and return
+    /// the resulting position. `.read` is the identity direction.
+    pub fn inject(self: *Cell, direction: Direction, scheduler: *Scheduler) Value {
+        switch (direction) {
+            .read => {},
+            .write => |v| self.addContent(v, scheduler),
+            .contradict => |info| self.addContent(.{ .contradiction = .{ .info = info } }, scheduler),
+        }
+        return self.content;
+    }
 };
 
 // =============================================================================
@@ -257,7 +281,7 @@ pub const Scheduler = struct {
 
     pub fn init(allocator: std.mem.Allocator) Scheduler {
         return .{
-            .queue = .{},
+            .queue = .empty,
             .running = false,
             .allocator = allocator,
         };
@@ -563,4 +587,49 @@ test "support set color is XOR" {
     try std.testing.expect(ss.allIn());
     p2.markOut();
     try std.testing.expect(!ss.allIn());
+}
+
+test "gay Cell coalgebra: readout + inject over Scheduler" {
+    const alloc = std.testing.allocator;
+    var sched = Scheduler.init(alloc);
+    defer sched.deinit();
+
+    var cell = Cell.init(alloc, "coalg_gay");
+    defer cell.deinit();
+
+    // position starts at Nothing.
+    try std.testing.expect(cell.readout().isNothing());
+
+    // .read is the identity direction.
+    const after_read = cell.inject(.{ .read = {} }, &sched);
+    try std.testing.expect(after_read.isNothing());
+
+    // .write advances to a Value position.
+    const after_write = cell.inject(.{ .write = Value{ .float = 6.9 } }, &sched);
+    try std.testing.expectEqual(@as(f64, 6.9), after_write.float);
+    try std.testing.expectEqual(@as(f64, 6.9), cell.readout().float);
+
+    // .contradict advances to Contradiction (lattice top).
+    const after_contra = cell.inject(.{ .contradict = "gay lattice test" }, &sched);
+    try std.testing.expect(after_contra.isContradiction());
+}
+
+test "gay shapes compose via poly.tensor" {
+    const alloc = std.testing.allocator;
+
+    // Two gay cells modeled as single-position single-direction shapes.
+    const p_a = poly.Poly{ .name = "gay_a", .arities = &[_]usize{1} };
+    const p_b = poly.Poly{ .name = "gay_b", .arities = &[_]usize{1} };
+
+    var ab = try poly.tensor(alloc, p_a, p_b);
+    defer ab.deinit();
+
+    // Dirichlet distribution: each of 1x1 composite positions has arity 1x1=1.
+    try std.testing.expectEqual(@as(usize, 1), ab.arities.len);
+    try std.testing.expectEqualSlices(usize, &[_]usize{1}, ab.arities);
+
+    // p_a ⊗ y ≅ p_a at the shape level.
+    var ay = try poly.tensor(alloc, p_a, poly.y);
+    defer ay.deinit();
+    try std.testing.expect(poly.Poly.eql(ay.asPoly(), p_a));
 }

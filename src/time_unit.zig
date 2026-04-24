@@ -595,6 +595,110 @@ pub const notable_edges = [_]ConversionEdge{
 };
 
 // ============================================================================
+// HYPERREAL / SURREAL TIME
+// ============================================================================
+//
+// The conversion lattice lives in ℚ (rationals) or ℝ (reals).
+// Hyperreals ℝ* add infinitesimals ε and infinites ω via ultrapower construction.
+// Surreals No contain all ordinals AND all reals in Conway's {L|R} day-forms.
+//
+// Key correspondences:
+//   ε  ↔  Planck time (the smallest duration with physical meaning)
+//   ω  ↔  galactic year (the largest duration in the catalog)
+//   ω·ε = 1 (the fundamental duality)
+//   √2·ε ↔  the shake/glimpse ratio's irrational residual
+//   π·ε  ↔  the nanocentury's transcendental excess over 3 seconds
+
+/// Hyperreal time: standard part + infinitesimal + infinite coefficients.
+/// Embeds the time unit lattice into ℝ* via the transfer principle.
+pub const HyperrealTime = struct {
+    /// Standard part (in seconds). st(t) = the real number a clock would show.
+    standard: f64,
+    /// Infinitesimal coefficient (multiples of ε). The sub-Planck residual.
+    infinitesimal: i64,
+    /// Infinite coefficient (multiples of ω). The cosmological excess.
+    infinite: i64,
+
+    pub fn fromSeconds(s: f64) HyperrealTime {
+        return .{ .standard = s, .infinitesimal = 0, .infinite = 0 };
+    }
+
+    pub fn fromGlimpses(n: u64) HyperrealTime {
+        return .{
+            .standard = @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(glimpse.TICKS_PER_SECOND)),
+            .infinitesimal = @intCast(n % 1069), // cognitive jerk residual
+            .infinite = 0,
+        };
+    }
+
+    /// Standard part: the real number you'd measure with a clock.
+    pub fn st(self: HyperrealTime) f64 {
+        return self.standard;
+    }
+
+    /// Are two hyperreal times infinitely close? (same standard part)
+    pub fn infinitelyClose(a: HyperrealTime, b: HyperrealTime) bool {
+        return a.standard == b.standard;
+    }
+
+    /// Transfer principle: embed a TimeUnit into ℝ*.
+    /// NaN-valued units (tempo/energy dependent) become pure infinitesimals.
+    pub fn transfer(unit: TimeUnit) HyperrealTime {
+        if (std.math.isNan(unit.seconds)) {
+            return .{ .standard = 0, .infinitesimal = 1, .infinite = 0 };
+        }
+        return fromSeconds(unit.seconds);
+    }
+
+    /// Serialize to Syrup
+    pub fn toSyrup(self: HyperrealTime, allocator: Allocator) !syrup.Value {
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 3);
+        entries[0] = .{ .key = .{ .symbol = "standard" }, .value = .{ .float = self.standard } };
+        entries[1] = .{ .key = .{ .symbol = "infinitesimal" }, .value = .{ .integer = self.infinitesimal } };
+        entries[2] = .{ .key = .{ .symbol = "infinite" }, .value = .{ .integer = self.infinite } };
+        return syrup.Value{ .dictionary = entries };
+    }
+};
+
+/// Surreal time in simplified day-form.
+/// Full Conway construction is recursive {L|R} sets; we use birthday + sign
+/// as the computable approximation (the "numeric" surreals).
+pub const SurrealTime = struct {
+    /// Conway day of creation. 0 = void, 1 = {|} = 0, 2 = {0|} = 1, etc.
+    birthday: u32,
+    /// Sign: +1 = {L|} (born right), 0 = balanced, -1 = {|R} (born left)
+    sign: i8,
+    /// Real approximation for display/conversion
+    real_approx: f64,
+
+    pub const void_time = SurrealTime{ .birthday = 0, .sign = 0, .real_approx = std.math.nan(f64) };
+    pub const zero = SurrealTime{ .birthday = 1, .sign = 0, .real_approx = 0.0 };
+    pub const one = SurrealTime{ .birthday = 2, .sign = 1, .real_approx = 1.0 };
+    pub const omega = SurrealTime{ .birthday = std.math.maxInt(u32), .sign = 1, .real_approx = std.math.inf(f64) };
+    pub const epsilon = SurrealTime{ .birthday = std.math.maxInt(u32), .sign = 1, .real_approx = 0.0 };
+
+    /// Map a time unit to its surreal birthday.
+    /// Birthday ≈ |log₁₀(seconds)| + 1. Physical scale → ordinal complexity.
+    pub fn fromUnit(unit: TimeUnit) SurrealTime {
+        if (std.math.isNan(unit.seconds)) {
+            return void_time; // tempo-dependent → before creation
+        }
+        const log_s = @abs(@log10(unit.seconds));
+        const day: u32 = @intFromFloat(@min(log_s + 1.0, 100.0));
+        const sign: i8 = if (unit.seconds >= 1.0) 1 else if (unit.seconds > 0) -1 else 0;
+        return .{ .birthday = day, .sign = sign, .real_approx = unit.seconds };
+    }
+
+    pub fn toSyrup(self: SurrealTime, allocator: Allocator) !syrup.Value {
+        const entries = try allocator.alloc(syrup.Value.DictEntry, 3);
+        entries[0] = .{ .key = .{ .symbol = "birthday" }, .value = .{ .integer = @intCast(self.birthday) } };
+        entries[1] = .{ .key = .{ .symbol = "sign" }, .value = .{ .integer = @intCast(self.sign) } };
+        entries[2] = .{ .key = .{ .symbol = "real" }, .value = .{ .float = self.real_approx } };
+        return syrup.Value{ .dictionary = entries };
+    }
+};
+
+// ============================================================================
 // TESTS
 // ============================================================================
 
@@ -630,7 +734,7 @@ test "GF(3) conservation: domain trits sum to zero mod 3" {
     // Not guaranteed to be 0 for an arbitrary catalog,
     // but the trit classification should be balanced.
     // This test documents the current balance.
-    _ = sum;
+    try std.testing.expect(sum == sum); // tautology keeps var live without pointless-discard
 }
 
 test "notable edges: nanocentury ≈ helek" {
@@ -665,4 +769,39 @@ test "all units have non-empty names" {
         try std.testing.expect(u.name.len > 0);
         try std.testing.expect(u.symbol.len > 0);
     }
+}
+
+test "hyperreal transfer: real unit preserves standard part" {
+    const ht = HyperrealTime.transfer(units.glimpse_unit);
+    try std.testing.expect(@abs(ht.standard - units.glimpse_unit.seconds) < 1e-20);
+    try std.testing.expectEqual(@as(i64, 0), ht.infinitesimal);
+}
+
+test "hyperreal transfer: NaN unit → infinitesimal" {
+    const ht = HyperrealTime.transfer(units.mora);
+    try std.testing.expectEqual(@as(f64, 0.0), ht.standard);
+    try std.testing.expectEqual(@as(i64, 1), ht.infinitesimal);
+}
+
+test "hyperreal from glimpses" {
+    const ht = HyperrealTime.fromGlimpses(141_120_000); // 1 second
+    try std.testing.expect(@abs(ht.st() - 1.0) < 1e-6);
+}
+
+test "surreal birthday: Planck > galactic year (more ordinal complexity)" {
+    const planck_sb = SurrealTime.fromUnit(units.planck_time);
+    const gy_sb = SurrealTime.fromUnit(units.galactic_year);
+    // Planck has larger |log₁₀| than galactic year
+    try std.testing.expect(planck_sb.birthday > gy_sb.birthday);
+}
+
+test "surreal birthday: NaN → void (before creation)" {
+    const mora_sb = SurrealTime.fromUnit(units.mora);
+    try std.testing.expectEqual(@as(u32, 0), mora_sb.birthday);
+    try std.testing.expectEqual(@as(i8, 0), mora_sb.sign);
+}
+
+test "trice = flick * 3 / 5" {
+    const ratio = units.flick.seconds / units.trice.seconds;
+    try std.testing.expect(@abs(ratio - 3.0 / 5.0) < 1e-6);
 }

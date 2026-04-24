@@ -78,7 +78,7 @@ pub const GayMCContext = struct {
             .checkpoint_count = 0,
             .worker_id = worker_id,
             .seed = seed,
-            .color_history = .{},
+            .color_history = .empty,
             .allocator = allocator,
         };
     }

@@ -120,7 +120,7 @@ pub const GayRng = struct {
 // Core color extraction from 64-bit value
 // ============================================================================
 
-fn colorFromU64(val: u64) Color {
+pub fn colorFromU64(val: u64) Color {
     // Split 64 bits into 3 segments: bits [0..21], [21..42], [42..63]
     const mask21: u64 = (1 << 21) - 1;
     const r_raw = val & mask21;

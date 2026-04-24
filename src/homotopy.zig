@@ -739,9 +739,9 @@ pub const HomotopyACSet = struct {
     pub fn init(allocator: Allocator) HomotopyACSet {
         return .{
             .allocator = allocator,
-            .solutions = .{},
-            .paths = .{},
-            .systems = .{},
+            .solutions = .empty,
+            .paths = .empty,
+            .systems = .empty,
         };
     }
 
@@ -793,8 +793,21 @@ pub const HomotopyACSet = struct {
 
     /// Export to ACSet.jl compatible JSON
     pub fn toJson(self: HomotopyACSet, allocator: Allocator) ![]const u8 {
-        var buf = std.ArrayListUnmanaged(u8){};
-        const writer = buf.writer(allocator);
+        var buf: std.ArrayListUnmanaged(u8) = .empty;
+        errdefer buf.deinit(allocator);
+        const W = struct {
+            buf: *std.ArrayListUnmanaged(u8),
+            alloc: Allocator,
+            fn writeAll(w: @This(), s: []const u8) !void {
+                try w.buf.appendSlice(w.alloc, s);
+            }
+            fn print(w: @This(), comptime fmt: []const u8, args: anytype) !void {
+                var tmp: [512]u8 = undefined;
+                const slice = std.fmt.bufPrint(&tmp, fmt, args) catch unreachable;
+                try w.buf.appendSlice(w.alloc, slice);
+            }
+        };
+        const writer = W{ .buf = &buf, .alloc = allocator };
 
         try writer.writeAll("{\n");
 

@@ -55,7 +55,7 @@ pub fn build_effective_instance(alloc: std.mem.Allocator) !std.ArrayList(Cell) {
         .{ .id = "Z3", .theory = 'Z', .value = .top,                 .coplay_fixed = true },
         // A Olog
         .{ .id = "A2", .theory = 'A', .value = .{ .trit = .neg },    .coplay_fixed = false },
-        .{ .id = "A3", .theory = 'A', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "A3", .theory = 'A', .value = .{ .log = .empty },      .coplay_fixed = false },
         // B RegulatoryNetwork
         .{ .id = "B1", .theory = 'B', .value = .{ .trit = .pos },    .coplay_fixed = false },
         .{ .id = "B2", .theory = 'B', .value = .{ .trit = .zero },   .coplay_fixed = true },
@@ -67,7 +67,7 @@ pub fn build_effective_instance(alloc: std.mem.Allocator) !std.ArrayList(Cell) {
         // D StockFlow
         .{ .id = "D1", .theory = 'D', .value = .{ .trit = .zero },   .coplay_fixed = false },
         .{ .id = "D2", .theory = 'D', .value = .{ .trit = .zero },   .coplay_fixed = false },
-        .{ .id = "D3", .theory = 'D', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "D3", .theory = 'D', .value = .{ .log = .empty },      .coplay_fixed = false },
         // E PetriNet (E1 above)
         .{ .id = "E2", .theory = 'E', .value = .tombstone,           .coplay_fixed = false },
         .{ .id = "E3", .theory = 'E', .value = .{ .trit = .pos },    .coplay_fixed = false },
@@ -89,14 +89,14 @@ pub fn build_effective_instance(alloc: std.mem.Allocator) !std.ArrayList(Cell) {
         .{ .id = "I3", .theory = 'I', .value = .{ .trit = .pos },    .coplay_fixed = false },
         // J DoubleCategory
         .{ .id = "J1", .theory = 'J', .value = .{ .trit = .zero },   .coplay_fixed = false },
-        .{ .id = "J2", .theory = 'J', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "J2", .theory = 'J', .value = .{ .log = .empty },      .coplay_fixed = false },
         // J3 twin squares lives only at 2-cell level; classical
         // K Decapodes (PDE limits classical)
         .{ .id = "K2", .theory = 'K', .value = .{ .trit = .pos },    .coplay_fixed = false },
         // L WiringDiagram
         .{ .id = "L1", .theory = 'L', .value = .bottom,              .coplay_fixed = true },
         .{ .id = "L2", .theory = 'L', .value = .top,                 .coplay_fixed = false },
-        .{ .id = "L3", .theory = 'L', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "L3", .theory = 'L', .value = .{ .log = .empty },      .coplay_fixed = false },
         // M StringDiagram
         .{ .id = "M1", .theory = 'M', .value = .{ .trit = .zero },   .coplay_fixed = false },
         .{ .id = "M2", .theory = 'M', .value = .{ .trit = .neg },    .coplay_fixed = false },
@@ -122,27 +122,27 @@ pub fn build_effective_instance(alloc: std.mem.Allocator) !std.ArrayList(Cell) {
         .{ .id = "R3", .theory = 'R', .value = .top,                 .coplay_fixed = true },
         // S PolynomialFunctor (S1 above)
         .{ .id = "S2", .theory = 'S', .value = .top,                 .coplay_fixed = false },
-        .{ .id = "S3", .theory = 'S', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "S3", .theory = 'S', .value = .{ .log = .empty },      .coplay_fixed = false },
         // T SpanCospan
         .{ .id = "T1", .theory = 'T', .value = .{ .trit = .zero },   .coplay_fixed = false },
         .{ .id = "T2", .theory = 'T', .value = .tombstone,           .coplay_fixed = false },
         .{ .id = "T3", .theory = 'T', .value = .top,                 .coplay_fixed = true },
         // U Profunctor
         .{ .id = "U1", .theory = 'U', .value = .{ .trit = .zero },   .coplay_fixed = false },
-        .{ .id = "U2", .theory = 'U', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "U2", .theory = 'U', .value = .{ .log = .empty },      .coplay_fixed = false },
         .{ .id = "U3", .theory = 'U', .value = .top,                 .coplay_fixed = true },
         // V Kleisli
-        .{ .id = "V1", .theory = 'V', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "V1", .theory = 'V', .value = .{ .log = .empty },      .coplay_fixed = false },
         .{ .id = "V2", .theory = 'V', .value = .{ .trit = .zero },   .coplay_fixed = false },
         .{ .id = "V3", .theory = 'V', .value = .{ .trit = .pos },    .coplay_fixed = false },
         // W Presheaf
-        .{ .id = "W1", .theory = 'W', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "W1", .theory = 'W', .value = .{ .log = .empty },      .coplay_fixed = false },
         .{ .id = "W2", .theory = 'W', .value = .top,                 .coplay_fixed = false },
         .{ .id = "W3", .theory = 'W', .value = .top,                 .coplay_fixed = true },
         // X SimplicialSet
         .{ .id = "X1", .theory = 'X', .value = .{ .trit = .zero },   .coplay_fixed = false },
         // X2 partial; X3 classical only
-        .{ .id = "X2", .theory = 'X', .value = .{ .log = .{} },      .coplay_fixed = false },
+        .{ .id = "X2", .theory = 'X', .value = .{ .log = .empty },      .coplay_fixed = false },
         // Y Topos (Y3 above)
         .{ .id = "Y2", .theory = 'Y', .value = .top,                 .coplay_fixed = false },
         // Y1 ω-persistence classical

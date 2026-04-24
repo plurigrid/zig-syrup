@@ -34,5 +34,5 @@ bb /Users/bob/i/zig-syrup/benchmark/bench_bb.clj
 echo ""
 
 echo "=============================================="
-echo "Benchmark complete. See BENCHMARK-RESULTS.md"
+echo "Benchmark complete. See docs/benchmarks/BENCHMARK-RESULTS.md"
 echo "=============================================="

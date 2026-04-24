@@ -17,6 +17,14 @@
 const std = @import("std");
 const math = std.math;
 
+// 0.16 compat
+fn nanoTimestamp() i128 {
+    if (@hasDecl(std.time, "nanoTimestamp")) return @field(std.time, "nanoTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i128, @intCast(ts.sec)) * std.time.ns_per_s + @as(i128, @intCast(ts.nsec));
+}
+
 // ============================================================================
 // BAND DEFINITIONS
 // ============================================================================
@@ -446,22 +454,22 @@ test "fft benchmark: memoized vs runtime" {
     }
 
     // Benchmark runtime FFT
-    const start_rt = std.time.nanoTimestamp();
+    const start_rt = nanoTimestamp();
     for (0..iterations) |_| {
         @memcpy(real, base);
         @memset(imag, 0);
         radix2FftRuntime(real, imag, n);
     }
-    const elapsed_rt = std.time.nanoTimestamp() - start_rt;
+    const elapsed_rt = nanoTimestamp() - start_rt;
 
     // Benchmark memoized FFT
-    const start_memo = std.time.nanoTimestamp();
+    const start_memo = nanoTimestamp();
     for (0..iterations) |_| {
         @memcpy(real, base);
         @memset(imag, 0);
         radix2FftMemoized(real, imag, n, &roots_256);
     }
-    const elapsed_memo = std.time.nanoTimestamp() - start_memo;
+    const elapsed_memo = nanoTimestamp() - start_memo;
 
     const ns_rt: i64 = @intCast(@divFloor(elapsed_rt, @as(i128, iterations)));
     const ns_memo: i64 = @intCast(@divFloor(elapsed_memo, @as(i128, iterations)));

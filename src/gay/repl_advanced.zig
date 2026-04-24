@@ -15,6 +15,14 @@ const std = @import("std");
 const math = std.math;
 const splitmix = @import("splitmix.zig");
 
+// 0.16 compat
+fn milliTimestamp() i64 {
+    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+}
+
 const Color = splitmix.Color;
 const GAY_SEED: u64 = splitmix.GAY_SEED;
 const GOLDEN: u64 = splitmix.GOLDEN;
@@ -304,9 +312,9 @@ pub const TestTracker = struct {
     pub fn init(allocator: std.mem.Allocator, seed: u64) TestTracker {
         return .{
             .seed = seed,
-            .tests = .{},
-            .violations = .{},
-            .metrics = .{},
+            .tests = .empty,
+            .violations = .empty,
+            .metrics = .empty,
             .total_colors = 0,
             .total_iterations = 0,
             .allocator = allocator,
@@ -327,7 +335,7 @@ pub const TestTracker = struct {
             .result = result,
             .duration_ns = duration_ns,
             .iterations = iterations,
-            .timestamp = std.time.milliTimestamp(),
+            .timestamp = milliTimestamp(),
             .color = color,
             .fingerprint = fp,
         });
@@ -339,7 +347,7 @@ pub const TestTracker = struct {
         try self.violations.append(self.allocator, .{
             .violation_type = vtype,
             .description_hash = desc_hash,
-            .timestamp = std.time.milliTimestamp(),
+            .timestamp = milliTimestamp(),
             .color = violationColor(vtype),
             .fingerprint = fp,
         });
@@ -349,7 +357,7 @@ pub const TestTracker = struct {
         try self.metrics.append(self.allocator, .{
             .name_hash = name_hash,
             .value = value,
-            .timestamp = std.time.milliTimestamp(),
+            .timestamp = milliTimestamp(),
             .color = hashColor(name_hash, self.seed),
         });
     }
@@ -382,7 +390,7 @@ pub const FindingsSet = struct {
 
     pub fn init(allocator: std.mem.Allocator) FindingsSet {
         return .{
-            .findings = .{},
+            .findings = .empty,
             .combined_fingerprint = 0,
             .thread_count = 0,
             .allocator = allocator,
@@ -740,7 +748,7 @@ pub const ThreadGenealogy = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, root: AmpThread) !ThreadGenealogy {
-        var threads: std.ArrayList(AmpThread) = .{};
+        var threads: std.ArrayList(AmpThread) = .empty;
         try threads.append(allocator, root);
         return .{
             .threads = threads,

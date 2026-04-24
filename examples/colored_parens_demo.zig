@@ -48,10 +48,12 @@ fn lookupTrit(op_name: []const u8) Trit {
     return .ergodic; // Default for unknown ops
 }
 
-/// Render expression with colored parentheses
+/// Render expression with colored parentheses.
+/// Golden angle rotates hue by depth, plastic angle by branch index.
 fn renderColoredExpr(
     expr: Expr,
     depth: u16,
+    branch: u8,
     writer: anytype,
 ) !void {
     var ansi_buf: [19]u8 = undefined;
@@ -62,7 +64,7 @@ fn renderColoredExpr(
         },
         .list => |list| {
             const op_trit = lookupTrit(list.op);
-            const color = ExprColor.init(op_trit, depth);
+            const color = ExprColor.initWithBranch(op_trit, depth, branch);
 
             // Opening paren with color
             const open_ansi = color.rgb.toAnsiFg(&ansi_buf);
@@ -71,10 +73,10 @@ fn renderColoredExpr(
             // Operation name
             try writer.print("{s}", .{list.op});
 
-            // Recursive render args
-            for (list.args) |arg| {
+            // Recursive render args — each arg gets its branch index
+            for (list.args, 0..) |arg, i| {
                 try writer.print(" ", .{});
-                try renderColoredExpr(arg, depth + 1, writer);
+                try renderColoredExpr(arg, depth + 1, @intCast(i), writer);
             }
 
             // Closing paren with same color
@@ -105,7 +107,7 @@ pub fn main() !void {
     };
 
     try stdout.print("Simple: ", .{});
-    try renderColoredExpr(simple, 0, stdout);
+    try renderColoredExpr(simple, 0, 0, stdout);
     try stdout.print("\n\n", .{});
 
     // Example 2: BCI Pipeline (from tests)
@@ -140,7 +142,7 @@ pub fn main() !void {
     };
 
     try stdout.print("BCI Pipeline:\n", .{});
-    try renderColoredExpr(aptos_expr, 0, stdout);
+    try renderColoredExpr(aptos_expr, 0, 0, stdout);
     try stdout.print("\n\n", .{});
 
     // Example 3: Show color computation trace

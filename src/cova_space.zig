@@ -233,7 +233,7 @@ pub fn Matrix(comptime F: type) type {
             }
 
             // Free columns give kernel vectors
-            var result: std.ArrayList([]F) = .{};
+            var result: std.ArrayList([]F) = .empty;
             for (0..self.cols) |c| {
                 if (!pivot_cols[c]) {
                     const vec = try allocator.alloc(F, self.cols);
@@ -319,7 +319,7 @@ pub const Simplex = struct {
 
     /// Compute (dim-1)-dimensional faces by omitting each vertex.
     pub fn faces(self: *const Simplex, allocator: Allocator) !std.ArrayList(Simplex) {
-        var result: std.ArrayList(Simplex) = .{};
+        var result: std.ArrayList(Simplex) = .empty;
         if (self.dim == 0) return result;
         for (0..self.vertices.len) |skip| {
             const face_verts = try allocator.alloc(usize, self.vertices.len - 1);
@@ -342,7 +342,7 @@ pub const Simplex = struct {
 
     /// Boundary with orientations: (-1)^i for omitting vertex i.
     pub fn boundaryWithOrientations(self: *const Simplex, allocator: Allocator) !std.ArrayList(FaceOrientation(Simplex)) {
-        var result: std.ArrayList(FaceOrientation(Simplex)) = .{};
+        var result: std.ArrayList(FaceOrientation(Simplex)) = .empty;
         if (self.dim == 0) return result;
         for (0..self.vertices.len) |i| {
             const face_verts = try allocator.alloc(usize, self.vertices.len - 1);
@@ -445,7 +445,7 @@ pub const Cube = struct {
 
     /// Compute (dim-1)-dimensional faces by fixing each coordinate to 0 and 1.
     pub fn faces(self: *const Cube, allocator: Allocator) !std.ArrayList(Cube) {
-        var result: std.ArrayList(Cube) = .{};
+        var result: std.ArrayList(Cube) = .empty;
         if (self.dim == 0) return result;
         const k = self.dim;
         const face_size: usize = @as(usize, 1) << @intCast(k - 1);
@@ -476,7 +476,7 @@ pub const Cube = struct {
 
     /// Cubical boundary: sum_i (-1)^i (face_{x_i=1} - face_{x_i=0}).
     pub fn boundaryWithOrientations(self: *const Cube, allocator: Allocator) !std.ArrayList(FaceOrientation(Cube)) {
-        var result: std.ArrayList(FaceOrientation(Cube)) = .{};
+        var result: std.ArrayList(FaceOrientation(Cube)) = .empty;
         if (self.dim == 0) return result;
         const k = self.dim;
         const face_size: usize = @as(usize, 1) << @intCast(k - 1);
@@ -616,7 +616,7 @@ pub fn Complex(comptime T: type) type {
             var face_list = try element.faces(self.allocator);
             defer face_list.deinit(self.allocator);
 
-            var face_ids: std.ArrayList(usize) = .{};
+            var face_ids: std.ArrayList(usize) = .empty;
 
             for (face_list.items) |face| {
                 const fid = try self.joinElement(face);
@@ -626,7 +626,7 @@ pub fn Complex(comptime T: type) type {
                 if (cofaces) |cf| {
                     try cf.append(self.allocator, eid);
                 } else {
-                    var new_list: std.ArrayList(usize) = .{};
+                    var new_list: std.ArrayList(usize) = .empty;
                     try new_list.append(self.allocator, eid);
                     try self.coface_rel.put(fid, new_list);
                 }
@@ -644,7 +644,7 @@ pub fn Complex(comptime T: type) type {
 
             // Ensure coface entry exists
             if (!self.coface_rel.contains(eid)) {
-                const empty_list: std.ArrayList(usize) = .{};
+                const empty_list: std.ArrayList(usize) = .empty;
                 try self.coface_rel.put(eid, empty_list);
             }
 
@@ -656,7 +656,7 @@ pub fn Complex(comptime T: type) type {
         }
 
         pub fn elementsOfDimension(self: *const Self, allocator: Allocator, dim: usize) !std.ArrayList(T) {
-            var result: std.ArrayList(T) = .{};
+            var result: std.ArrayList(T) = .empty;
             var it = self.elements.iterator();
             while (it.next()) |entry| {
                 if (entry.value_ptr.dimension() == dim) {
@@ -805,8 +805,8 @@ pub fn Chain(comptime T: type, comptime R: type) type {
 
         pub fn init(allocator: Allocator) Self {
             return .{
-                .items = .{},
-                .coefficients = .{},
+                .items = .empty,
+                .coefficients = .empty,
                 .allocator = allocator,
             };
         }

@@ -147,7 +147,7 @@ pub const TokenizeError = error{
 };
 
 pub fn tokenize(input: []const u8, allocator: Allocator) TokenizeError![]Token {
-    var tokens: std.ArrayList(Token) = .{};
+    var tokens: std.ArrayList(Token) = .empty;
     errdefer tokens.deinit(allocator);
 
     var i: usize = 0;
@@ -280,7 +280,7 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
     switch (tok.type) {
         .lparen => {
             pos.* += 1;
-            var items: std.ArrayList(SExp) = .{};
+            var items: std.ArrayList(SExp) = .empty;
             errdefer {
                 for (items.items) |item| item.deinit(allocator);
                 items.deinit(allocator);
@@ -294,7 +294,7 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
         },
         .lbracket => {
             pos.* += 1;
-            var items: std.ArrayList(SExp) = .{};
+            var items: std.ArrayList(SExp) = .empty;
             errdefer {
                 for (items.items) |item| item.deinit(allocator);
                 items.deinit(allocator);
@@ -308,7 +308,7 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
         },
         .lbrace => {
             pos.* += 1;
-            var pairs: std.ArrayList(SExp.DictPair) = .{};
+            var pairs: std.ArrayList(SExp.DictPair) = .empty;
             errdefer {
                 for (pairs.items) |pair| {
                     pair.key.deinit(allocator);
@@ -379,7 +379,7 @@ fn parseSexp(tokens: []const Token, pos: *usize, allocator: Allocator) ParseErro
 }
 
 fn unescapeString(raw: []const u8, allocator: Allocator) ![]u8 {
-    var buf: std.ArrayList(u8) = .{};
+    var buf: std.ArrayList(u8) = .empty;
     errdefer buf.deinit(allocator);
     var i: usize = 0;
     while (i < raw.len) {
@@ -409,7 +409,7 @@ fn unescapeString(raw: []const u8, allocator: Allocator) ![]u8 {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub fn print(sexp: SExp, allocator: Allocator) ![]u8 {
-    var buf: std.ArrayList(u8) = .{};
+    var buf: std.ArrayList(u8) = .empty;
     try printInto(sexp, &buf, allocator);
     return buf.toOwnedSlice(allocator);
 }
@@ -496,7 +496,7 @@ const RAINBOW_COLORS = [_][]const u8{
 const RESET = "\x1b[0m";
 
 pub fn prettyPrint(sexp: SExp, allocator: Allocator) ![]u8 {
-    var buf: std.ArrayList(u8) = .{};
+    var buf: std.ArrayList(u8) = .empty;
     try prettyPrintInto(sexp, &buf, 0, allocator);
     try buf.appendSlice(allocator, RESET);
     return buf.toOwnedSlice(allocator);

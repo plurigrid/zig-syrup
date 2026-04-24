@@ -18,6 +18,8 @@ Complete toolkit for OpenBCI hardware integration on macOS, including host acqui
 - [Host Acquisition System](#host-acquisition-system) - Native macOS streaming
 - [VM Passthrough Guide](MACOS_VM_PASSTHROUGH.md) - Complete VM setup guide
 - [VM Options](vm_options.md) - Comparison of VM approaches
+- [Cyton reverse-engineering prep](CYTON_REVERSE_ENGINEERING_PREP.md) - Current
+  software snapshot and low-level health check
 
 ---
 
@@ -57,6 +59,28 @@ python3 host_acquisition.py
 ```
 
 See full [Host Acquisition Documentation](#host-acquisition-details) below.
+
+### Low-level Cyton checks
+
+Use the low-level Cyton health check when you want to validate the dongle,
+radio, and raw packet path before deeper reverse-engineering work. The Python
+entrypoint is the primary path. The Hy and Common Lisp wrappers forward the
+same arguments to the Python script for polyglot tooling.
+
+```bash
+# Verified entrypoint
+python3 cyton_health_check.py --help
+
+# Requires a Hy runtime
+hy cyton_health_check.hy --help
+
+# Requires a Common Lisp runtime with UIOP, such as SBCL
+sbcl --script cyton_health_check.lsp -- --help
+```
+
+> **Note:** This workspace currently verifies the Python entrypoint only. The
+> Hy wrapper needs a Hy runtime, and the Common Lisp wrapper needs a Common
+> Lisp runtime with UIOP available.
 
 ---
 
@@ -123,6 +147,10 @@ sudo ./usbip_client.sh attach <host-ip> <busid>
 | File | Purpose |
 |------|---------|
 | `host_acquisition.py` | Native macOS data acquisition |
+| `cyton_health_check.py` | Low-level Cyton dongle, radio, and stream health check |
+| `cyton_health_check.hy` | Hy wrapper for the Cyton health check |
+| `cyton_health_check.lsp` | Common Lisp wrapper for the Cyton health check |
+| `CYTON_REVERSE_ENGINEERING_PREP.md` | Reverse-engineering update snapshot and Cyton prep |
 | `setup_host.sh` | Host environment setup |
 | `setup_utm_vm.sh` | UTM VM setup script |
 | `create_linux_vm.sh` | Linux VM creator (Lima/vz/Docker) |

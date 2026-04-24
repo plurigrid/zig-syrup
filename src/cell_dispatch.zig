@@ -20,6 +20,32 @@
 //! No demos. Worlds only.
 
 const std = @import("std");
+
+// 0.16 compat: std.Thread.Pool was removed. Provide a tiny serial shim so
+// DispatchEngine compiles. It runs jobs inline; no actual concurrency.
+const WaitGroupCompat = struct {};
+const ThreadPoolCompat = struct {
+    pub const Options = struct {
+        allocator: std.mem.Allocator,
+        n_jobs: usize = 1,
+    };
+    pub fn init(self: *ThreadPoolCompat, opts: Options) !void {
+        _ = self;
+        _ = opts;
+    }
+    pub fn deinit(self: *ThreadPoolCompat) void {
+        _ = self;
+    }
+    pub fn spawnWg(self: *ThreadPoolCompat, wg: *WaitGroupCompat, comptime func: anytype, args: anytype) void {
+        _ = self;
+        _ = wg;
+        @call(.auto, func, args);
+    }
+    pub fn waitAndWork(self: *ThreadPoolCompat, wg: *WaitGroupCompat) void {
+        _ = self;
+        _ = wg;
+    }
+};
 const syrup = @import("syrup");
 const damage = @import("damage");
 const Allocator = std.mem.Allocator;
@@ -629,7 +655,7 @@ pub const SimdOps = struct {
 
             // Scalar fallback for individual cells in the vector
             // (direct SIMD struct store requires aligned memory)
-            for (0..VecSize) |j| {
+            inline for (0..VecSize) |j| {
                 cells[i + j].codepoint = codepoint_vec[j];
                 cells[i + j].fg = fg_vec[j];
                 cells[i + j].bg = bg_vec[j];
@@ -656,7 +682,7 @@ pub const SimdOps = struct {
 
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
-            for (0..VecSize) |j| {
+            inline for (0..VecSize) |j| {
                 cells[i + j].fg = fg_vec[j];
             }
         }
@@ -679,7 +705,7 @@ pub const SimdOps = struct {
 
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
-            for (0..VecSize) |j| {
+            inline for (0..VecSize) |j| {
                 cells[i + j].bg = bg_vec[j];
             }
         }
@@ -744,7 +770,7 @@ pub const SimdOps = struct {
         while (i + VecSize <= cells.len) : (i += VecSize) {
             // Load generation fields
             var gens: @Vector(VecSize, u8) = undefined;
-            for (0..VecSize) |j| {
+            inline for (0..VecSize) |j| {
                 gens[j] = @truncate(cells[i + j].attrs >> 8);
             }
 
@@ -882,7 +908,7 @@ pub const ComputeDispatch = struct {
 /// Parallel dispatch engine for cell batches
 pub const DispatchEngine = struct {
     allocator: Allocator,
-    thread_pool: std.Thread.Pool,
+    thread_pool: ThreadPoolCompat,
     thread_pool_initialized: bool,
     acp_sender: ?AcpSender,
     generation: u8,
@@ -912,7 +938,7 @@ pub const DispatchEngine = struct {
 
         const thread_count = config.thread_count orelse @max(1, std.Thread.getCpuCount() catch 1);
 
-        var thread_pool: std.Thread.Pool = undefined;
+        var thread_pool: ThreadPoolCompat = undefined;
         thread_pool.init(.{
             .allocator = allocator,
             .n_jobs = thread_count,
@@ -967,7 +993,7 @@ pub const DispatchEngine = struct {
         const num_chunks = (batch.cells.len + chunk_size - 1) / chunk_size;
 
         var total_processed: std.atomic.Value(u32) = .init(0);
-        var wg: std.Thread.WaitGroup = .{};
+        var wg: WaitGroupCompat = .{};
 
         for (0..num_chunks) |chunk_idx| {
             const start = chunk_idx * chunk_size;

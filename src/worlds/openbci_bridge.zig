@@ -9,6 +9,34 @@ const syrup = @import("syrup");
 const World = @import("world.zig").World;
 const Player = @import("world.zig").Player;
 
+// 0.16 compat
+fn milliTimestamp() i64 {
+    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+}
+fn randomFloat(comptime T: type) T {
+    if (@hasDecl(std.crypto, "random") and @hasDecl(@TypeOf(@field(std.crypto, "random")), "float")) {
+        return @field(std.crypto, "random").float(T);
+    }
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    const seed: u64 = @bitCast(@as(i64, @intCast(ts.sec)) ^ @as(i64, @intCast(ts.nsec)));
+    var prng = std.Random.DefaultPrng.init(seed);
+    return prng.random().float(T);
+}
+fn randomInt(comptime T: type) T {
+    if (@hasDecl(std.crypto, "random") and @hasDecl(@TypeOf(@field(std.crypto, "random")), "int")) {
+        return @field(std.crypto, "random").int(T);
+    }
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    const seed: u64 = @bitCast(@as(i64, @intCast(ts.sec)) ^ @as(i64, @intCast(ts.nsec)));
+    var prng = std.Random.DefaultPrng.init(seed);
+    return prng.random().int(T);
+}
+
 /// Bridge error types
 pub const BridgeError = error{
     ConnectionFailed,
@@ -123,7 +151,7 @@ pub const BrainState = struct {
 
     /// Serialize to syrup
     pub fn toSyrup(self: BrainState, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
+        var entries: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{
@@ -144,7 +172,7 @@ pub const BrainState = struct {
         });
 
         // Band powers
-        var band_list = std.ArrayListUnmanaged(syrup.Value){};
+        var band_list: std.ArrayListUnmanaged(syrup.Value) = .empty;
         defer band_list.deinit(allocator);
 
         for (self.band_powers) |power| {
@@ -247,10 +275,10 @@ pub const OpenBCIBridge = struct {
         return Self{
             .allocator = allocator,
             .connected_world = world,
-            .player_mappings = .{},
-            .sample_buffer = .{},
+            .player_mappings = .empty,
+            .sample_buffer = .empty,
             .max_buffer_size = 1000,
-            .brain_states = .{},
+            .brain_states = .empty,
             .sample_rate = 250.0, // OpenBCI default
             .fft_size = fft_size,
             .window_function = window,
@@ -361,7 +389,7 @@ pub const OpenBCIBridge = struct {
         const relaxation = band_powers[2];
 
         return BrainState{
-            .timestamp = std.time.milliTimestamp(),
+            .timestamp = milliTimestamp(),
             .focus_level = std.math.clamp(focus, 0.0, 1.0),
             .relaxation_level = std.math.clamp(relaxation, 0.0, 1.0),
             .engagement_level = 0.7,
@@ -399,7 +427,7 @@ pub const OpenBCIBridge = struct {
         };
 
         // Collect samples over calibration period
-        const start_time = std.time.milliTimestamp();
+        const start_time = milliTimestamp();
         var samples_collected: usize = 0;
         var accumulated_state = BrainState{
             .timestamp = 0,
@@ -450,16 +478,16 @@ pub const OpenBCIBridge = struct {
 
         // Simulate channels based on focus level
         for (0..EEGChannel.CYTON_COUNT) |i| {
-            const noise = std.crypto.random.float(f32) * 10.0;
+            const noise = randomFloat(f32) * 10.0;
             const signal = focus_level * 50.0;
             channels[i] = signal + noise - 25.0; // Center around 0
         }
 
         return EEGSample{
-            .timestamp = std.time.milliTimestamp(),
+            .timestamp = milliTimestamp(),
             .channels = channels,
             .accel = .{ 0, 0, 1.0 },
-            .sample_num = @intCast(std.crypto.random.int(u32)),
+            .sample_num = @intCast(randomInt(u32)),
         };
     }
 
@@ -482,7 +510,7 @@ pub const OpenBCIBridge = struct {
 
     /// Serialize bridge state to syrup
     pub fn toSyrup(self: Self, allocator: Allocator) !syrup.Value {
-        var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
+        var entries: std.ArrayListUnmanaged(syrup.Value.DictEntry) = .empty;
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{
@@ -539,7 +567,7 @@ pub const OpenBCIParser = struct {
         } else null;
 
         return EEGSample{
-            .timestamp = std.time.milliTimestamp(),
+            .timestamp = milliTimestamp(),
             .channels = channels,
             .accel = accel,
             .sample_num = sample_num,

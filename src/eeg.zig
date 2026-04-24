@@ -15,6 +15,12 @@ const std = @import("std");
 const cyton_parser = @import("cyton_parser.zig");
 const fft_bands = @import("fft_bands.zig");
 
+fn milliTimestamp() i64 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+}
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -192,7 +198,7 @@ pub fn main() !void {
     const bytes_read = try std.posix.read(std.posix.STDIN_FILENO, &input_buffer);
 
     if (bytes_read == 0) {
-        _ = try std.posix.write(std.posix.STDOUT_FILENO, "{\"error\": \"no input\"}\n");
+        _ = @as(usize, @intCast(std.c.write(std.posix.STDOUT_FILENO, @as([*]const u8, @ptrCast("{\"error\": \"no input\"}\n")), "{\"error\": \"no input\"}\n".len)));
         return;
     }
 
@@ -211,7 +217,7 @@ pub fn main() !void {
                 else => "parse_error",
             };
             const json = try std.fmt.bufPrint(&error_buf, "{{\"error\": \"{s}\"}}\n", .{error_msg});
-            _ = try std.posix.write(std.posix.STDOUT_FILENO, json);
+            _ = @as(usize, @intCast(std.c.write(std.posix.STDOUT_FILENO, @as([*]const u8, @ptrCast(json)), json.len)));
             return;
         };
 
@@ -227,7 +233,7 @@ pub fn main() !void {
 
         // Create output
         const output = EEGOutput{
-            .ts = std.time.milliTimestamp(),
+            .ts = milliTimestamp(),
             .seq = sample.sample_number,
             .epoch = 0,
             .color = color,
@@ -259,12 +265,12 @@ pub fn main() !void {
                 output.gf3_sum,
             },
         );
-        _ = try std.posix.write(std.posix.STDOUT_FILENO, json);
-        _ = try std.posix.write(std.posix.STDOUT_FILENO, "\n");
+        _ = @as(usize, @intCast(std.c.write(std.posix.STDOUT_FILENO, @as([*]const u8, @ptrCast(json)), json.len)));
+        _ = @as(usize, @intCast(std.c.write(std.posix.STDOUT_FILENO, @as([*]const u8, @ptrCast("\n")), "\n".len)));
     } else {
         var err_buf: [256]u8 = undefined;
         const err_msg = try std.fmt.bufPrint(&err_buf, "{{\"error\": \"expected {d} bytes, got {d}\"}}\n", .{ cyton_parser.CYTON_PACKET_LEN, bytes_read });
-        _ = try std.posix.write(std.posix.STDOUT_FILENO, err_msg);
+        _ = @as(usize, @intCast(std.c.write(std.posix.STDOUT_FILENO, @as([*]const u8, @ptrCast(err_msg)), err_msg.len)));
     }
 }
 

@@ -137,7 +137,7 @@ pub const FactorNode = struct {
     ) Self {
         return .{
             .name = name,
-            .variables = std.ArrayListUnmanaged(*Cell(f32, latticeMerge(f32))){},
+            .variables = std.ArrayListUnmanaged(*Cell(f32, latticeMerge(f32))).empty,
             .joint_fn = joint_fn,
             .marginal_fn = marginal_fn,
             .output = output,
@@ -342,8 +342,8 @@ pub const FactorGraph = struct {
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{
-            .cells = std.ArrayListUnmanaged(*LCell){},
-            .factors = std.ArrayListUnmanaged(*FactorNode){},
+            .cells = std.ArrayListUnmanaged(*LCell).empty,
+            .factors = std.ArrayListUnmanaged(*FactorNode).empty,
             .allocator = allocator,
         };
     }
@@ -418,7 +418,7 @@ pub const FactorGraph = struct {
 
     /// Detect factors with synergy above threshold (the "magenta detectors").
     pub fn detectSynergy(self: *Self, threshold: f32) !std.ArrayListUnmanaged(*FactorNode) {
-        var synergistic = std.ArrayListUnmanaged(*FactorNode){};
+        var synergistic = std.ArrayListUnmanaged(*FactorNode).empty;
         for (self.factors.items) |factor| {
             const pid = factor.computePID();
             if (pid.synergy >= threshold) {

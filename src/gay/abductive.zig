@@ -178,7 +178,7 @@ pub fn abduceInvader(
     search_end: u64,
     top_k: usize,
 ) ![]AbductiveHypothesis {
-    var list: std.ArrayList(AbductiveHypothesis) = .{};
+    var list: std.ArrayList(AbductiveHypothesis) = .empty;
     defer list.deinit(allocator);
 
     var id = search_start;
@@ -294,7 +294,7 @@ pub const WorldNavigator = struct {
             .allocator = allocator,
             .current_id = 1,
             .seed = seed,
-            .history = .{},
+            .history = .empty,
         };
     }
 

@@ -179,10 +179,19 @@ pub const ExprColor = struct {
     hue: f32,
     rgb: RGB,
 
-    /// Compute color for an expression at given depth
+    /// Compute color for an expression at given depth.
+    /// For linear nesting (lists), golden angle suffices.
+    /// For branching (let bindings, cond arms), use plastic angle on the branch index.
     pub fn init(trit: Trit, depth: u16) ExprColor {
+        return initWithBranch(trit, depth, 0);
+    }
+
+    /// Compute color with both depth (golden angle) and branch slot (plastic angle).
+    /// depth × golden + branch × plastic = 2D dispersion matching interaction net geometry.
+    pub fn initWithBranch(trit: Trit, depth: u16, branch: u8) ExprColor {
         const base = trit.baseHue();
-        const rotation = @as(f32, @floatFromInt(depth)) * GOLDEN_ANGLE;
+        const rotation = @as(f32, @floatFromInt(depth)) * GOLDEN_ANGLE +
+            @as(f32, @floatFromInt(branch)) * PLASTIC_ANGLE;
         const hue = @mod(base + rotation, 360.0);
 
         // Use HCL color space (perceptually uniform)

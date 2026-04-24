@@ -88,7 +88,7 @@ pub const Problem = std.ArrayListUnmanaged(struct { Term, Term });
 /// Robinson's unification algorithm
 /// Returns the most general unifier (MGU) or null if unification fails
 pub fn unify(allocator: std.mem.Allocator, t1: Term, t2: Term) UnifyError!?Substitution {
-    var problem = Problem{};
+    var problem: Problem = .empty;
     defer problem.deinit(allocator);
     try problem.append(allocator, .{ t1, t2 });
 

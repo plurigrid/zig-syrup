@@ -316,7 +316,7 @@ pub fn findEquilibria2D(
     max_iter: usize,
     allocator: Allocator,
 ) ![]Equilibrium2D {
-    var result: std.ArrayListUnmanaged(Equilibrium2D) = .{};
+    var result: std.ArrayListUnmanaged(Equilibrium2D) = .empty;
     errdefer result.deinit(allocator);
 
     for (guesses) |guess| {

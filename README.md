@@ -248,11 +248,13 @@ Every layer maintains balanced ternary invariant `(-1) + (0) + (+1) ≡ 0 (mod 3
 
 ## Docs
 
-- `BENCHMARK-RESULTS.md` — encode/decode/CID performance
-- `CAPTP-OPTIMIZATIONS.md` — CapTP descriptor fast paths
-- `ZIG-SYRUP-FULL-PARITY.md` — spec alignment with reference implementations
-- `INTERCHANGE-COMPARISON.md` — format comparison (CBOR, MessagePack, Protobuf)
-- `CATEGORY_THEORY_TILES.md` — category theory tile patterns
+- [docs/README.md](docs/README.md) — package-facing documentation index
+- [docs/benchmarks/BENCHMARK-RESULTS.md](docs/benchmarks/BENCHMARK-RESULTS.md) — encode/decode/CID performance
+- [docs/architecture/CAPTP-OPTIMIZATIONS.md](docs/architecture/CAPTP-OPTIMIZATIONS.md) — CapTP descriptor fast paths
+- [docs/status/ZIG-SYRUP-FULL-PARITY.md](docs/status/ZIG-SYRUP-FULL-PARITY.md) — spec alignment with reference implementations
+- [docs/architecture/INTERCHANGE-COMPARISON.md](docs/architecture/INTERCHANGE-COMPARISON.md) — format comparison (CBOR, MessagePack, Protobuf)
+- [docs/research/CATEGORY_THEORY_TILES.md](docs/research/CATEGORY_THEORY_TILES.md) — category theory tile patterns
+- [examples/interop/PATH_INVARIANCE.md](examples/interop/PATH_INVARIANCE.md) — live interop test matrix and environment status
 
 ## Related
 

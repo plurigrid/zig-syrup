@@ -138,7 +138,7 @@ pub fn parseStream(
     data: []const u8,
     allocator: std.mem.Allocator,
 ) (ParseError || error{OutOfMemory})![]CytonSample {
-    var samples = std.ArrayListUnmanaged(CytonSample){};
+    var samples = std.ArrayListUnmanaged(CytonSample).empty;
     errdefer samples.deinit(allocator);
 
     var i: usize = 0;

@@ -31,6 +31,50 @@
 const builtin = @import("builtin");
 const is_wasm = builtin.cpu.arch == .wasm32 or builtin.cpu.arch == .wasm64;
 
+// Plastic constant ρ ≈ 1.3247 (root of x³ = x + 1)
+// Generates GF(27) = GF(3³) — the third tier of the trit tower.
+// Plastic angle = 360° / ρ² ≈ 205.14° — optimal 2D dispersion for branching structures.
+const PLASTIC_ANGLE: f32 = 205.1442;
+const GOLDEN_ANGLE: f32 = 137.5078;
+
+// ============================================================================
+// HSL → u24 (minimal, no allocator)
+// ============================================================================
+
+/// Convert HSL (h in [0,360), s and l in [0,1]) to packed u24 RGB.
+fn hslToU24(h: f32, s: f32, l: f32) u24 {
+    const c = (1.0 - @abs(2.0 * l - 1.0)) * s;
+    const h_prime = h / 60.0;
+    const x = c * (1.0 - @abs(@mod(h_prime, 2.0) - 1.0));
+    var r1: f32 = 0;
+    var g1: f32 = 0;
+    var b1: f32 = 0;
+    if (h_prime < 1) {
+        r1 = c;
+        g1 = x;
+    } else if (h_prime < 2) {
+        r1 = x;
+        g1 = c;
+    } else if (h_prime < 3) {
+        g1 = c;
+        b1 = x;
+    } else if (h_prime < 4) {
+        g1 = x;
+        b1 = c;
+    } else if (h_prime < 5) {
+        r1 = x;
+        b1 = c;
+    } else {
+        r1 = c;
+        b1 = x;
+    }
+    const m = l - c / 2.0;
+    const r: u8 = @intFromFloat(@max(0, @min(255, (r1 + m) * 255.0)));
+    const g: u8 = @intFromFloat(@max(0, @min(255, (g1 + m) * 255.0)));
+    const b: u8 = @intFromFloat(@max(0, @min(255, (b1 + m) * 255.0)));
+    return (@as(u24, r) << 16) | (@as(u24, g) << 8) | b;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -113,6 +157,33 @@ pub const NodeKind = enum(u8) {
             .wire => 0x666666,
             .hole => 0x222222, // Dark — unfilled
             .fill => 0xFFFFFF, // Bright — filled
+        };
+    }
+
+    /// Plastic-angle color: hue rotated by ρ² per arity slot, depth per bounce.
+    /// Golden angle disperses along depth (1D). Plastic angle disperses across
+    /// depth × arity (2D) — the natural geometry of interaction nets where
+    /// nodes branch (tensor/par have 3 ports, bang has 2).
+    pub fn plasticColor(self: NodeKind, depth: u32, arity_slot: u8) u24 {
+        const base_hue: f32 = switch (self.toPolarity()) {
+            .pos => 240.0, // Blue
+            .null => 120.0, // Green
+            .neg => 0.0, // Red
+        };
+        // Plastic angle rotates across arity slots (branch dimension)
+        // Golden angle rotates across depth (nesting dimension)
+        const hue = @mod(
+            base_hue + @as(f32, @floatFromInt(depth)) * GOLDEN_ANGLE + @as(f32, @floatFromInt(arity_slot)) * PLASTIC_ANGLE,
+            360.0,
+        );
+        return hslToU24(hue, 0.6, 0.55);
+    }
+
+    fn toPolarity(self: NodeKind) Polarity {
+        return switch (self) {
+            .tensor, .axiom, .bang, .fill => .pos,
+            .wire, .hole, .dereliction => .null,
+            .par, .cut, .whynot, .contraction, .weakening => .neg,
         };
     }
 };
@@ -468,8 +539,10 @@ pub const ProofNet = struct {
         node.visited = true;
         token.bounces += 1;
 
-        // Color mixing: token picks up node color via XOR
-        token.color ^= node.color;
+        // Color mixing: plastic-angle rotation per bounce + arity slot.
+        // Replaces XOR (which is GF(2)) with GF(3)-aware hue rotation.
+        // Token accumulates: depth via golden angle, branching via plastic angle.
+        token.color = node.kind.plasticColor(token.bounces, token.position.port);
 
         switch (node.kind) {
             .axiom => {
@@ -700,15 +773,27 @@ pub const ProofNet = struct {
     }
 
     fn drandColor(seed: u64, index: u16) u24 {
-        // SplitMix64 expansion of drand seed → per-node color
-        const GOLDEN: u64 = 0x9e3779b97f4a7c15;
+        // SplitMix64 expansion of drand seed → deterministic nondeterministic hue.
+        // Uses plastic angle rotation so adjacent indices get maximally dispersed
+        // colors in the 2D (depth × arity) space of proof net nodes.
+        const GOLDEN_MULT: u64 = 0x9e3779b97f4a7c15;
         const MIX1: u64 = 0xbf58476d1ce4e5b9;
         const MIX2: u64 = 0x94d049bb133111eb;
-        var z = seed +% (GOLDEN *% @as(u64, index));
+        var z = seed +% (GOLDEN_MULT *% @as(u64, index));
         z = (z ^ (z >> 30)) *% MIX1;
         z = (z ^ (z >> 27)) *% MIX2;
         z = z ^ (z >> 31);
-        return @truncate(z & 0xFFFFFF);
+        // Extract trit from low bits, then plastic-rotate
+        const trit_val: i8 = @as(i8, @intCast(z % 3)) - 1; // {-1, 0, 1}
+        const base_hue: f32 = switch (trit_val) {
+            1 => 240.0,
+            0 => 120.0,
+            -1 => 0.0,
+            else => 120.0,
+        };
+        const hue = @mod(base_hue + @as(f32, @floatFromInt(index)) * PLASTIC_ANGLE, 360.0);
+        const lightness = 0.45 + 0.2 * @as(f32, @floatFromInt((z >> 8) & 0xFF)) / 255.0;
+        return hslToU24(hue, 0.65, lightness);
     }
 
     // ---- Queries ----

@@ -196,8 +196,8 @@ pub const FaultInjector = struct {
     pub fn init(allocator: Allocator, seed: u64) FaultInjector {
         return .{
             .allocator = allocator,
-            .active_faults = .{},
-            .history = .{},
+            .active_faults = .empty,
+            .history = .empty,
             .rng_state = splitmix64(seed),
             .seq = 0,
         };
@@ -453,7 +453,7 @@ pub const BidirectionalTracker = struct {
             .seed = seed,
             .forward_colors = std.AutoHashMap(TrackingKey, u32).init(allocator),
             .backward_colors = std.AutoHashMap(TrackingKey, u32).init(allocator),
-            .proof_log = .{},
+            .proof_log = .empty,
         };
     }
 

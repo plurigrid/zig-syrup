@@ -200,7 +200,7 @@ pub const SelfWalker = struct {
     pub fn init(allocator: Allocator, lat: f64, lng: f64, precision: u8, seed: u64) !Self {
         var walker = Self{
             .allocator = allocator,
-            .trail = .{},
+            .trail = .empty,
             .precision = if (precision < 2) 10 else precision,
             .seed = seed,
         };
@@ -280,7 +280,7 @@ pub const SelfWalker = struct {
 
         var walker = Self{
             .allocator = allocator,
-            .trail = .{},
+            .trail = .empty,
             .latitude = lat,
             .longitude = lng,
             .trit = trit_val,

@@ -8,6 +8,14 @@ const mem = std.mem;
 const fmt = std.fmt;
 const time = std.time;
 
+// 0.16 compat
+fn nanoTimestamp() i128 {
+    if (@hasDecl(std.time, "nanoTimestamp")) return @field(std.time, "nanoTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i128, @intCast(ts.sec)) * std.time.ns_per_s + @as(i128, @intCast(ts.nsec));
+}
+
 // ---------------------------------------------------------------------------
 // Platform detection (comptime)
 // ---------------------------------------------------------------------------
@@ -130,7 +138,7 @@ fn parseThermal(s: []const u8) ThermalPressure {
 fn parseMilliwatts(line: []const u8) ?f64 {
     // Find the colon
     const colon_pos = mem.indexOf(u8, line, ":") orelse return null;
-    var rest = mem.trimLeft(u8, line[colon_pos + 1 ..], " \t");
+    var rest = mem.trimStart(u8, line[colon_pos + 1 ..], " \t");
 
     // Parse the number (digits and '.')
     var end: usize = 0;
@@ -147,7 +155,7 @@ fn parseMilliwatts(line: []const u8) ?f64 {
     const val = std.fmt.parseFloat(f64, rest[0..end]) catch return null;
 
     // Check for "mW" suffix
-    rest = mem.trimLeft(u8, rest[end..], " \t");
+    rest = mem.trimStart(u8, rest[end..], " \t");
     if (mem.startsWith(u8, rest, "mW")) {
         return val / 1000.0; // mW -> W
     }
@@ -192,7 +200,7 @@ pub fn parsePowermetricsOutput(output: []const u8) ?PowerSample {
     if (package_power <= 0) package_power = cpu_power + gpu_power + ane_power;
 
     return .{
-        .timestamp_ns = time.nanoTimestamp(),
+        .timestamp_ns = nanoTimestamp(),
         .cpu_power_w = cpu_power,
         .gpu_power_w = gpu_power,
         .ane_power_w = ane_power,
@@ -245,9 +253,9 @@ pub fn runPowermetrics(allocator: std.mem.Allocator, interval_ms: u32) !?[]u8 {
 /// On Apple Silicon, attempts powermetrics; otherwise uses timing estimate.
 /// `ops_count` = number of logical operations the workload performs.
 pub fn measureEnergy(ops_count: u64, work_fn: *const fn () void) EnergyMeasurement {
-    const start = time.nanoTimestamp();
+    const start = nanoTimestamp();
     work_fn();
-    const end = time.nanoTimestamp();
+    const end = nanoTimestamp();
     const duration_ns: f64 = @floatFromInt(end - start);
     const duration_s = duration_ns / 1e9;
 
@@ -262,9 +270,9 @@ pub fn measureEnergyCtx(
     ops_count: u64,
     work_fn: *const fn (Ctx) void,
 ) EnergyMeasurement {
-    const start = time.nanoTimestamp();
+    const start = nanoTimestamp();
     work_fn(ctx);
-    const end = time.nanoTimestamp();
+    const end = nanoTimestamp();
     const duration_ns: f64 = @floatFromInt(end - start);
     const duration_s = duration_ns / 1e9;
     return EnergyMeasurement.estimated(duration_s, ops_count);
@@ -363,9 +371,9 @@ test "timing-based measurement" {
     const S = struct {
         fn work() void {
             // Burn ~1ms
-            const start = time.nanoTimestamp();
+            const start = nanoTimestamp();
             while (true) {
-                const now = time.nanoTimestamp();
+                const now = nanoTimestamp();
                 if (now - start > 1_000_000) break;
             }
         }
