@@ -47,7 +47,7 @@ When you are in a session, you can explicitly instruct Copilot to adopt one of t
 ## 4. Specific to This Repository (`zig-syrup`)
 
 We have now grounded `zig-syrup` in this synthesis:
-*   `HYPERREAL_COLOR_THEORY.md`: Explicitly cites Tao and Kontorovich.
+*   `docs/research/HYPERREAL_COLOR_THEORY.md`: Explicitly cites Tao and Kontorovich.
 *   `src/hyperreal.zig`: Implements the "Tao" lens (non-standard analysis).
 *   `src/retty.zig`: Implements the "Symmetric" lens (GF(3) balance).
 

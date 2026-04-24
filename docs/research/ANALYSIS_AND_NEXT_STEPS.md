@@ -44,4 +44,4 @@ You asked to compare "rendering quality and ultimate UX".
 *   `src/hyperreal.zig`: Core math (Tao).
 *   `src/zeta_widget.zig`: Core visualization (Kontorovich).
 *   `src/zoad.zig`: Integrated Desktop (Singh).
-*   `HYPERREAL_COLOR_THEORY.md`: Theoretical grounding.
+*   `docs/research/HYPERREAL_COLOR_THEORY.md`: Theoretical grounding.

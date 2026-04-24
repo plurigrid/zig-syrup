@@ -11,7 +11,7 @@ Successfully implemented referentially transparent colored parentheses visualiza
 ## Demo Output
 
 ```bash
-$ ./colored_demo
+$ zig run src/colored_parens_demo.zig
 
 === Colored Parentheses Demo ===
 
@@ -135,7 +135,7 @@ Editor/LSP queries the Zig binary's debug info → renders colored parens in rea
 
 - `src/lux_color.zig` (185 LOC) - Core color computation
 - `src/colored_parens_demo.zig` (205 LOC) - Demo renderer
-- `COLORED-PARENS-DEMO.md` (this file)
+- `docs/examples/COLORED-PARENS-DEMO.md` (this file)
 
 **Total**: ~400 LOC for full proof-of-concept.
 
@@ -152,7 +152,10 @@ All 27 tests passing:
 
 ## Visual Verification
 
-Run: `./colored_demo`
+Run the source demo directly with `zig run src/colored_parens_demo.zig`.
+
+The original root-level `colored_demo` prototype binary has been preserved under
+`.topos/artifacts/bin/colored_demo`.
 
 Expected: 4 nested parentheses pairs with visually distinct colors progressing via golden angle rotation.
 
