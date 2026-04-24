@@ -6,7 +6,6 @@
 ///!   2. Infrastructure:       California Ave Caltrain, Jerry Bowden Park
 ///!   3. Street grid:          High St / Oregon Ave intersection
 ///!   4. BLE mesh:             Find My Device network last-heard bearing
-
 const std = @import("std");
 
 // ── OLC encode (inlined) ───────────────────────────────────────────────────
@@ -46,7 +45,10 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lat_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = SEPARATOR; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = SEPARATOR;
+            idx += 1;
+        }
         if (digit >= length) break;
         var lng_digit = @as(usize, @intFromFloat(@floor(lng_val / res)));
         if (lng_digit >= CODE_ALPHABET.len) lng_digit = CODE_ALPHABET.len - 1;
@@ -54,13 +56,19 @@ fn encode(lat: f64, lng: f64, code_length: u8, buffer: []u8) !usize {
         buffer[idx] = CODE_ALPHABET[lng_digit];
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = SEPARATOR; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = SEPARATOR;
+            idx += 1;
+        }
     }
     while (digit < SEPARATOR_POSITION) {
         buffer[idx] = '0';
         idx += 1;
         digit += 1;
-        if (digit == SEPARATOR_POSITION) { buffer[idx] = SEPARATOR; idx += 1; }
+        if (digit == SEPARATOR_POSITION) {
+            buffer[idx] = SEPARATOR;
+            idx += 1;
+        }
     }
     if (length > PAIR_CODE_LENGTH) {
         const lat_res_base = pairRes(PAIR_CODE_LENGTH - 2);
@@ -113,7 +121,12 @@ fn codeTrit(code: []const u8) i8 {
     return @intCast(@as(i32, @intCast(@mod(sum, 3))) - 1);
 }
 fn tritSymbol(t: i8) u8 {
-    return switch (t) { -1 => '-', 0 => '0', 1 => '+', else => '?' };
+    return switch (t) {
+        -1 => '-',
+        0 => '0',
+        1 => '+',
+        else => '?',
+    };
 }
 
 // ── Haversine distance in meters ───────────────────────────────────────────
@@ -124,7 +137,7 @@ fn haversine(lat1: f64, lng1: f64, lat2: f64, lng2: f64) f64 {
     const dlng = (lng2 - lng1) * std.math.pi / 180.0;
     const a = std.math.sin(dlat / 2.0) * std.math.sin(dlat / 2.0) +
         std.math.cos(lat1 * std.math.pi / 180.0) * std.math.cos(lat2 * std.math.pi / 180.0) *
-        std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
+            std.math.sin(dlng / 2.0) * std.math.sin(dlng / 2.0);
     const c = 2.0 * std.math.atan2(std.math.sqrt(a), std.math.sqrt(1.0 - a));
     return R * c;
 }
@@ -163,14 +176,14 @@ const Landmark = struct {
 const landmarks = [_]Landmark{
     .{ .name = "CA Ave Caltrain Station", .lat = 37.4269, .lng = -122.1427, .kind = "transit" },
     .{ .name = "Jerry Bowden Park center", .lat = 37.4263, .lng = -122.1435, .kind = "park" },
-    .{ .name = "High St / Oregon Ave",    .lat = 37.4278, .lng = -122.1405, .kind = "intersection" },
-    .{ .name = "Oregon Expy overpass",     .lat = 37.4272, .lng = -122.1395, .kind = "road" },
-    .{ .name = "Park Blvd / Ash St",      .lat = 37.4253, .lng = -122.1400, .kind = "intersection" },
-    .{ .name = "Alma St / High St",       .lat = 37.4270, .lng = -122.1445, .kind = "intersection" },
+    .{ .name = "High St / Oregon Ave", .lat = 37.4278, .lng = -122.1405, .kind = "intersection" },
+    .{ .name = "Oregon Expy overpass", .lat = 37.4272, .lng = -122.1395, .kind = "road" },
+    .{ .name = "Park Blvd / Ash St", .lat = 37.4253, .lng = -122.1400, .kind = "intersection" },
+    .{ .name = "Alma St / High St", .lat = 37.4270, .lng = -122.1445, .kind = "intersection" },
     .{ .name = "El Camino Real (nearest)", .lat = 37.4275, .lng = -122.1370, .kind = "road" },
-    .{ .name = "2381 High St",            .lat = 37.4280, .lng = -122.1408, .kind = "address" },
-    .{ .name = "2331 High St",            .lat = 37.4285, .lng = -122.1412, .kind = "address" },
-    .{ .name = "151 Oregon Ave",          .lat = 37.4276, .lng = -122.1398, .kind = "address" },
+    .{ .name = "2381 High St", .lat = 37.4280, .lng = -122.1408, .kind = "address" },
+    .{ .name = "2331 High St", .lat = 37.4285, .lng = -122.1412, .kind = "address" },
+    .{ .name = "151 Oregon Ave", .lat = 37.4276, .lng = -122.1398, .kind = "address" },
 };
 
 // ── Triangulation point (signal source) ────────────────────────────────────
@@ -180,18 +193,18 @@ const Signal = struct {
     lat: f64,
     lng: f64,
     radius_m: f64, // estimated accuracy radius
-    weight: f64,   // confidence weight (0-1)
+    weight: f64, // confidence weight (0-1)
 };
 
 const signals = [_]Signal{
     // Primary: Google Find Hub GPS fix
-    .{ .name = "GPS (Find Hub pin)",      .lat = 37.4275, .lng = -122.1410, .radius_m = 65.0,  .weight = 0.7 },
+    .{ .name = "GPS (Find Hub pin)", .lat = 37.4275, .lng = -122.1410, .radius_m = 65.0, .weight = 0.7 },
     // Secondary: WiFi-based (typical for urban Palo Alto, ~30m accuracy)
-    .{ .name = "WiFi triangulation",      .lat = 37.4277, .lng = -122.1408, .radius_m = 30.0,  .weight = 0.5 },
+    .{ .name = "WiFi triangulation", .lat = 37.4277, .lng = -122.1408, .radius_m = 30.0, .weight = 0.5 },
     // Tertiary: Cell tower (nearest macro site, wider radius)
-    .{ .name = "Cell tower sector",       .lat = 37.4280, .lng = -122.1400, .radius_m = 150.0, .weight = 0.2 },
+    .{ .name = "Cell tower sector", .lat = 37.4280, .lng = -122.1400, .radius_m = 150.0, .weight = 0.2 },
     // BLE: Find My Device network (nearby Android devices heard the Pixel)
-    .{ .name = "BLE mesh (FMD network)",  .lat = 37.4276, .lng = -122.1406, .radius_m = 20.0,  .weight = 0.6 },
+    .{ .name = "BLE mesh (FMD network)", .lat = 37.4276, .lng = -122.1406, .radius_m = 20.0, .weight = 0.6 },
 };
 
 // ── Weighted centroid triangulation ────────────────────────────────────────
@@ -261,7 +274,7 @@ pub fn main() !void {
 
     p("\n── TRIANGULATED POSITION ───────────────────────────────────────────\n\n", .{});
     p("  Weighted centroid:  {d:.6}, {d:.6}\n", .{ result.lat, result.lng });
-    p("  Est. uncertainty:   {d:.1}m radius\n", .{ result.radius });
+    p("  Est. uncertainty:   {d:.1}m radius\n", .{result.radius});
 
     // Encode the triangulated position
     var buf: [20]u8 = undefined;
@@ -388,11 +401,7 @@ pub fn main() !void {
     var possible: u32 = 0;
     var extended: u32 = 0;
     for (tiles[0..tile_count]) |t| {
-        if (t.dist_m < 15) immediate += 1
-        else if (t.dist_m < 30) close += 1
-        else if (t.dist_m < 60) probable += 1
-        else if (t.dist_m < 100) possible += 1
-        else extended += 1;
+        if (t.dist_m < 15) immediate += 1 else if (t.dist_m < 30) close += 1 else if (t.dist_m < 60) probable += 1 else if (t.dist_m < 100) possible += 1 else extended += 1;
     }
 
     p("\n── CONFIDENCE ZONES ────────────────────────────────────────────────\n\n", .{});

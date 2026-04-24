@@ -1,5 +1,5 @@
 //! # Tileable Combinatorial Complex Substrate
-//! 
+//!
 //! Basic combinatorial complex infrastructure supporting arbitrary rank,
 //! incidence, and zero-copy slab addressing.
 
@@ -75,8 +75,12 @@ pub const CombinatorialComplex = struct {
         }
     }
 
-    inline fn slabOf(id: CellId) usize { return id / SLAB_SIZE; }
-    inline fn offsetOf(id: CellId) usize { return id % SLAB_SIZE; }
+    inline fn slabOf(id: CellId) usize {
+        return id / SLAB_SIZE;
+    }
+    inline fn offsetOf(id: CellId) usize {
+        return id % SLAB_SIZE;
+    }
 
     pub fn addVertex(self: *Self, trit_val: i8) !CellId {
         const id = self.next_id.fetchAdd(1, .monotonic);
@@ -93,8 +97,12 @@ pub const CombinatorialComplex = struct {
         return id;
     }
 
-    pub fn cellCount(self: *const Self) u32 { return self.next_id.load(.monotonic); }
-    pub fn isConserved(self: *const Self) bool { return @mod(self.trit_sum.load(.monotonic), 3) == 0; }
+    pub fn cellCount(self: *const Self) u32 {
+        return self.next_id.load(.monotonic);
+    }
+    pub fn isConserved(self: *const Self) bool {
+        return @mod(self.trit_sum.load(.monotonic), 3) == 0;
+    }
 };
 
 test "complex construction" {

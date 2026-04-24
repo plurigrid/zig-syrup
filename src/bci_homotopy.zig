@@ -21,19 +21,19 @@ const Allocator = std.mem.Allocator;
 // ============================================================================
 
 pub const BrainState = enum {
-    focused,    // High beta/gamma
-    excited,    // High beta/gamma
-    relaxed,    // High alpha
+    focused, // High beta/gamma
+    excited, // High beta/gamma
+    relaxed, // High alpha
     meditative, // High theta/alpha coherence
-    drowsy,     // High theta
-    stressed,   // High beta, low alpha
+    drowsy, // High theta
+    stressed, // High beta, low alpha
 
     /// Map brain state to GF(3) trit
     pub fn toTrit(self: BrainState) continuation.Trit {
         return switch (self) {
-            .focused, .excited => .plus,     // Creation/Action
-            .relaxed, .meditative => .zero,  // Ergodic/Flow
-            .drowsy, .stressed => .minus,    // Damping/Restriction
+            .focused, .excited => .plus, // Creation/Action
+            .relaxed, .meditative => .zero, // Ergodic/Flow
+            .drowsy, .stressed => .minus, // Damping/Restriction
         };
     }
 
@@ -66,7 +66,7 @@ pub const CognitiveModel = struct {
     beliefs: continuation.BeliefSet,
     current_trit: continuation.Trit,
     history: std.ArrayListUnmanaged(continuation.Trit),
-    
+
     pub fn init(allocator: Allocator) CognitiveModel {
         return .{
             .beliefs = continuation.BeliefSet.init(allocator),
@@ -83,20 +83,20 @@ pub const CognitiveModel = struct {
     /// Update model based on new classified state
     pub fn update(self: *CognitiveModel, state: BrainState, allocator: Allocator) !void {
         const new_trit = state.toTrit();
-        
+
         // 1. Update GF(3) History
         try self.history.append(allocator, new_trit);
 
         // 2. AGM Belief Revision
         // We maintain beliefs about the user's state
         const state_name = @tagName(state);
-        
+
         // If state changed, revise beliefs
         if (new_trit != self.current_trit) {
             // Contract old beliefs incompatible with new state
             // (Simplified: just assert new state)
             try self.beliefs.revise(.{ .proposition = state_name, .entrenchment = 1 });
-            
+
             // Derive implications (Example)
             if (state == .focused) {
                 try self.beliefs.expand(.{ .proposition = "high-cognitive-load" });
@@ -118,7 +118,7 @@ pub const StateTransition = struct {
     start: homotopy.Complex,
     target: homotopy.Complex,
     duration_sec: f64,
-    
+
     /// Map a trit to a location on the unit circle (roots of unity)
     /// Plus  -> 1 + 0i  (0 degrees)
     /// Zero  -> -0.5 + 0.866i (120 degrees)
@@ -135,7 +135,7 @@ pub const StateTransition = struct {
     pub fn generatePath(start_trit: continuation.Trit, end_trit: continuation.Trit, steps: usize, allocator: Allocator) ![]homotopy.Complex {
         const c_start = tritToComplex(start_trit);
         const c_end = tritToComplex(end_trit);
-        
+
         const path = try allocator.alloc(homotopy.Complex, steps);
         for (0..steps) |i| {
             const t = @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(steps - 1));
@@ -167,7 +167,7 @@ test "CognitiveModel updates history and beliefs" {
     try model.update(.focused, allocator);
     try std.testing.expectEqual(continuation.Trit.plus, model.current_trit);
     try std.testing.expectEqual(@as(usize, 1), model.history.items.len);
-    
+
     // Beliefs should contain "focused"
     try std.testing.expect(model.beliefs.entails("focused"));
     try std.testing.expect(model.beliefs.entails("high-cognitive-load"));
@@ -175,19 +175,18 @@ test "CognitiveModel updates history and beliefs" {
 
 test "Homotopy path generation" {
     const allocator = std.testing.allocator;
-    
+
     // Path from Zero to Plus
     const path = try StateTransition.generatePath(.zero, .plus, 5, allocator);
     defer allocator.free(path);
-    
+
     try std.testing.expectEqual(@as(usize, 5), path.len);
-    
+
     // Start should be Zero position (-0.5 + 0.866i)
     try std.testing.expectApproxEqAbs(@as(f64, -0.5), path[0].re, 0.001);
     try std.testing.expectApproxEqAbs(@as(f64, 0.866), path[0].im, 0.001);
-    
+
     // End should be Plus position (1.0 + 0.0i)
     try std.testing.expectApproxEqAbs(@as(f64, 1.0), path[4].re, 0.001);
     try std.testing.expectApproxEqAbs(@as(f64, 0.0), path[4].im, 0.001);
 }
-

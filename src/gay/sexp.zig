@@ -489,8 +489,8 @@ const RAINBOW_COLORS = [_][]const u8{
     "\x1b[38;5;196m", // red
     "\x1b[38;5;208m", // orange
     "\x1b[38;5;226m", // yellow
-    "\x1b[38;5;46m",  // green
-    "\x1b[38;5;21m",  // blue
+    "\x1b[38;5;46m", // green
+    "\x1b[38;5;21m", // blue
     "\x1b[38;5;129m", // purple
 };
 const RESET = "\x1b[0m";

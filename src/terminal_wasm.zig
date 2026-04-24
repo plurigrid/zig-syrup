@@ -52,12 +52,7 @@ export fn terminal_init(cols: u16, rows: u16) void {
 export fn terminal_put(x: u16, y: u16, cp: u32, fg: u32, bg: u32, attrs: u8) void {
     const fg_u24: u24 = @intCast(fg & 0xFFFFFF);
     const bg_u24: u24 = @intCast(bg & 0xFFFFFF);
-    grid.put(x, y, 
-        @intCast(cp & 0x1FFFFF), 
-        terminal.Color.rgb(@intCast((fg_u24 >> 16) & 0xFF), @intCast((fg_u24 >> 8) & 0xFF), @intCast(fg_u24 & 0xFF)), 
-        terminal.Color.rgb(@intCast((bg_u24 >> 16) & 0xFF), @intCast((bg_u24 >> 8) & 0xFF), @intCast(bg_u24 & 0xFF)), 
-        @bitCast(attrs)
-    );
+    grid.put(x, y, @intCast(cp & 0x1FFFFF), terminal.Color.rgb(@intCast((fg_u24 >> 16) & 0xFF), @intCast((fg_u24 >> 8) & 0xFF), @intCast(fg_u24 & 0xFF)), terminal.Color.rgb(@intCast((bg_u24 >> 16) & 0xFF), @intCast((bg_u24 >> 8) & 0xFF), @intCast(bg_u24 & 0xFF)), @bitCast(attrs));
 }
 
 /// Read cell codepoint at (x, y)
@@ -85,10 +80,7 @@ export fn terminal_write_str(ptr: u32, len: u32, fg: u32, bg: u32) void {
     const str: [*]const u8 = @ptrFromInt(ptr);
     const fg_u24: u24 = @intCast(fg & 0xFFFFFF);
     const bg_u24: u24 = @intCast(bg & 0xFFFFFF);
-    grid.writeString(str[0..len], 
-        terminal.Color.rgb(@intCast((fg_u24 >> 16) & 0xFF), @intCast((fg_u24 >> 8) & 0xFF), @intCast(fg_u24 & 0xFF)),
-        terminal.Color.rgb(@intCast((bg_u24 >> 16) & 0xFF), @intCast((bg_u24 >> 8) & 0xFF), @intCast(bg_u24 & 0xFF))
-    );
+    grid.writeString(str[0..len], terminal.Color.rgb(@intCast((fg_u24 >> 16) & 0xFF), @intCast((fg_u24 >> 8) & 0xFF), @intCast(fg_u24 & 0xFF)), terminal.Color.rgb(@intCast((bg_u24 >> 16) & 0xFF), @intCast((bg_u24 >> 8) & 0xFF), @intCast(bg_u24 & 0xFF)));
 }
 
 /// Resize the grid

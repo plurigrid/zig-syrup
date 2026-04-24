@@ -195,10 +195,8 @@ pub const WasmBuilder = struct {
         while (true) {
             const byte: u8 = @truncate(@as(u32, @bitCast(v)) & 0x7F);
             v >>= 7;
-            const more = !(
-                (v == 0 and (byte & 0x40) == 0) or
-                (v == -1 and (byte & 0x40) != 0)
-            );
+            const more = !((v == 0 and (byte & 0x40) == 0) or
+                (v == -1 and (byte & 0x40) != 0));
             if (more) {
                 try list.append(allocator, byte | 0x80);
             } else {

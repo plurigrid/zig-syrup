@@ -14,14 +14,28 @@ const syrup = @import("syrup");
 // Removed dependency on broken openbci_bridge.zig
 // const openbci = @import("openbci_bridge.zig");
 // Changed relative imports to use modules provided by build.zig
-const bci_homotopy = @import("bci_homotopy"); 
+const bci_homotopy = @import("bci_homotopy");
 const continuation = @import("continuation");
 const Allocator = std.mem.Allocator;
 
 /// EEG channel identifiers (OpenBCI Cyton/Daisy standard)
 pub const EEGChannel = enum(u8) {
-    ch1 = 0, ch2, ch3, ch4, ch5, ch6, ch7, ch8,
-    ch9, ch10, ch11, ch12, ch13, ch14, ch15, ch16,
+    ch1 = 0,
+    ch2,
+    ch3,
+    ch4,
+    ch5,
+    ch6,
+    ch7,
+    ch8,
+    ch9,
+    ch10,
+    ch11,
+    ch12,
+    ch13,
+    ch14,
+    ch15,
+    ch16,
     pub const COUNT = 16;
 };
 
@@ -42,18 +56,18 @@ pub const Neurofeedback = struct {
     target_relaxation: f32,
     tolerance: f32,
     reward_function: RewardFunction,
-    
+
     pub const RewardFunction = enum {
         linear,
         sigmoid,
         threshold,
     };
-    
+
     pub fn calculateReward(self: Neurofeedback, state: OpenBciState) f32 {
         const focus_diff = @abs(state.focus_level - self.target_focus);
         const relax_diff = @abs(state.relaxation_level - self.target_relaxation);
         const avg_diff = (focus_diff + relax_diff) / 2.0;
-        
+
         return switch (self.reward_function) {
             .linear => 1.0 - std.math.clamp(avg_diff, 0.0, 1.0),
             .sigmoid => 1.0 / (1.0 + @exp(-5.0 * ((1.0 - avg_diff) - 0.5))),
@@ -65,8 +79,8 @@ pub const Neurofeedback = struct {
 /// Aptos Consensus Role (GF(3) Trit)
 pub const ConsensusRole = enum(u8) {
     coordinator = 0, // 0: Relaxed/Meditative
-    validator = 1,   // -1: Drowsy/Stressed (Critical)
-    generator = 2,   // +1: Focused/Excited (Creative)
+    validator = 1, // -1: Drowsy/Stressed (Critical)
+    generator = 2, // +1: Focused/Excited (Creative)
 
     pub fn fromTrit(trit: continuation.Trit) ConsensusRole {
         return switch (trit) {
@@ -81,9 +95,9 @@ pub const ConsensusRole = enum(u8) {
 pub const BrainAction = struct {
     role: ConsensusRole,
     confidence: f32, // 0.0-1.0
-    reward: f32,     // Neurofeedback reward (0.0-1.0)
+    reward: f32, // Neurofeedback reward (0.0-1.0)
     timestamp: i64,
-    
+
     pub fn toSyrup(self: BrainAction, allocator: Allocator) !syrup.Value {
         var entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
         defer entries.deinit(allocator);
@@ -92,17 +106,17 @@ pub const BrainAction = struct {
             .key = syrup.Value.fromSymbol("role"),
             .value = syrup.Value.fromInteger(@intFromEnum(self.role)),
         });
-        
+
         try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("confidence"),
             .value = syrup.Value.fromFloat(self.confidence),
         });
-        
+
         try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("reward"),
             .value = syrup.Value.fromFloat(self.reward),
         });
-        
+
         try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("timestamp"),
             .value = syrup.Value.fromInteger(self.timestamp),
@@ -126,18 +140,15 @@ pub const BrainAction = struct {
         // Coordinator (0) -> 0
         // Validator (-1) -> 1
         const stake_type = @intFromEnum(self.role);
-        
+
         // Amount scales with confidence (e.g. 100 * confidence)
         const amount = @as(u64, @intFromFloat(self.confidence * 100.0));
-        
-        return std.fmt.allocPrint(allocator, 
-            "{{" ++
+
+        return std.fmt.allocPrint(allocator, "{{" ++
             "\"function\":\"0x1::pyusd_staking::stake\"," ++
             "\"type_arguments\":[]," ++
             "\"arguments\":[{d},{d}]" ++
-            "}}",
-            .{stake_type, amount}
-        );
+            "}}", .{ stake_type, amount });
     }
 };
 
@@ -146,7 +157,7 @@ pub const BciAptosBridge = struct {
     allocator: Allocator,
     cognitive_model: bci_homotopy.CognitiveModel,
     neurofeedback: ?Neurofeedback,
-    
+
     pub fn init(allocator: Allocator) BciAptosBridge {
         return .{
             .allocator = allocator,
@@ -154,7 +165,7 @@ pub const BciAptosBridge = struct {
             .neurofeedback = null,
         };
     }
-    
+
     pub fn deinit(self: *BciAptosBridge) void {
         self.cognitive_model.deinit(self.allocator);
     }
@@ -168,13 +179,13 @@ pub const BciAptosBridge = struct {
     pub fn processState(self: *BciAptosBridge, state: OpenBciState) !?BrainAction {
         // 1. Map OpenBCI state to Homotopy BrainState
         const homotopy_state = mapToHomotopyState(state);
-        
+
         // 2. Update Cognitive Model (Belief Revision)
         try self.cognitive_model.update(homotopy_state, self.allocator);
-        
+
         // 3. Determine Trit from Model
         const current_trit = self.cognitive_model.current_trit;
-        
+
         // 4. Calculate Confidence (magnitude of state)
         const confidence = switch (homotopy_state) {
             .focused => state.focus_level,
@@ -201,7 +212,7 @@ pub const BciAptosBridge = struct {
                 .timestamp = state.timestamp,
             };
         }
-        
+
         return null;
     }
 
@@ -211,7 +222,7 @@ pub const BciAptosBridge = struct {
         if (state.fatigue_level > 0.7) return .drowsy;
         if (state.focus_level > 0.7) return .focused;
         if (state.relaxation_level > 0.7) return .relaxed;
-        
+
         // Secondary checks
         if (state.focus_level > state.relaxation_level) return .excited;
         return .meditative; // Default to balanced/meditative
@@ -221,7 +232,7 @@ pub const BciAptosBridge = struct {
 test "process state generates action" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var bridge = BciAptosBridge.init(allocator);
     defer bridge.deinit();
 
@@ -235,7 +246,7 @@ test "process state generates action" {
         .band_powers = .{0} ** 5,
         .signal_quality = .{0} ** 16,
     };
-    
+
     const action = try bridge.processState(focus_state);
     try testing.expect(action != null);
     try testing.expectEqual(ConsensusRole.generator, action.?.role);
@@ -255,11 +266,11 @@ test "process state generates action" {
     const action2 = try bridge.processState(tired_state);
     try testing.expect(action2 != null);
     try testing.expectEqual(ConsensusRole.validator, action2.?.role);
-    
+
     // Verify payload generation
     const payload = try action2.?.toAptosPayload(allocator);
     defer allocator.free(payload);
-    
+
     // Expect Validator (1) and scaled amount
     try testing.expect(std.mem.indexOf(u8, payload, "\"arguments\":[1,") != null);
 }
@@ -267,7 +278,7 @@ test "process state generates action" {
 test "neurofeedback gates action" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var bridge = BciAptosBridge.init(allocator);
     defer bridge.deinit();
 
@@ -289,7 +300,7 @@ test "neurofeedback gates action" {
         .band_powers = .{0} ** 5,
         .signal_quality = .{0} ** 16,
     };
-    
+
     const action = try bridge.processState(focus_state);
     try testing.expect(action != null);
     try testing.expect(action.?.reward > 0.9); // High reward

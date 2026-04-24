@@ -283,7 +283,7 @@ fn haversineM(lat1: f64, lon1: f64, lat2: f64, lon2: f64) f64 {
     const dlon = (lon2 - lon1) * to_rad;
     const a = @sin(dlat / 2) * @sin(dlat / 2) +
         @cos(lat1 * to_rad) * @cos(lat2 * to_rad) *
-        @sin(dlon / 2) * @sin(dlon / 2);
+            @sin(dlon / 2) * @sin(dlon / 2);
     const c = 2 * std.math.atan2(@sqrt(a), @sqrt(1 - a));
     return R * c;
 }

@@ -207,7 +207,7 @@ pub const NotcursesBackend = struct {
         if (total == 0) return 0;
         return @as(f32, @floatFromInt(self.cells_written)) / @as(f32, @floatFromInt(total));
     }
-    
+
     /// Non-blocking input. Returns null if no event within timeout_ms.
     pub const InputEvent = struct {
         id: u32, // Unicode codepoint or special key

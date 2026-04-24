@@ -41,9 +41,9 @@ pub const DEFAULT_RECORD_DURATION: f64 = 1.0;
 
 /// 10-20 system channel labels for standard EEG montage
 pub const LABELS_10_20 = [_][]const u8{
-    "Fp1", "Fp2", "F7",  "F3",  "Fz",  "F4",  "F8",  "T3",
-    "C3",  "Cz",  "C4",  "T4",  "T5",  "P3",  "Pz",  "P4",
-    "T6",  "O1",  "Oz",  "O2",  "A1",  "A2",  "F9",  "F10",
+    "Fp1", "Fp2", "F7", "F3", "Fz", "F4", "F8", "T3",
+    "C3",  "Cz",  "C4", "T4", "T5", "P3", "Pz", "P4",
+    "T6",  "O1",  "Oz", "O2", "A1", "A2", "F9", "F10",
 };
 
 // ============================================================================
@@ -201,16 +201,16 @@ pub const EDFWriter = struct {
         try result.ensureTotalCapacity(allocator, hdr_size + data.len);
 
         // Write general header (256 bytes)
-        try appendFixedStr(&result, allocator, EDF_VERSION, 8);                    // version
-        try appendFixedStr(&result, allocator, &self.header.patient_info, 80);     // patient
-        try appendFixedStr(&result, allocator, &self.header.recording_info, 80);   // recording
-        try appendFixedStr(&result, allocator, &self.header.start_date, 8);        // date
-        try appendFixedStr(&result, allocator, &self.header.start_time, 8);        // time
-        try appendFixedInt(&result, allocator, @as(i64, @intCast(hdr_size)), 8);   // header bytes
-        try appendFixedStr(&result, allocator, "EDF+C" ++ "   " ** 11, 44);       // reserved (EDF+C)
-        try appendFixedInt(&result, allocator, self.n_records, 8);                 // n_records
-        try appendFixedFloat(&result, allocator, self.header.record_duration, 8);  // duration
-        try appendFixedInt(&result, allocator, self.header.n_channels, 4);         // n_channels
+        try appendFixedStr(&result, allocator, EDF_VERSION, 8); // version
+        try appendFixedStr(&result, allocator, &self.header.patient_info, 80); // patient
+        try appendFixedStr(&result, allocator, &self.header.recording_info, 80); // recording
+        try appendFixedStr(&result, allocator, &self.header.start_date, 8); // date
+        try appendFixedStr(&result, allocator, &self.header.start_time, 8); // time
+        try appendFixedInt(&result, allocator, @as(i64, @intCast(hdr_size)), 8); // header bytes
+        try appendFixedStr(&result, allocator, "EDF+C" ++ "   " ** 11, 44); // reserved (EDF+C)
+        try appendFixedInt(&result, allocator, self.n_records, 8); // n_records
+        try appendFixedFloat(&result, allocator, self.header.record_duration, 8); // duration
+        try appendFixedInt(&result, allocator, self.header.n_channels, 4); // n_channels
 
         const n_ch = self.header.n_channels;
 

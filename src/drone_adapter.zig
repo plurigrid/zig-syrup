@@ -40,7 +40,6 @@
 /// │ Bridge9FFI.backward_morphism input  │
 /// │ drone_state → phenomenal_state      │
 /// └─────────────────────────────────────┘
-
 const std = @import("std");
 const message_frame = @import("message_frame");
 
@@ -340,7 +339,12 @@ pub const MAVLinkController = struct {
         try self.sendCommandLong(
             @intFromEnum(MavCmd.arm_disarm),
             if (do_arm) 1.0 else 0.0,
-            0, 0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         );
     }
 
@@ -348,7 +352,13 @@ pub const MAVLinkController = struct {
     pub fn takeoff(self: *MAVLinkController, alt_m: f32) !void {
         try self.sendCommandLong(
             @intFromEnum(MavCmd.takeoff),
-            0, 0, 0, 0, 0, 0, alt_m,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            alt_m,
         );
     }
 
@@ -356,7 +366,13 @@ pub const MAVLinkController = struct {
     pub fn land(self: *MAVLinkController) !void {
         try self.sendCommandLong(
             @intFromEnum(MavCmd.land),
-            0, 0, 0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         );
     }
 
@@ -364,15 +380,26 @@ pub const MAVLinkController = struct {
     pub fn rtl(self: *MAVLinkController) !void {
         try self.sendCommandLong(
             @intFromEnum(MavCmd.return_to_launch),
-            0, 0, 0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         );
     }
 
     fn sendCommandLong(
         self: *MAVLinkController,
         command: u16,
-        p1: f32, p2: f32, p3: f32, p4: f32,
-        p5: f32, p6: f32, p7: f32,
+        p1: f32,
+        p2: f32,
+        p3: f32,
+        p4: f32,
+        p5: f32,
+        p6: f32,
+        p7: f32,
     ) !void {
         var payload: [33]u8 = undefined;
         @memset(&payload, 0);
@@ -410,10 +437,13 @@ pub const MAVLinkController = struct {
                 var state = self.last_state orelse DroneState{
                     .attitude = undefined,
                     .position = std.mem.zeroes(DronePosition),
-                    .airspeed = 0, .groundspeed = 0,
-                    .throttle = 0, .climb = 0,
+                    .airspeed = 0,
+                    .groundspeed = 0,
+                    .throttle = 0,
+                    .climb = 0,
                     .battery_remaining = -1,
-                    .armed = false, .mode = .stabilize,
+                    .armed = false,
+                    .mode = .stabilize,
                     .timestamp_us = 0,
                 };
 
@@ -505,8 +535,14 @@ pub fn extractDroneCommands(coord: LuxGeneralizedCoordinate) struct {
 
 /// Convert drone commands to RC PWM channels (1000-2000μs)
 pub fn commandsToRcPwm(
-    roll: f32, pitch: f32, yaw: f32, thrust: f32,
-    gimbal_pitch: f32, gimbal_yaw: f32, aux1: f32, aux2: f32,
+    roll: f32,
+    pitch: f32,
+    yaw: f32,
+    thrust: f32,
+    gimbal_pitch: f32,
+    gimbal_yaw: f32,
+    aux1: f32,
+    aux2: f32,
 ) [8]u16 {
     return [8]u16{
         angleToPwm(roll, -std.math.pi / 4.0, std.math.pi / 4.0),
@@ -550,7 +586,8 @@ pub fn droneStateToGeneralizedCoordinate(state: DroneState) LuxGeneralizedCoordi
             @floatCast(state.attitude.pitchspeed),
             @floatCast(state.attitude.yawspeed),
             @floatCast(state.climb),
-            0.0, 0.0,
+            0.0,
+            0.0,
             @as(f64, @floatFromInt(state.position.vz)) / 100.0,
             0.0,
         },
@@ -626,8 +663,14 @@ test "dimension extraction and PWM conversion" {
     try std.testing.expect(cmds.thrust < 0.7);
 
     const pwm = commandsToRcPwm(
-        cmds.roll, cmds.pitch, cmds.yaw, cmds.thrust,
-        cmds.gimbal_pitch, cmds.gimbal_yaw, cmds.aux1, cmds.aux2,
+        cmds.roll,
+        cmds.pitch,
+        cmds.yaw,
+        cmds.thrust,
+        cmds.gimbal_pitch,
+        cmds.gimbal_yaw,
+        cmds.aux1,
+        cmds.aux2,
     );
 
     // All PWM values should be in valid range

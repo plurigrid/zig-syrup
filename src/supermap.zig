@@ -582,10 +582,18 @@ pub const CyberPhysical = struct {
 
 /// Apply a channel to a phase cell. Returns output index (0..26).
 export fn supermap_channel_apply(
-    m00: i8, m01: i8, m02: i8,
-    m10: i8, m11: i8, m12: i8,
-    m20: i8, m21: i8, m22: i8,
-    freq: i8, phase: i8, amp: i8,
+    m00: i8,
+    m01: i8,
+    m02: i8,
+    m10: i8,
+    m11: i8,
+    m12: i8,
+    m20: i8,
+    m21: i8,
+    m22: i8,
+    freq: i8,
+    phase: i8,
+    amp: i8,
 ) callconv(.c) u8 {
     const ch = Channel{
         .matrix = .{
@@ -607,13 +615,19 @@ export fn supermap_channel_apply(
 /// Returns the output phase cell index when applied to the given input.
 export fn supermap_quantum_switch(
     // Channel 1 diagonal (simplified: only diagonal channels for C ABI)
-    c1_diag0: i8, c1_diag1: i8, c1_diag2: i8,
+    c1_diag0: i8,
+    c1_diag1: i8,
+    c1_diag2: i8,
     // Channel 2 diagonal
-    c2_diag0: i8, c2_diag1: i8, c2_diag2: i8,
+    c2_diag0: i8,
+    c2_diag1: i8,
+    c2_diag2: i8,
     // Control trit
     control: i8,
     // Input
-    freq: i8, phase: i8, amp: i8,
+    freq: i8,
+    phase: i8,
+    amp: i8,
 ) callconv(.c) u8 {
     const c1 = Channel{
         .matrix = .{

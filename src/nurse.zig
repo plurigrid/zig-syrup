@@ -61,11 +61,11 @@ pub const Cell = enum(u8) {
 };
 
 pub const Phase = enum(u8) {
-    crash = 0,     // hours 0-24
-    floor = 1,     // days 2-7
+    crash = 0, // hours 0-24
+    floor = 1, // days 2-7
     dysphoria = 2, // weeks 2-4
-    paws = 3,      // months 1-6
-    stable = 4,    // months 6+
+    paws = 3, // months 1-6
+    stable = 4, // months 6+
 
     pub fn fromDay(day: u16) Phase {
         if (day < 1) return .crash;
@@ -146,16 +146,16 @@ pub const SystemState = struct {
 
     fn defaultCartridges() [10]Cartridge {
         return .{
-            .{ .slot = 1,  .med_name = "clonidine",   .mg = 0.1,  .remaining = null },
-            .{ .slot = 2,  .med_name = "gabapentin",  .mg = 300,  .remaining = null },
-            .{ .slot = 3,  .med_name = "hydroxyzine", .mg = 25,   .remaining = null },
-            .{ .slot = 4,  .med_name = "magnesium",   .mg = 400,  .remaining = null },
-            .{ .slot = 5,  .med_name = "l-tyrosine",  .mg = 500,  .remaining = null },
-            .{ .slot = 6,  .med_name = "omega-3",     .mg = 1000, .remaining = null },
-            .{ .slot = 7,  .med_name = "b-complex",   .mg = 1,    .remaining = null },
-            .{ .slot = 8,  .med_name = "melatonin",   .mg = 3,    .remaining = null },
-            .{ .slot = 9,  .med_name = null,           .mg = 0,    .remaining = null },
-            .{ .slot = 10, .med_name = null,           .mg = 0,    .remaining = null },
+            .{ .slot = 1, .med_name = "clonidine", .mg = 0.1, .remaining = null },
+            .{ .slot = 2, .med_name = "gabapentin", .mg = 300, .remaining = null },
+            .{ .slot = 3, .med_name = "hydroxyzine", .mg = 25, .remaining = null },
+            .{ .slot = 4, .med_name = "magnesium", .mg = 400, .remaining = null },
+            .{ .slot = 5, .med_name = "l-tyrosine", .mg = 500, .remaining = null },
+            .{ .slot = 6, .med_name = "omega-3", .mg = 1000, .remaining = null },
+            .{ .slot = 7, .med_name = "b-complex", .mg = 1, .remaining = null },
+            .{ .slot = 8, .med_name = "melatonin", .mg = 3, .remaining = null },
+            .{ .slot = 9, .med_name = null, .mg = 0, .remaining = null },
+            .{ .slot = 10, .med_name = null, .mg = 0, .remaining = null },
         };
     }
 };
@@ -334,11 +334,10 @@ pub fn handleNurseState(allocator: std.mem.Allocator) !json.Value {
         \\hero: {s}
         \\intervene: {s}
     , .{
-        state.phase.name(), state.day,
-        cells_joined,
-        state.substances.vyvanse_mg, state.substances.adderall_mg,
-        state.substances.caffeine_mg, state.substances.nicotine_mg,
-        if (state.hero_connected) "connected" else "disconnected",
+        state.phase.name(),                           state.day,
+        cells_joined,                                 state.substances.vyvanse_mg,
+        state.substances.adderall_mg,                 state.substances.caffeine_mg,
+        state.substances.nicotine_mg,                 if (state.hero_connected) "connected" else "disconnected",
         if (state.shouldIntervene()) "YES" else "no",
     });
     return mcpResult(allocator, text);
@@ -433,11 +432,12 @@ pub fn handleNurseTrajectory(allocator: std.mem.Allocator, args: json.ObjectMap)
         else => {},
     };
 
-    const text = try std.fmt.allocPrint(allocator,
+    const text = try std.fmt.allocPrint(
+        allocator,
         "trajectory updated: day {d} ({s}) vyvanse={d:.0}mg adderall={d:.0}mg caffeine={d:.0}mg nicotine={d:.0}mg",
         .{
-            state.day, state.phase.name(),
-            state.substances.vyvanse_mg, state.substances.adderall_mg,
+            state.day,                    state.phase.name(),
+            state.substances.vyvanse_mg,  state.substances.adderall_mg,
             state.substances.caffeine_mg, state.substances.nicotine_mg,
         },
     );

@@ -5,7 +5,7 @@
 //!
 //! Inspired by:
 //! - notcurses damage tracking
-//! - egui immediate-mode repaint regions  
+//! - egui immediate-mode repaint regions
 //! - wezterm/ghostty cell diffing
 //! - tree-sitter incremental parsing edits
 //!

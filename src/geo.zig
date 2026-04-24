@@ -398,7 +398,7 @@ pub fn decodeOlc(code: []const u8) OlcError!CodeArea {
 
     var south_lat: f64 = 0.0;
     var west_lng: f64 = 0.0;
-    
+
     // Initial resolution: 20 degrees for first pair
     var lat_resolution: f64 = 20.0;
     var lng_resolution: f64 = 20.0;
@@ -413,11 +413,11 @@ pub fn decodeOlc(code: []const u8) OlcError!CodeArea {
             const lng_digit = std.mem.indexOfScalar(u8, CODE_ALPHABET, clean_code[i + 1]) orelse return error.InvalidCode;
             west_lng += @as(f64, @floatFromInt(lng_digit)) * lng_resolution;
         }
-        
+
         lat_resolution /= ENCODING_BASE;
         lng_resolution /= ENCODING_BASE;
     }
-    
+
     // After pair decoding, resolution is the cell size
     var lat_height = lat_resolution * ENCODING_BASE;
     var lng_width = lng_resolution * ENCODING_BASE;
@@ -624,11 +624,11 @@ pub fn coordToSyrup(lat: f64, lng: f64, allocator: Allocator) !Value {
 pub fn encodeToSyrup(lat: f64, lng: f64, code_length: u8, allocator: Allocator) !Value {
     var buffer: [16]u8 = undefined;
     const len = try encodeOlc(lat, lng, code_length, &buffer);
-    
+
     // Copy to allocated memory since buffer is stack
     const code_copy = try allocator.alloc(u8, len);
     @memcpy(code_copy, buffer[0..len]);
-    
+
     const payload_alloc = try allocator.alloc(Value, 1);
     payload_alloc[0] = Value.fromString(code_copy);
     return Value.fromTagged("geo:olc", &payload_alloc[0]);

@@ -78,8 +78,12 @@ pub const GaussianSplat = struct {
     pub fn toPoint(self: *const GaussianSplat) Point {
         const c = self.rgb();
         return .{
-            .x = self.x, .y = self.y, .z = self.z,
-            .r = c[0], .g = c[1], .b = c[2],
+            .x = self.x,
+            .y = self.y,
+            .z = self.z,
+            .r = c[0],
+            .g = c[1],
+            .b = c[2],
             .class = classifyByHeight(self.z),
         };
     }
@@ -96,9 +100,9 @@ pub const GaussianSplat = struct {
 
 /// Station trit assignment for placement zones
 pub const StationTrit = enum(i2) {
-    blue = -1,  // chair, afferent, sieve
-    horse = 0,  // screen, crossover, shimmer
-    red = 1,    // pegboard, efferent, cosieve
+    blue = -1, // chair, afferent, sieve
+    horse = 0, // screen, crossover, shimmer
+    red = 1, // pegboard, efferent, cosieve
 
     pub fn label(self: StationTrit) []const u8 {
         return switch (self) {
@@ -249,8 +253,12 @@ pub const PointCloud = struct {
             const b = std.fmt.parseInt(u8, parts.next() orelse "128", 10) catch 128;
 
             try self.points.append(.{
-                .x = x, .y = y, .z = z,
-                .r = r, .g = g, .b = b,
+                .x = x,
+                .y = y,
+                .z = z,
+                .r = r,
+                .g = g,
+                .b = b,
                 .class = classifyByHeight(z),
             });
         }

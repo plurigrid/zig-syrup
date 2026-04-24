@@ -134,7 +134,7 @@ pub const MerkleTree = struct {
     /// Generate inclusion proof for an entry
     pub fn getProof(self: Self, entry_index: usize) error{OutOfMemory}!?MerkleProof {
         if (entry_index >= self.leaves.items.len) return null;
-        
+
         var proof = std.ArrayList([32]u8).init(self.allocator);
         errdefer proof.deinit();
 
@@ -143,7 +143,7 @@ pub const MerkleTree = struct {
 
         while (level_size > 1) {
             const sibling_index = if (current_index % 2 == 0) current_index + 1 else current_index - 1;
-            
+
             if (sibling_index < level_size) {
                 // Find the sibling node at this level
                 const sibling_node = self.findNodeAtLevel(level_size, sibling_index);
@@ -279,7 +279,7 @@ pub const EventLog = struct {
     /// Verify log integrity
     pub fn verifyIntegrity(self: Self) bool {
         var prev_hash = [_]u8{0} ** 32;
-        
+
         for (self.entries.items) |entry| {
             // Verify chain link
             if (!std.mem.eql(u8, &entry.prev_hash, &prev_hash)) {
@@ -430,7 +430,7 @@ pub const FlatFileStorage = struct {
 
     pub fn open(self: *Self, world_id: u64) !void {
         if (self.file) |*f| f.close();
-        
+
         const filename = try std.fmt.allocPrint(self.allocator, "{s}/world_{d}.log", .{ self.base_path, world_id });
         defer self.allocator.free(filename);
 
@@ -442,20 +442,20 @@ pub const FlatFileStorage = struct {
 
     pub fn writeEntry(self: *Self, entry: LogEntry) !void {
         const f = self.file orelse return error.NotOpen;
-        
+
         // Simple binary format: type(1) + timestamp(8) + tick(8) + world_id(8) + data_len(4) + data + hash(32) + prev_hash(32)
         const data_len: u32 = @intCast(entry.data.len);
-        
+
         var buf: [1024]u8 = undefined;
         var stream = std.io.fixedBufferStream(&buf);
         const w = stream.writer();
-        
+
         try w.writeByte(@intFromEnum(entry.entry_type));
         try w.writeInt(i64, entry.timestamp, .little);
         try w.writeInt(u64, entry.tick, .little);
         try w.writeInt(u64, entry.world_id, .little);
         try w.writeInt(u32, data_len, .little);
-        
+
         const header_len = stream.pos;
         try f.writeAll(buf[0..header_len]);
         try f.writeAll(entry.data);
@@ -519,11 +519,11 @@ pub const EternalStorage = struct {
     /// Log world creation event
     pub fn logWorldCreated(self: *Self, w: world.World) !void {
         const log = try self.getLog(w.id);
-        
+
         // Serialize world creation data
         var buf: [256]u8 = undefined;
         const data = try std.fmt.bufPrint(&buf, "uri={s},seed={d}", .{ w.uri.raw_uri, w.config.random_seed });
-        
+
         try log.append(
             .world_created,
             std.time.milliTimestamp(),
@@ -536,12 +536,12 @@ pub const EternalStorage = struct {
     /// Log entity spawn
     pub fn logEntitySpawned(self: *Self, world_id: u64, tick: u64, e: world.Entity) !void {
         const log = try self.getLog(world_id);
-        
+
         var buf: [512]u8 = undefined;
         const data = try std.fmt.bufPrint(&buf, "id={d},pos={d:.2},{d:.2},{d:.2},mass={d:.2}", .{
             e.id, e.position[0], e.position[1], e.position[2], e.mass,
         });
-        
+
         try log.append(
             .entity_spawned,
             std.time.milliTimestamp(),
@@ -566,7 +566,7 @@ pub const EternalStorage = struct {
     /// Create checkpoint (snapshot)
     pub fn createCheckpoint(self: *Self, world_id: u64, snapshot: world.WorldSnapshot) !void {
         const log = try self.getLog(world_id);
-        
+
         // Serialize snapshot hash
         try log.append(
             .checkpoint,

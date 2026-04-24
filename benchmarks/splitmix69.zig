@@ -27,6 +27,14 @@
 //!   @ies/gay — Julia operator algebra (3-per-bifurcation)
 
 const std = @import("std");
+
+fn _nowNs() i128 {
+    const S = struct {
+        var t: ?std.time.Timer = null;
+    };
+    if (S.t == null) S.t = std.time.Timer.start() catch return 0;
+    return @intCast(S.t.?.read());
+}
 const splitmix_trit = @import("splitmix_trit");
 
 const SEED: u64 = 69;
@@ -108,11 +116,11 @@ fn benchSplitMix64() BenchResult {
 
     sm = splitmix_trit.SplitMix64.init(SEED);
     acc = 0;
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |_| {
         acc ^= sm.next();
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     volatile_sink = acc;
     return .{ .label = "SplitMix64 (Coordinator)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
@@ -122,11 +130,11 @@ fn benchChaCha() BenchResult {
     for (0..WARM_ITERS) |_| std.mem.doNotOptimizeAway(ch.next());
 
     ch = splitmix_trit.ChaCha.init(SEED);
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |_| {
         std.mem.doNotOptimizeAway(ch.next());
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     return .{ .label = "ChaCha8 (Validator)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
 
@@ -135,11 +143,11 @@ fn benchRybka() BenchResult {
     for (0..WARM_ITERS) |_| std.mem.doNotOptimizeAway(ry.next());
 
     ry = splitmix_trit.Rybka.init(SEED);
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |_| {
         std.mem.doNotOptimizeAway(ry.next());
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     return .{ .label = "Rybka (Generator)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
 
@@ -148,11 +156,11 @@ fn benchTriadicRGB() BenchResult {
     for (0..WARM_ITERS) |_| std.mem.doNotOptimizeAway(gen.next());
 
     gen = splitmix_trit.SplitMixRGB.init(SEED);
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |_| {
         std.mem.doNotOptimizeAway(gen.next());
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     return .{ .label = "SplitMixRGB (Triadic)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
 
@@ -161,17 +169,17 @@ fn benchTriadicTrit() BenchResult {
     for (0..WARM_ITERS) |_| std.mem.doNotOptimizeAway(gen.next());
 
     gen = splitmix_trit.SplitMixTrit.init(SEED);
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |_| {
         std.mem.doNotOptimizeAway(gen.next());
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     return .{ .label = "SplitMixTrit (GF3 Add)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
 
 fn benchSPIVerify() BenchResult {
     var acc: u64 = 0;
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |i| {
         const idx: u64 = @intCast(i);
         const forward = splitmix_trit.SplitMix64.at(SEED, idx);
@@ -179,7 +187,7 @@ fn benchSPIVerify() BenchResult {
         acc ^= forward ^ reverse;
         if (forward != reverse) unreachable;
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     volatile_sink = acc;
     return .{ .label = "SPI Verify (at*2)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
@@ -195,7 +203,7 @@ fn benchObserverEffect() BenchResult {
 
     const iters = BENCH_ITERS / SPI_CHECK_COUNT;
     var acc: u64 = 0;
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..iters) |_| {
         for (0..SPI_CHECK_COUNT) |i| {
             const random_access = splitmix_trit.SplitMix64.at(SEED, @intCast(i));
@@ -203,26 +211,26 @@ fn benchObserverEffect() BenchResult {
             if (random_access != forward_results[i]) unreachable;
         }
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     volatile_sink = acc;
     return .{ .label = "Observer Effect (fwd=rnd)", .total_ns = end - start, .iters = iters * SPI_CHECK_COUNT };
 }
 
 fn benchColorAtRandom() BenchResult {
     // Random-access color generation (the SPI-parallel path)
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |i| {
         const color = splitmix_trit.SplitMixRGB.colorAt(SEED, @intCast(i));
         std.mem.doNotOptimizeAway(color);
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     return .{ .label = "colorAt (SPI-parallel)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
 
 fn benchCIDE2000Overhead() BenchResult {
     // Import color_bandwidth if available, otherwise approximate
     // Measure perceptual distance calculation overhead
-    const start = std.time.nanoTimestamp();
+    const start = _nowNs();
     for (0..BENCH_ITERS) |i| {
         const c1 = splitmix_trit.SplitMixRGB.colorAt(SEED, @intCast(i));
         const c2 = splitmix_trit.SplitMixRGB.colorAt(SEED, @intCast(i + 1));
@@ -233,12 +241,12 @@ fn benchCIDE2000Overhead() BenchResult {
         const dist_sq = dr * dr + dg * dg + db * db;
         std.mem.doNotOptimizeAway(dist_sq);
     }
-    const end = std.time.nanoTimestamp();
+    const end = _nowNs();
     return .{ .label = "Perceptual dist (approx)", .total_ns = end - start, .iters = BENCH_ITERS };
 }
 
 fn writeAll(buf: []const u8) void {
-    _ = std.posix.write(std.posix.STDOUT_FILENO, buf) catch {};
+    std.debug.print("{s}", .{buf});
 }
 
 fn printBuf(comptime fmt: []const u8, args: anytype) void {

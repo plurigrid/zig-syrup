@@ -23,28 +23,28 @@ pub const MerkleNode = struct {
     hash: Hash,
     data: []const u8,
     children: []const Hash,
-    
+
     const Self = @This();
-    
+
     /// Compute Merkle hash of this node and its children
     pub fn computeMerkleHash(data: []const u8, children: []const Hash) Hash {
         var hasher = std.crypto.hash.Blake3.init(.{});
-        
+
         // Hash data length and data
         hasher.update(std.mem.asBytes(&@as(u64, @intCast(data.len))));
         hasher.update(data);
-        
+
         // Hash children count and child hashes
         hasher.update(std.mem.asBytes(&@as(u64, @intCast(children.len))));
         for (children) |child| {
             hasher.update(&child);
         }
-        
+
         var hash: Hash = undefined;
         hasher.final(&hash);
         return hash;
     }
-    
+
     /// Verify this node's hash is correct
     pub fn verify(self: Self) bool {
         const computed = computeMerkleHash(self.data, self.children);
@@ -110,10 +110,7 @@ pub const MerkleTree = struct {
             var i: usize = 0;
             while (i < current_level.items.len) : (i += 2) {
                 if (i + 1 < current_level.items.len) {
-                    const combined = combineHashes(
-                        current_level.items[i],
-                        current_level.items[i + 1]
-                    );
+                    const combined = combineHashes(current_level.items[i], current_level.items[i + 1]);
                     try parent_level.append(self.allocator, combined);
                 } else {
                     // Odd node out - promote to next level
@@ -123,13 +120,13 @@ pub const MerkleTree = struct {
 
             current_level = parent_level;
         }
-        
+
         try self.levels.append(self.allocator, current_level);
-        
+
         self.root = current_level.items[0];
         return self.root;
     }
-    
+
     /// Generate proof for a leaf at given index
     pub fn getProof(self: Self, leaf_index: usize) !MerkleProof {
         if (leaf_index >= self.leaves.items.len) return error.InvalidIndex;
@@ -153,7 +150,7 @@ pub const MerkleTree = struct {
 
         return proof;
     }
-    
+
     /// Get root hash
     pub fn getRoot(self: Self) Hash {
         return self.root;
@@ -175,14 +172,14 @@ pub const MerkleProof = struct {
     /// Verify proof against a root hash
     pub fn verify(self: MerkleProof, root: Hash) bool {
         var current = self.leaf_hash;
-        
+
         for (self.siblings.items, self.indices.items) |sibling, idx| {
             current = if (idx == 0)
                 combineHashes(current, sibling)
             else
                 combineHashes(sibling, current);
         }
-        
+
         return std.mem.eql(u8, &current, &root);
     }
 };
@@ -194,7 +191,7 @@ pub const MerkleProof = struct {
 /// Content Addressed Storage interface
 pub const CAS = struct {
     vtable: *const VTable,
-    
+
     pub const VTable = struct {
         put: *const fn (ctx: *anyopaque, data: []const u8) anyerror!Hash,
         get: *const fn (ctx: *anyopaque, hash: Hash) anyerror!?[]const u8,
@@ -203,27 +200,27 @@ pub const CAS = struct {
         ref: *const fn (ctx: *anyopaque, hash: Hash) anyerror!void,
         unref: *const fn (ctx: *anyopaque, hash: Hash) anyerror!void,
     };
-    
+
     pub fn put(self: CAS, data: []const u8) !Hash {
         return self.vtable.put(self, data);
     }
-    
+
     pub fn get(self: CAS, hash: Hash) !?[]const u8 {
         return self.vtable.get(self, hash);
     }
-    
+
     pub fn exists(self: CAS, hash: Hash) bool {
         return self.vtable.exists(self, hash);
     }
-    
+
     pub fn delete(self: CAS, hash: Hash) !void {
         return self.vtable.delete(self, hash);
     }
-    
+
     pub fn ref(self: CAS, hash: Hash) !void {
         return self.vtable.ref(self, hash);
     }
-    
+
     pub fn unref(self: CAS, hash: Hash) !void {
         return self.vtable.unref(self, hash);
     }
@@ -239,10 +236,10 @@ pub const MemoryStore = struct {
     data: std.HashMap(Hash, []const u8, format.HashContext, std.hash_map.default_max_load_percentage),
     refs: std.HashMap(Hash, usize, format.HashContext, std.hash_map.default_max_load_percentage),
     total_size: usize,
-    mutex: @import("compat").Mutex,
-    
+    mutex: std.Io.Mutex,
+
     const Self = @This();
-    
+
     pub fn init(allocator: Allocator) Self {
         return .{
             .allocator = allocator,
@@ -252,7 +249,7 @@ pub const MemoryStore = struct {
             .mutex = .{},
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         var it = self.data.valueIterator();
         while (it.next()) |data| {
@@ -261,84 +258,84 @@ pub const MemoryStore = struct {
         self.data.deinit();
         self.refs.deinit();
     }
-    
+
     pub fn put(self: *Self, data: []const u8) !Hash {
         const hash = computeHash(data);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Check if already exists
         if (self.data.contains(hash)) {
             return hash;
         }
-        
+
         // Store data
         const copy = try self.allocator.dupe(u8, data);
         errdefer self.allocator.free(copy);
-        
+
         try self.data.put(hash, copy);
         try self.refs.put(hash, 1);
-        
+
         self.total_size += data.len;
-        
+
         return hash;
     }
-    
+
     pub fn get(self: *Self, hash: Hash) !?[]const u8 {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         return self.data.get(hash);
     }
-    
+
     pub fn exists(self: *Self, hash: Hash) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         return self.data.contains(hash);
     }
-    
+
     pub fn ref(self: *Self, hash: Hash) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         const entry = self.refs.getEntry(hash) orelse return error.NotFound;
         entry.value_ptr.* += 1;
     }
-    
+
     pub fn unref(self: *Self, hash: Hash) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         const entry = self.refs.getEntry(hash) orelse return error.NotFound;
-        
+
         if (entry.value_ptr.* > 0) {
             entry.value_ptr.* -= 1;
         }
     }
-    
+
     pub fn delete(self: *Self, hash: Hash) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Only delete if no references
         const ref_count = self.refs.get(hash) orelse 0;
         if (ref_count > 0) return error.HasReferences;
-        
+
         if (self.data.fetchRemove(hash)) |kv| {
             self.total_size -= kv.value.len;
             self.allocator.free(kv.value);
         }
-        
+
         _ = self.refs.remove(hash);
     }
-    
+
     /// Garbage collect unreferenced objects
     pub fn gc(self: *Self) !usize {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         var to_remove = std.ArrayListUnmanaged(Hash){};
         defer to_remove.deinit(self.allocator);
 
@@ -348,7 +345,7 @@ pub const MemoryStore = struct {
                 try to_remove.append(self.allocator, entry.key_ptr.*);
             }
         }
-        
+
         var freed: usize = 0;
         for (to_remove.items) |hash| {
             if (self.data.fetchRemove(hash)) |kv| {
@@ -357,11 +354,11 @@ pub const MemoryStore = struct {
             }
             _ = self.refs.remove(hash);
         }
-        
+
         self.total_size -= freed;
         return freed;
     }
-    
+
     pub fn cas(_: *Self) CAS {
         return .{
             .vtable = &.{
@@ -416,16 +413,16 @@ pub const FileStore = struct {
     base_path: []const u8,
     index: std.HashMap(Hash, struct { offset: u64, size: u32 }, format.HashContext, std.hash_map.default_max_load_percentage),
     refs: std.HashMap(Hash, usize, format.HashContext, std.hash_map.default_max_load_percentage),
-    data_file: ?@import("compat").File,
-    mutex: @import("compat").Mutex,
-    
+    data_file: ?std.Io.File,
+    mutex: std.Io.Mutex,
+
     const Self = @This();
     const INDEX_MAGIC = "EWIG_IDX\x00\x01";
-    
+
     pub fn init(allocator: Allocator, base_path: []const u8) !Self {
         // Create directory
         try std.fs.cwd().makePath(base_path);
-        
+
         var self = Self{
             .allocator = allocator,
             .base_path = try allocator.dupe(u8, base_path),
@@ -434,22 +431,22 @@ pub const FileStore = struct {
             .data_file = null,
             .mutex = .{},
         };
-        
+
         // Open data file
         const data_path = try std.fs.path.join(allocator, &.{ base_path, "data.bin" });
         defer allocator.free(data_path);
-        
+
         self.data_file = try std.fs.cwd().createFile(data_path, .{
             .read = true,
             .truncate = false,
         });
-        
+
         // Load index
         try self.loadIndex();
-        
+
         return self;
     }
-    
+
     pub fn deinit(self: *Self) void {
         if (self.data_file) |*f| {
             f.close();
@@ -459,75 +456,75 @@ pub const FileStore = struct {
         self.index.deinit();
         self.refs.deinit();
     }
-    
+
     fn loadIndex(self: *Self) !void {
         const index_path = try std.fs.path.join(self.allocator, &.{ self.base_path, "index.bin" });
         defer self.allocator.free(index_path);
-        
+
         const file = std.fs.cwd().openFile(index_path, .{}) catch |err| switch (err) {
             error.FileNotFound => return,
             else => return err,
         };
         defer file.close();
-        
+
         var reader = file.reader();
-        
+
         // Check magic
         var magic: [10]u8 = undefined;
         reader.readNoEof(&magic) catch return;
         if (!std.mem.eql(u8, &magic, INDEX_MAGIC)) return error.InvalidIndex;
-        
+
         // Read entry count
         const count = reader.readInt(u64, .little) catch return;
-        
+
         // Read entries
         var i: u64 = 0;
         while (i < count) : (i += 1) {
             var hash: Hash = undefined;
             reader.readNoEof(&hash) catch break;
-            
+
             const offset = reader.readInt(u64, .little) catch break;
             const size = reader.readInt(u32, .little) catch break;
             const refcount = reader.readInt(u64, .little) catch break;
-            
+
             self.index.put(hash, .{ .offset = offset, .size = size }) catch break;
             self.refs.put(hash, refcount) catch break;
         }
     }
-    
+
     fn saveIndex(self: *Self) !void {
         const index_path = try std.fs.path.join(self.allocator, &.{ self.base_path, "index.bin" });
         defer self.allocator.free(index_path);
-        
+
         const file = try std.fs.cwd().createFile(index_path, .{});
         defer file.close();
-        
+
         var writer = file.writer();
-        
+
         // Write magic
         try writer.writeAll(INDEX_MAGIC);
-        
+
         // Write entry count
         try writer.writeInt(u64, self.index.count(), .little);
-        
+
         // Write entries
         var it = self.index.iterator();
         while (it.next()) |entry| {
             try writer.writeAll(&entry.key_ptr.*);
             try writer.writeInt(u64, entry.value_ptr.*.offset, .little);
             try writer.writeInt(u32, entry.value_ptr.*.size, .little);
-            
+
             const refcount = self.refs.get(entry.key_ptr.*) orelse 1;
             try writer.writeInt(u64, refcount, .little);
         }
     }
-    
+
     pub fn put(self: *Self, data: []const u8) !Hash {
         const hash = computeHash(data);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Check if already exists
         if (self.index.contains(hash)) {
             // Increment ref count
@@ -535,57 +532,57 @@ pub const FileStore = struct {
             entry.value_ptr.* += 1;
             return hash;
         }
-        
+
         const f = self.data_file.?;
-        
+
         // Seek to end
         const offset = try f.getEndPos();
         try f.seekFromEnd(0);
-        
+
         // Write size prefix and data
         var writer = f.writer();
         try writer.writeInt(u32, @intCast(data.len), .little);
         try writer.writeAll(data);
         try f.sync();
-        
+
         // Update index
         try self.index.put(hash, .{
             .offset = offset,
             .size = @intCast(data.len),
         });
         try self.refs.put(hash, 1);
-        
+
         // Save index periodically (every 100 writes)
         if (self.index.count() % 100 == 0) {
             self.mutex.unlock();
             defer self.mutex.lock();
             try self.saveIndex();
         }
-        
+
         return hash;
     }
-    
+
     pub fn get(self: *Self, hash: Hash) !?[]const u8 {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         const entry = self.index.get(hash) orelse return null;
-        
+
         const f = self.data_file.?;
-        
+
         // Seek to position
         try f.seekTo(entry.offset + 4); // Skip size prefix
-        
+
         // Read data
         const data = try self.allocator.alloc(u8, entry.size);
         errdefer self.allocator.free(data);
-        
+
         const read = try f.read(data);
         if (read != entry.size) return error.IncompleteRead;
-        
+
         return data;
     }
-    
+
     pub fn exists(self: *Self, hash: Hash) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -602,24 +599,24 @@ const testing = std.testing;
 test "merkle tree" {
     var tree = MerkleTree.init(testing.allocator);
     defer tree.deinit();
-    
+
     // Add some leaves
     try tree.addLeaf(computeHash("a"));
     try tree.addLeaf(computeHash("b"));
     try tree.addLeaf(computeHash("c"));
     try tree.addLeaf(computeHash("d"));
-    
+
     // Build tree
     const root = try tree.build();
-    
+
     // Root should not be zero
     const zero_hash = [_]u8{0} ** 32;
     try testing.expect(!std.mem.eql(u8, &root, &zero_hash));
-    
+
     // Get proof for leaf 0
     var proof = try tree.getProof(0);
     defer proof.deinit();
-    
+
     // Verify proof
     try testing.expect(proof.verify(root));
 }
@@ -627,19 +624,19 @@ test "merkle tree" {
 test "memory store deduplication" {
     var store = MemoryStore.init(testing.allocator);
     defer store.deinit();
-    
+
     const data = "test data";
-    
+
     // Put same data twice
     const hash1 = try store.put(data);
     const hash2 = try store.put(data);
-    
+
     // Should get same hash
     try testing.expect(std.mem.eql(u8, &hash1, &hash2));
-    
+
     // Should exist
     try testing.expect(store.exists(hash1));
-    
+
     // Should retrieve
     const retrieved = try store.get(hash1);
     try testing.expectEqualStrings(data, retrieved.?);
@@ -648,16 +645,16 @@ test "memory store deduplication" {
 test "memory store gc" {
     var store = MemoryStore.init(testing.allocator);
     defer store.deinit();
-    
+
     const hash = try store.put("test");
-    
+
     // Unref
     try store.unref(hash);
-    
+
     // GC
     const freed = try store.gc();
     try testing.expect(freed > 0);
-    
+
     // Should no longer exist
     try testing.expect(!store.exists(hash));
 }

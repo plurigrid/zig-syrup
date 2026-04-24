@@ -24,7 +24,7 @@
 //!
 //! The algebra: Algebra(2,0,1) -- 2D color space + 1 degenerate availability.
 //!   e0: R-channel axis (minus trit)
-//!   e1: G-channel axis (plus trit)  
+//!   e1: G-channel axis (plus trit)
 //!   e2: degenerate luminosity (zero trit, e2^2 = 0)
 //!
 //! This matches entangle.zig: sigma permutes (R,G,B) channels cyclically,

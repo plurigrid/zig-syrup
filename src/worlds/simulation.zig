@@ -12,10 +12,10 @@ const Random = std.Random;
 
 /// Simulation configuration
 pub const SimConfig = struct {
-    tick_rate_hz: u32,      // Fixed timestep
-    max_ticks: u64,         // Simulation limit
+    tick_rate_hz: u32, // Fixed timestep
+    max_ticks: u64, // Simulation limit
     random_seed: u64,
-    deterministic: bool,    // Strict determinism checks
+    deterministic: bool, // Strict determinism checks
 };
 
 /// A single tick in the simulation
@@ -24,7 +24,7 @@ pub const Tick = struct {
     timestamp: i64,
     actions: []const PlayerAction,
     state_hash: [32]u8,
-    
+
     pub const PlayerAction = struct {
         player_id: []const u8,
         action_type: []const u8,
@@ -35,25 +35,25 @@ pub const Tick = struct {
 /// Deterministic random number generator
 pub const DeterministicRng = struct {
     rng: Random.DefaultPrng,
-    
+
     pub fn init(seed: u64) DeterministicRng {
         return .{
             .rng = Random.DefaultPrng.init(seed),
         };
     }
-    
+
     pub fn random(self: *DeterministicRng) Random {
         return self.rng.random();
     }
-    
+
     pub fn int(self: *DeterministicRng, comptime T: type) T {
         return self.rng.random().int(T);
     }
-    
+
     pub fn float(self: *DeterministicRng, comptime T: type) T {
         return self.rng.random().float(T);
     }
-    
+
     /// Get current state for serialization
     pub fn getState(self: DeterministicRng) u64 {
         // Simplified - in real impl would expose internal state
@@ -71,11 +71,11 @@ pub const Simulation = struct {
     tick_history: ArrayList(Tick),
     started: bool,
     paused: bool,
-    
+
     // Statistics
     total_actions: u64,
     divergence_checks: u64,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         config: SimConfig,
@@ -96,7 +96,7 @@ pub const Simulation = struct {
         };
         return self;
     }
-    
+
     pub fn deinit(self: *Simulation) void {
         for (self.tick_history.items) |tick| {
             for (tick.actions) |action| {
@@ -109,63 +109,63 @@ pub const Simulation = struct {
         self.tick_history.deinit();
         self.allocator.destroy(self);
     }
-    
+
     /// Start the simulation
     pub fn start(self: *Simulation) void {
         self.started = true;
         self.paused = false;
     }
-    
+
     /// Pause simulation
     pub fn pause(self: *Simulation) void {
         self.paused = true;
     }
-    
+
     /// Resume simulation
-    pub fn resume(self: *Simulation) void {
+    pub fn doResume(self: *Simulation) void {
         self.paused = false;
     }
-    
+
     /// Run one tick
     pub fn tick(self: *Simulation) !void {
         if (!self.started or self.paused) return;
-        
+
         if (self.current_tick >= self.config.max_ticks) {
             return error.MaxTicksReached;
         }
-        
+
         const tick_start = std.time.milliTimestamp();
-        
+
         // Process any pending actions for this tick
         const actions = try self.getActionsForTick(self.current_tick);
-        
+
         // Apply actions to world
         for (actions) |action| {
             try self.applyAction(action);
         }
-        
+
         // Update world (deterministic)
         try self.updateWorld();
-        
+
         // Record tick
         const state_hash = try self.world.snapshot();
-        
+
         const tick_record = Tick{
             .number = self.current_tick,
             .timestamp = tick_start,
             .actions = actions,
             .state_hash = state_hash,
         };
-        
+
         try self.tick_history.append(tick_record);
-        
+
         self.current_tick += 1;
         self.total_actions += actions.len;
-        
+
         // Yield to allow other work (cooperative scheduling)
         std.time.sleep(1); // Minimal yield
     }
-    
+
     /// Run simulation to completion
     pub fn run(self: *Simulation) !void {
         self.start();
@@ -173,7 +173,7 @@ pub const Simulation = struct {
             try self.tick();
         }
     }
-    
+
     /// Run with multiplayer session
     pub fn runMultiplayer(
         self: *Simulation,
@@ -181,17 +181,17 @@ pub const Simulation = struct {
         duration_ticks: u64,
     ) !void {
         self.start();
-        
+
         const end_tick = self.current_tick + duration_ticks;
-        
+
         while (self.current_tick < end_tick) {
             // Process session actions
             try session.processActions();
             try session.synchronize();
-            
+
             // Run simulation tick
             try self.tick();
-            
+
             // Consistency check
             const check = session.checkConsistency();
             if (!check.consistent) {
@@ -200,65 +200,65 @@ pub const Simulation = struct {
             self.divergence_checks += 1;
         }
     }
-    
+
     fn getActionsForTick(self: *Simulation, tick_num: u64) ![]Tick.PlayerAction {
         // In real implementation, would poll action queue
         // For now, return empty
         _ = tick_num;
         return &[_]Tick.PlayerAction{};
     }
-    
+
     fn applyAction(self: *Simulation, action: Tick.PlayerAction) !void {
         // Apply action to world state
         // This would dispatch to appropriate handler based on action_type
         _ = self;
         _ = action;
     }
-    
+
     fn updateWorld(self: *Simulation) !void {
         // Deterministic world update
         // Uses self.rng for any randomness
         _ = self;
     }
-    
+
     /// Replay simulation from tick history
     pub fn replay(self: *Simulation) !void {
         // Reset to initial state
         self.current_tick = 0;
         self.rng = DeterministicRng.init(self.config.random_seed);
-        
+
         // Replay each tick
         for (self.tick_history.items) |tick| {
             // Verify state hash matches at each tick
             const current_hash = try self.world.snapshot();
-            
+
             if (!std.mem.eql(u8, &current_hash, &tick.state_hash)) {
                 return error.ReplayDivergence;
             }
-            
+
             // Apply actions
             for (tick.actions) |action| {
                 try self.applyAction(action);
             }
-            
+
             try self.updateWorld();
             self.current_tick += 1;
         }
     }
-    
+
     /// Replay from saved log file
     pub fn replayFromLog(self: *Simulation, log_path: []const u8) !void {
         const file = try std.fs.cwd().openFile(log_path, .{});
         defer file.close();
-        
+
         const content = try file.readToEndAlloc(self.allocator, 1024 * 1024 * 100);
         defer self.allocator.free(content);
-        
+
         // Parse and replay
         _ = self;
         _ = content;
     }
-    
+
     /// Verify two simulations are deterministic
     pub fn verifyDeterminism(
         allocator: std.mem.Allocator,
@@ -269,29 +269,29 @@ pub const Simulation = struct {
     ) !bool {
         var sim_a = try Simulation.init(allocator, config, world_a);
         defer sim_a.deinit();
-        
+
         var sim_b = try Simulation.init(allocator, config, world_b);
         defer sim_b.deinit();
-        
+
         // Run both simulations
         var i: u64 = 0;
         while (i < ticks) : (i += 1) {
             try sim_a.tick();
             try sim_b.tick();
-            
+
             // Compare state hashes
             const hash_a = try world_a.snapshot();
             const hash_b = try world_b.snapshot();
-            
+
             if (!std.mem.eql(u8, &hash_a, &hash_b)) {
                 std.log.warn("Divergence at tick {d}", .{i});
                 return false;
             }
         }
-        
+
         return true;
     }
-    
+
     /// Compare two simulations for differences
     pub fn compare(
         self: *Simulation,
@@ -299,13 +299,13 @@ pub const Simulation = struct {
     ) !ComparisonResult {
         var differences = ArrayList(TickDifference).init(self.allocator);
         errdefer differences.deinit();
-        
+
         const min_ticks = @min(self.tick_history.items.len, other.tick_history.items.len);
-        
+
         for (0..min_ticks) |i| {
             const tick_a = self.tick_history.items[i];
             const tick_b = other.tick_history.items[i];
-            
+
             if (!std.mem.eql(u8, &tick_a.state_hash, &tick_b.state_hash)) {
                 try differences.append(.{
                     .tick = i,
@@ -316,11 +316,11 @@ pub const Simulation = struct {
                 });
             }
         }
-        
+
         // Check length difference
-        const length_diff = @as(i64, @intCast(self.tick_history.items.len)) - 
+        const length_diff = @as(i64, @intCast(self.tick_history.items.len)) -
             @as(i64, @intCast(other.tick_history.items.len));
-        
+
         return .{
             .deterministic = differences.items.len == 0 and length_diff == 0,
             .total_ticks_a = self.tick_history.items.len,
@@ -328,7 +328,7 @@ pub const Simulation = struct {
             .differences = try differences.toOwnedSlice(),
         };
     }
-    
+
     /// Benchmark simulation performance
     pub fn benchmark(
         self: *Simulation,
@@ -336,15 +336,15 @@ pub const Simulation = struct {
     ) !BenchmarkResult {
         const start_time = std.time.milliTimestamp();
         const start_tick = self.current_tick;
-        
+
         var i: u64 = 0;
         while (i < ticks) : (i += 1) {
             try self.tick();
         }
-        
+
         const end_time = std.time.milliTimestamp();
         const duration_ms = end_time - start_time;
-        
+
         return .{
             .ticks = ticks,
             .duration_ms = duration_ms,
@@ -352,20 +352,20 @@ pub const Simulation = struct {
             .avg_tick_duration_ms = @as(f64, @floatFromInt(duration_ms)) / @as(f64, @floatFromInt(ticks)),
         };
     }
-    
+
     /// Export tick history to file
     pub fn exportHistory(self: *Simulation, path: []const u8) !void {
         const file = try std.fs.cwd().createFile(path, .{});
         defer file.close();
-        
+
         const writer = file.writer();
-        
+
         // Header
         try writer.print("# Simulation Replay Log\n", .{});
         try writer.print("# Seed: {d}\n", .{self.config.random_seed});
         try writer.print("# TickRate: {d}Hz\n", .{self.config.tick_rate_hz});
         try writer.print("# TotalTicks: {d}\n\n", .{self.tick_history.items.len});
-        
+
         // Ticks
         for (self.tick_history.items) |tick| {
             try writer.print("TICK {d} {x} {d}\n", .{
@@ -373,7 +373,7 @@ pub const Simulation = struct {
                 std.fmt.fmtSliceHexLower(&tick.state_hash),
                 tick.actions.len,
             });
-            
+
             for (tick.actions) |action| {
                 try writer.print("  ACTION {s} {s} {s}\n", .{
                     action.player_id,
@@ -383,7 +383,7 @@ pub const Simulation = struct {
             }
         }
     }
-    
+
     /// Get statistics
     pub fn getStats(self: *Simulation) SimStats {
         return .{
@@ -409,7 +409,7 @@ pub const ComparisonResult = struct {
     total_ticks_a: usize,
     total_ticks_b: usize,
     differences: []TickDifference,
-    
+
     pub fn deinit(self: *ComparisonResult, allocator: std.mem.Allocator) void {
         allocator.free(self.differences);
     }
@@ -434,40 +434,39 @@ pub const SimStats = struct {
 pub const StressTest = struct {
     allocator: std.mem.Allocator,
     config: SimConfig,
-    
+
     pub fn init(allocator: std.mem.Allocator, config: SimConfig) StressTest {
         return .{
             .allocator = allocator,
             .config = config,
         };
     }
-    
+
     /// Run stress test with random actions
     pub fn run(self: StressTest, duration_ticks: u64) !StressResult {
         const world = try World.create(self.allocator, "a://stress-test", null);
         defer world.destroy();
-        
+
         var sim = try Simulation.init(self.allocator, self.config, world);
         defer sim.deinit();
-        
+
         sim.start();
-        
+
         var rng = DeterministicRng.init(self.config.random_seed);
-        
+
         var i: u64 = 0;
         while (i < duration_ticks) : (i += 1) {
             // Inject random actions
             if (rng.int(u8) % 10 == 0) { // 10% chance per tick
                 // Create random action
-                _ = try sim.world.setParam("random_value", 
-                    .{ .Float = rng.float(f64) });
+                _ = try sim.world.setParam("random_value", .{ .Float = rng.float(f64) });
             }
-            
+
             try sim.tick();
         }
-        
+
         const stats = sim.getStats();
-        
+
         return .{
             .completed = true,
             .ticks = i,
@@ -490,49 +489,48 @@ pub const StressResult = struct {
 
 test "Simulation determinism" {
     const allocator = std.testing.allocator;
-    
+
     const config = SimConfig{
         .tick_rate_hz = 60,
         .max_ticks = 100,
         .random_seed = 12345,
         .deterministic = true,
     };
-    
+
     const world1 = try World.create(allocator, "a://test1", null);
     defer world1.destroy();
-    
+
     const world2 = try World.create(allocator, "a://test2", null);
     defer world2.destroy();
-    
+
     // Set same initial state
     _ = try world1.setParam("x", .{ .Int = 0 });
     _ = try world2.setParam("x", .{ .Int = 0 });
-    
-    const deterministic = try Simulation.verifyDeterminism(
-        allocator, config, world1, world2, 50);
-    
+
+    const deterministic = try Simulation.verifyDeterminism(allocator, config, world1, world2, 50);
+
     try std.testing.expect(deterministic);
 }
 
 test "Simulation replay" {
     const allocator = std.testing.allocator;
-    
+
     const config = SimConfig{
         .tick_rate_hz = 60,
         .max_ticks = 100,
         .random_seed = 12345,
         .deterministic = true,
     };
-    
+
     const world = try World.create(allocator, "a://replay-test", null);
     defer world.destroy();
-    
+
     var sim = try Simulation.init(allocator, config, world);
     defer sim.deinit();
-    
+
     // Run 10 ticks
     try sim.run();
-    
+
     // Replay should succeed (no divergence)
     try sim.replay();
 }

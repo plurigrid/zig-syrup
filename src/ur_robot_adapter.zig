@@ -41,7 +41,6 @@
 /// │ Bridge9FFI.backward_morphism input  │
 /// │ robot_state → phenomenal_state      │
 /// └─────────────────────────────────────┘
-
 const std = @import("std");
 const message_frame = @import("message_frame");
 const tcp_transport = @import("tcp_transport");
@@ -52,15 +51,15 @@ const syrup = @import("syrup");
 // ============================================================================
 
 pub const UR_MODEL = enum {
-    ur3,    // Payload: 3kg, Reach: 500mm
-    ur5,    // Payload: 5kg, Reach: 850mm
-    ur10,   // Payload: 10kg, Reach: 1300mm
+    ur3, // Payload: 3kg, Reach: 500mm
+    ur5, // Payload: 5kg, Reach: 850mm
+    ur10, // Payload: 10kg, Reach: 1300mm
 };
 
 pub const UR_ROBOT_CONFIG = struct {
     model: UR_MODEL,
     hostname: []const u8,
-    modbus_port: u16 = 502,  // Standard Modbus TCP port
+    modbus_port: u16 = 502, // Standard Modbus TCP port
     ros_enabled: bool = false,
     ros_master_uri: []const u8 = "http://localhost:11311",
 };
@@ -74,21 +73,21 @@ pub const UR_ROBOT_CONFIG = struct {
 /// + Gripper (parallel jaw, 0-110mm)
 /// Total: 8-DOF mapping from Bridge 9
 pub const JointLimits = struct {
-    shoulder_pan: f64 = 360.0,      // degrees, -180 to +180
-    shoulder_lift: f64 = 360.0,     // degrees, -90 to +90
-    elbow: f64 = 360.0,              // degrees, -180 to +180
-    wrist1: f64 = 360.0,             // degrees, -180 to +180
-    wrist2: f64 = 360.0,             // degrees, -180 to +180
-    wrist3: f64 = 360.0,             // degrees, -180 to +180
-    gripper_width: f64 = 110.0,      // mm
-    tool_frame_z: f64 = 200.0,       // mm (max height above base)
+    shoulder_pan: f64 = 360.0, // degrees, -180 to +180
+    shoulder_lift: f64 = 360.0, // degrees, -90 to +90
+    elbow: f64 = 360.0, // degrees, -180 to +180
+    wrist1: f64 = 360.0, // degrees, -180 to +180
+    wrist2: f64 = 360.0, // degrees, -180 to +180
+    wrist3: f64 = 360.0, // degrees, -180 to +180
+    gripper_width: f64 = 110.0, // mm
+    tool_frame_z: f64 = 200.0, // mm (max height above base)
 };
 
 pub const JointState = struct {
-    angles: [6]f64,           // radians
-    velocities: [6]f64,       // radians/sec
-    accelerations: [6]f64,    // radians/sec²
-    gripper_width: f64,       // mm
+    angles: [6]f64, // radians
+    velocities: [6]f64, // radians/sec
+    accelerations: [6]f64, // radians/sec²
+    gripper_width: f64, // mm
     timestamp_us: u64,
 };
 
@@ -97,11 +96,11 @@ pub const JointState = struct {
 // ============================================================================
 
 pub const ModbusFrame = struct {
-    transaction_id: u16,      // Transaction identifier (MBAP header)
-    protocol_id: u16 = 0,     // Protocol identifier (0 for Modbus)
-    length: u16,              // Length of following data
-    unit_id: u8,              // Unit identifier (slave ID)
-    function_code: u8,        // 0x03 (read), 0x10 (write)
+    transaction_id: u16, // Transaction identifier (MBAP header)
+    protocol_id: u16 = 0, // Protocol identifier (0 for Modbus)
+    length: u16, // Length of following data
+    unit_id: u8, // Unit identifier (slave ID)
+    function_code: u8, // 0x03 (read), 0x10 (write)
     payload: []u8,
 };
 
@@ -331,9 +330,9 @@ pub const URModbusController = struct {
 // ============================================================================
 
 pub const LuxGeneralizedCoordinate = struct {
-    q: [8]f64,        // 8-DOF vector
-    q_dot: [8]f64,    // Velocities
-    q_ddot: [8]f64,   // Accelerations
+    q: [8]f64, // 8-DOF vector
+    q_dot: [8]f64, // Velocities
+    q_ddot: [8]f64, // Accelerations
     timestamp_us: u64,
 };
 

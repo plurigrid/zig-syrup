@@ -11,7 +11,6 @@
 /// - metauni_bridge.py (SSE :7070 → HTTP :7071 pattern)
 /// - ghostty_web_server.zig (TCP accept loop pattern)
 /// - Zig std.net for HTTP/1.1 minimal server
-
 const std = @import("std");
 const ghostty_ix = @import("ghostty_ix");
 
@@ -44,16 +43,17 @@ pub const HttpResponse = struct {
             else => "Unknown",
         };
 
-        return std.fmt.allocPrint(allocator,
+        return std.fmt.allocPrint(
+            allocator,
             "HTTP/1.1 {d} {s}\r\n" ++
-            "Content-Type: {s}\r\n" ++
-            "Content-Length: {d}\r\n" ++
-            "Access-Control-Allow-Origin: http://localhost\r\n" ++
-            "Access-Control-Allow-Methods: GET, POST\r\n" ++
-            "X-Content-Type-Options: nosniff\r\n" ++
-            "Connection: close\r\n" ++
-            "\r\n" ++
-            "{s}",
+                "Content-Type: {s}\r\n" ++
+                "Content-Length: {d}\r\n" ++
+                "Access-Control-Allow-Origin: http://localhost\r\n" ++
+                "Access-Control-Allow-Methods: GET, POST\r\n" ++
+                "X-Content-Type-Options: nosniff\r\n" ++
+                "Connection: close\r\n" ++
+                "\r\n" ++
+                "{s}",
             .{ self.status, status_text, self.content_type, self.body.len, self.body },
         );
     }
@@ -145,7 +145,8 @@ pub const IxHttpServer = struct {
         const balance_sum = @as(i64, hist[2]) - @as(i64, hist[0]);
         const balanced = @mod(balance_sum, 3) == 0;
 
-        const body = std.fmt.allocPrint(self.allocator,
+        const body = std.fmt.allocPrint(
+            self.allocator,
             "{{\"mode\":\"{s}\",\"trit_histogram\":{{\"minus\":{d},\"ergodic\":{d},\"plus\":{d}}},\"total_commands\":{d},\"gf3_balanced\":{},\"last_trit\":{d}}}",
             .{ self.mode, hist[0], hist[1], hist[2], total, balanced, self.dispatcher.last_command_trit },
         ) catch return HttpResponse{ .status = 500, .content_type = "application/json", .body = "{\"error\":\"allocation failed\"}" };
@@ -206,7 +207,8 @@ pub const IxHttpServer = struct {
 
         const adj_str = adj_stream.getWritten();
 
-        const body = std.fmt.allocPrint(self.allocator,
+        const body = std.fmt.allocPrint(
+            self.allocator,
             "{{\"node_id\":{d},\"focus_level\":{d:.3},\"adjacent_ids\":{s}}}",
             .{ self.focus_node_id, self.focus_level, adj_str },
         ) catch return HttpResponse{ .status = 500, .content_type = "application/json", .body = "{\"error\":\"allocation failed\"}" };
@@ -265,7 +267,8 @@ pub const IxHttpServer = struct {
         };
 
         const result = self.dispatcher.execute(cmd) catch |err| {
-            const err_body = std.fmt.allocPrint(self.allocator,
+            const err_body = std.fmt.allocPrint(
+                self.allocator,
                 "{{\"success\":false,\"error\":\"{s}\"}}",
                 .{@errorName(err)},
             ) catch return HttpResponse{ .status = 500, .content_type = "application/json", .body = "{\"error\":\"execution failed\"}" };
@@ -278,7 +281,8 @@ pub const IxHttpServer = struct {
             };
         };
 
-        const resp_body = std.fmt.allocPrint(self.allocator,
+        const resp_body = std.fmt.allocPrint(
+            self.allocator,
             "{{\"success\":{},\"output\":\"{s}\",\"colors_updated\":{},\"spatial_changed\":{}}}",
             .{ result.success, result.output, result.colors_updated, result.spatial_changed },
         ) catch return HttpResponse{ .status = 500, .content_type = "application/json", .body = "{\"error\":\"allocation failed\"}" };

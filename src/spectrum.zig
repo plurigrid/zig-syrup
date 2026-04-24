@@ -378,7 +378,7 @@ pub fn renderTrit(writer: anytype, tc: TriadicColor) !void {
         if (tc.t3 < 0) '-' else if (tc.t3 > 0) '+' else '0',
     };
     try writer.print("\x1b[38;2;{};{};{}m[{c}{c}{c}]\x1b[0m", .{
-        rgb.r, rgb.g, rgb.b,
+        rgb.r,    rgb.g,    rgb.b,
         chars[0], chars[1], chars[2],
     });
 }

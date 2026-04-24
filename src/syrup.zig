@@ -93,7 +93,9 @@ const FixedBufWriter = struct {
     }
 
     pub fn print(self: *FixedBufWriter, comptime fmt: []const u8, args: anytype) Error!void {
-        std.fmt.format(self, fmt, args) catch return error.NoSpaceLeft;
+        var tmp: [4096]u8 = undefined;
+        const written = std.fmt.bufPrint(&tmp, fmt, args) catch return error.NoSpaceLeft;
+        try self.writeAll(written);
     }
 
     pub fn write(self: *FixedBufWriter, data: []const u8) Error!usize {
@@ -123,8 +125,8 @@ pub const BigInt = struct {
 
     fn compareMagnitudes(a: []const u8, b: []const u8) Order {
         // Strip leading zeros using std.mem.trimLeft
-        const a_trimmed = std.mem.trimLeft(u8, a, &.{0});
-        const b_trimmed = std.mem.trimLeft(u8, b, &.{0});
+        const a_trimmed = std.mem.trimStart(u8, a, &.{0});
+        const b_trimmed = std.mem.trimStart(u8, b, &.{0});
         const len_cmp = std.math.order(a_trimmed.len, b_trimmed.len);
         return if (len_cmp != .eq) len_cmp else std.mem.order(u8, a_trimmed, b_trimmed);
     }
@@ -191,18 +193,18 @@ pub const Value = union(enum) {
     };
 
     /// Tagged value per OCapN Model spec - pair of tag (string) and value
-pub const Tagged = struct {
-    tag: []const u8,
-    payload: *const Value,
-};
+    pub const Tagged = struct {
+        tag: []const u8,
+        payload: *const Value,
+    };
 
     /// Error type for CapTP error propagation
     /// Mirrors desc:error: <desc:error message identifier data>
-pub const Error = struct {
-    message: []const u8,
-    identifier: []const u8,
-    data: *const Value,
-};
+    pub const Error = struct {
+        message: []const u8,
+        identifier: []const u8,
+        data: *const Value,
+    };
 
     // ========================================================================
     // CONSTRUCTORS - Fluent builder methods
@@ -385,7 +387,7 @@ pub const Error = struct {
         // For strings/symbols/bytes: compare by wire format (length then content)
         return switch (self) {
             .undefined, .null => {
-                // These types are singleton-like in record-like context, 
+                // These types are singleton-like in record-like context,
                 // but handled here if they appear directly
                 // undefined < null
                 if (self == .undefined and other == .null) return .lt;
@@ -425,15 +427,15 @@ pub const Error = struct {
     fn compareLengthPrefixed(a: []const u8, b: []const u8) Order {
         // We must compare the serialized length strings (e.g. "9" vs "10")
         // "9" > "10" lexicographically, so len=9 > len=10 in wire format.
-        
+
         var a_buf: [32]u8 = undefined;
         var b_buf: [32]u8 = undefined;
         const a_str = std.fmt.bufPrint(&a_buf, "{}", .{a.len}) catch unreachable;
         const b_str = std.fmt.bufPrint(&b_buf, "{}", .{b.len}) catch unreachable;
-        
+
         const len_cmp = std.mem.order(u8, a_str, b_str);
         if (len_cmp != .eq) return len_cmp;
-        
+
         // Same length string implies same length value. Compare content.
         return std.mem.order(u8, a, b);
     }
@@ -1166,7 +1168,7 @@ pub const Parser = struct {
     ) ParseError![]Value {
         var items = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
         errdefer items.deinit(self.allocator);
-        
+
         var last_start: usize = 0;
         var last_end: usize = 0;
 
@@ -1206,7 +1208,7 @@ pub const Parser = struct {
         self.pos += 1;
         var entries = std.ArrayListUnmanaged(Value.DictEntry){ .items = &.{}, .capacity = 0 };
         errdefer entries.deinit(self.allocator);
-        
+
         var last_key_start: usize = 0;
         var last_key_end: usize = 0;
 

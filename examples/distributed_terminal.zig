@@ -56,12 +56,12 @@ pub fn main() !void {
     }
 
     const before = batch.dirtyCount(engine.generation);
-    std.debug.print("Dirty cells: {} / {}\n", .{before, batch.cells.len});
+    std.debug.print("Dirty cells: {} / {}\n", .{ before, batch.cells.len });
 
     // Process through transducer
     const filter_dirty = cell_dispatch.filterDirty();
     var processed: u32 = 0;
-    
+
     const cb = struct {
         var count: *u32 = undefined;
         fn callback(cell: Cell, ctx: TransducerContext) !void {

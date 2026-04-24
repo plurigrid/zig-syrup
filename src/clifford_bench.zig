@@ -127,35 +127,83 @@ fn runBench(comptime name: []const u8, comptime T: type, comptime f: fn () T) vo
 
 // --- Benchmark functions (all comptime-known, no closures) ---
 
-fn bench_dual_mul() Dual { return dual_a.mul(dual_b); }
-fn bench_dual_rev() Dual { return dual_a.reverse(); }
+fn bench_dual_mul() Dual {
+    return dual_a.mul(dual_b);
+}
+fn bench_dual_rev() Dual {
+    return dual_a.reverse();
+}
 
-fn bench_complex_mul() Complex { return complex_a.mul(complex_b); }
-fn bench_complex_inv() ?Complex { return complex_a.inverse(); }
+fn bench_complex_mul() Complex {
+    return complex_a.mul(complex_b);
+}
+fn bench_complex_inv() ?Complex {
+    return complex_a.inverse();
+}
 
-fn bench_quat_mul() Quat { return quat_a.mul(quat_b); }
-fn bench_quat_rev() Quat { return quat_a.reverse(); }
-fn bench_quat_conj() Quat { return quat_a.conjugate(); }
-fn bench_quat_norm() f64 { return quat_a.norm(); }
-fn bench_quat_inv() ?Quat { return quat_a.inverse(); }
+fn bench_quat_mul() Quat {
+    return quat_a.mul(quat_b);
+}
+fn bench_quat_rev() Quat {
+    return quat_a.reverse();
+}
+fn bench_quat_conj() Quat {
+    return quat_a.conjugate();
+}
+fn bench_quat_norm() f64 {
+    return quat_a.norm();
+}
+fn bench_quat_inv() ?Quat {
+    return quat_a.inverse();
+}
 
-fn bench_vga_mul() VGA { return vga_v1.mul(vga_v2); }
-fn bench_vga_wedge() VGA { return vga_v1.wedge(vga_v2); }
-fn bench_vga_lc() VGA { return vga_v1.leftContract(vga_v2); }
-fn bench_vga_rev() VGA { return vga_v1.reverse(); }
-fn bench_vga_sandwich() VGA { return vga_rotor.sandwich(vga_v1); }
-fn bench_vga_inv() ?VGA { return vga_v1.inverse(); }
-fn bench_vga_grade() VGA { return vga_v1.mul(vga_v2).grade(1); }
+fn bench_vga_mul() VGA {
+    return vga_v1.mul(vga_v2);
+}
+fn bench_vga_wedge() VGA {
+    return vga_v1.wedge(vga_v2);
+}
+fn bench_vga_lc() VGA {
+    return vga_v1.leftContract(vga_v2);
+}
+fn bench_vga_rev() VGA {
+    return vga_v1.reverse();
+}
+fn bench_vga_sandwich() VGA {
+    return vga_rotor.sandwich(vga_v1);
+}
+fn bench_vga_inv() ?VGA {
+    return vga_v1.inverse();
+}
+fn bench_vga_grade() VGA {
+    return vga_v1.mul(vga_v2).grade(1);
+}
 
-fn bench_pga_mul() PGA { return pga_p1.mul(pga_p2); }
-fn bench_pga_wedge() PGA { return pga_p1.wedge(pga_p2); }
-fn bench_pga_sandwich() PGA { return pga_p1.sandwich(pga_p2); }
-fn bench_pga_rev() PGA { return pga_p1.reverse(); }
+fn bench_pga_mul() PGA {
+    return pga_p1.mul(pga_p2);
+}
+fn bench_pga_wedge() PGA {
+    return pga_p1.wedge(pga_p2);
+}
+fn bench_pga_sandwich() PGA {
+    return pga_p1.sandwich(pga_p2);
+}
+fn bench_pga_rev() PGA {
+    return pga_p1.reverse();
+}
 
-fn bench_cga_mul() CGA { return cga_v1.mul(cga_v2); }
-fn bench_cga_wedge() CGA { return cga_v1.wedge(cga_v2); }
-fn bench_cga_rev() CGA { return cga_v1.reverse(); }
-fn bench_cga_sandwich() CGA { return cga_v1.sandwich(cga_v2); }
+fn bench_cga_mul() CGA {
+    return cga_v1.mul(cga_v2);
+}
+fn bench_cga_wedge() CGA {
+    return cga_v1.wedge(cga_v2);
+}
+fn bench_cga_rev() CGA {
+    return cga_v1.reverse();
+}
+fn bench_cga_sandwich() CGA {
+    return cga_v1.sandwich(cga_v2);
+}
 
 pub fn main() !void {
     std.debug.print("\n============================================================\n", .{});

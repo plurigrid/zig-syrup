@@ -160,7 +160,6 @@ pub const Virion = struct {
 
     /// Fitness score (higher = more likely to spread). Computed, not stored.
     /// fitness = cap_coverage × (1 / (1 + mutations)) × balance_bonus
-
     /// Lineage: CID hashes of ancestors (most recent first)
     lineage: [MAX_LINEAGE][32]u8 = std.mem.zeroes([MAX_LINEAGE][32]u8),
     lineage_depth: u8 = 0,

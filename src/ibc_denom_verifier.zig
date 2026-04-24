@@ -248,14 +248,14 @@ pub const ZombieDenomStatus = enum {
 };
 
 const noble_channels = [_][]const u8{
-    "channel-750",  // Noble → Osmosis
-    "channel-148",  // Noble → Cosmoshub
-    "channel-4",    // Noble → Neutron
-    "channel-68",   // Noble → Stride
-    "channel-34",   // Noble → Injective
-    "channel-85",   // Noble → Kujira
-    "channel-121",  // Noble → Sei
-    "channel-45",   // Noble → Stargaze
+    "channel-750", // Noble → Osmosis
+    "channel-148", // Noble → Cosmoshub
+    "channel-4", // Noble → Neutron
+    "channel-68", // Noble → Stride
+    "channel-34", // Noble → Injective
+    "channel-85", // Noble → Kujira
+    "channel-121", // Noble → Sei
+    "channel-45", // Noble → Stargaze
 };
 
 /// Check if a denom trace passes through Noble (maintenance mode after March 2026)

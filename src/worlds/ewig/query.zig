@@ -35,7 +35,7 @@ pub const Query = union(enum) {
     Diff: DiffQuery,
     /// Custom function
     Custom: CustomQuery,
-    
+
     pub fn deinit(self: *Query, allocator: Allocator) void {
         switch (self.*) {
             .Select => |*q| q.deinit(allocator),
@@ -53,7 +53,7 @@ pub const SelectQuery = struct {
     where: ?*Expr,
     order_by: ?[]const OrderClause,
     limit: ?usize,
-    
+
     pub fn deinit(self: *SelectQuery, allocator: Allocator) void {
         for (self.columns) |col| {
             allocator.free(col);
@@ -84,7 +84,7 @@ pub const AggregateQuery = struct {
     from: []const u8,
     where: ?*Expr,
     group_by: ?[]const []const u8,
-    
+
     pub fn deinit(self: *AggregateQuery, allocator: Allocator) void {
         allocator.free(self.column);
         allocator.free(self.from);
@@ -114,7 +114,7 @@ pub const TemporalQuery = struct {
     since: ?i64,
     until: ?i64,
     window: ?TemporalWindow,
-    
+
     pub fn deinit(self: *TemporalQuery, allocator: Allocator) void {
         self.query.deinit(allocator);
         allocator.destroy(self.query);
@@ -130,7 +130,7 @@ pub const DiffQuery = struct {
     world_uri: []const u8,
     t1: i64,
     t2: i64,
-    
+
     pub fn deinit(self: *DiffQuery, allocator: Allocator) void {
         allocator.free(self.world_uri);
     }
@@ -139,7 +139,7 @@ pub const DiffQuery = struct {
 pub const CustomQuery = struct {
     name: []const u8,
     args: []const Value,
-    
+
     pub fn deinit(self: *CustomQuery, allocator: Allocator) void {
         allocator.free(self.name);
         for (self.args) |arg| {
@@ -164,7 +164,7 @@ pub const Expr = union(enum) {
     Literal: Value,
     Column: []const u8,
     Function: FunctionExpr,
-    
+
     pub fn deinit(self: *Expr, allocator: Allocator) void {
         switch (self.*) {
             .Binary => |*b| b.deinit(allocator),
@@ -174,7 +174,7 @@ pub const Expr = union(enum) {
             .Function => |*f| f.deinit(allocator),
         }
     }
-    
+
     /// Evaluate expression against an event
     pub fn evaluate(self: Expr, event: Event) bool {
         return switch (self) {
@@ -227,7 +227,7 @@ pub const Expr = union(enum) {
             .Function => return false, // Not implemented
         };
     }
-    
+
     /// Get value from expression
     fn getValue(self: Expr, event: Event) Value {
         switch (self) {
@@ -255,7 +255,7 @@ pub const BinaryExpr = struct {
     op: BinaryOp,
     left: *Expr,
     right: *Expr,
-    
+
     pub fn deinit(self: *BinaryExpr, allocator: Allocator) void {
         self.left.deinit(allocator);
         allocator.destroy(self.left);
@@ -278,7 +278,7 @@ pub const BinaryOp = enum {
 pub const UnaryExpr = struct {
     op: UnaryOp,
     operand: *Expr,
-    
+
     pub fn deinit(self: *UnaryExpr, allocator: Allocator) void {
         self.operand.deinit(allocator);
         allocator.destroy(self.operand);
@@ -292,7 +292,7 @@ pub const UnaryOp = enum {
 pub const FunctionExpr = struct {
     name: []const u8,
     args: []*Expr,
-    
+
     pub fn deinit(self: *FunctionExpr, allocator: Allocator) void {
         allocator.free(self.name);
         for (self.args) |arg| {
@@ -312,7 +312,7 @@ pub const Value = union(enum) {
     Float: f64,
     String: []const u8,
     Bytes: []const u8,
-    
+
     pub fn deinit(self: *Value, allocator: Allocator) void {
         switch (self.*) {
             .String => |s| allocator.free(s),
@@ -320,7 +320,7 @@ pub const Value = union(enum) {
             else => {},
         }
     }
-    
+
     pub fn eql(self: Value, other: Value) bool {
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) {
             return false;
@@ -335,7 +335,7 @@ pub const Value = union(enum) {
             .Bytes => |a| std.mem.eql(u8, a, other.Bytes),
         };
     }
-    
+
     pub fn compare(self: Value, other: Value) std.math.Order {
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) {
             return .eq; // Different types can't be compared
@@ -359,13 +359,13 @@ pub const Value = union(enum) {
 /// Executes queries against event logs
 pub const QueryExecutor = struct {
     allocator: Allocator,
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: Allocator) Self {
         return .{ .allocator = allocator };
     }
-    
+
     /// Execute a query
     pub fn execute(self: Self, query: Query, event_log: *EventLog) !QueryResult {
         switch (query) {
@@ -376,11 +376,11 @@ pub const QueryExecutor = struct {
             .Custom => |c| return self.executeCustom(c, event_log),
         }
     }
-    
+
     fn executeSelect(self: Self, query: SelectQuery, event_log: *EventLog) !QueryResult {
         var results = std.ArrayListUnmanaged(Event){};
         errdefer results.deinit(self.allocator);
-        
+
         // Filter events
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
@@ -388,18 +388,18 @@ pub const QueryExecutor = struct {
                 try results.append(self.allocator, event);
             }
         }
-        
+
         // Apply ordering
         if (query.order_by) |ob| {
             self.sortEvents(results.items, ob);
         }
-        
+
         // Apply limit
         const limited = if (query.limit) |l|
             results.items[0..@min(l, results.items.len)]
         else
             results.items;
-        
+
         return QueryResult{
             .events = try results.toOwnedSlice(self.allocator),
             .count = limited.len,
@@ -407,29 +407,29 @@ pub const QueryExecutor = struct {
             .allocator = self.allocator,
         };
     }
-    
+
     fn executeAggregate(self: Self, query: AggregateQuery, event_log: *EventLog) !QueryResult {
         // Filter events
         var events = std.ArrayListUnmanaged(Event){};
         defer events.deinit(self.allocator);
-        
+
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
             if (self.matchesWhere(event, query.where)) {
                 try events.append(self.allocator, event);
             }
         }
-        
+
         // Compute aggregate
         const value = self.computeAggregate(query.function, events.items, query.column);
-        
+
         var aggregates = try self.allocator.alloc(AggregateValue, 1);
         aggregates[0] = .{
             .function = query.function,
             .column = try self.allocator.dupe(u8, query.column),
             .value = value,
         };
-        
+
         return QueryResult{
             .events = &.{},
             .count = events.items.len,
@@ -437,12 +437,12 @@ pub const QueryExecutor = struct {
             .allocator = self.allocator,
         };
     }
-    
+
     fn executeTemporal(self: Self, query: TemporalQuery, event_log: *EventLog) !QueryResult {
         // Apply time filter
         var filtered = std.ArrayListUnmanaged(Event){};
         defer filtered.deinit(self.allocator);
-        
+
         var it = log.EventIterator.init(event_log, .Forward);
         while (it.next()) |event| {
             if (query.since) |since| {
@@ -453,10 +453,10 @@ pub const QueryExecutor = struct {
             }
             try filtered.append(self.allocator, event);
         }
-        
+
         // Execute inner query on filtered events
         // Simplified: just return filtered events
-        
+
         return QueryResult{
             .events = try filtered.toOwnedSlice(self.allocator),
             .count = filtered.items.len,
@@ -464,21 +464,21 @@ pub const QueryExecutor = struct {
             .allocator = self.allocator,
         };
     }
-    
+
     fn executeDiff(self: Self, query: DiffQuery) !QueryResult {
         _ = self;
         _ = query;
         // Would compute state diff between t1 and t2
         return error.NotImplemented;
     }
-    
+
     fn executeCustom(self: Self, query: CustomQuery, event_log: *EventLog) !QueryResult {
         _ = self;
         _ = query;
         _ = event_log;
         return error.NotImplemented;
     }
-    
+
     fn matchesWhere(self: Self, event: Event, where: ?*Expr) bool {
         _ = self;
         if (where) |w| {
@@ -486,13 +486,13 @@ pub const QueryExecutor = struct {
         }
         return true;
     }
-    
+
     fn sortEvents(self: Self, events: []Event, order_by: []const OrderClause) void {
         _ = self;
         if (order_by.len == 0) return;
-        
+
         const primary = order_by[0];
-        
+
         std.sort.insertion(Event, events, primary, struct {
             fn lessThan(ob: OrderClause, a: Event, b: Event) bool {
                 const cmp = compareByColumn(a, b, ob.column);
@@ -500,7 +500,7 @@ pub const QueryExecutor = struct {
             }
         }.lessThan);
     }
-    
+
     fn computeAggregate(
         self: Self,
         func: AggregateFunction,
@@ -509,7 +509,7 @@ pub const QueryExecutor = struct {
     ) Value {
         _ = self;
         _ = column;
-        
+
         switch (func) {
             .Count => return .{ .Uint = @intCast(events.len) },
             .First => return if (events.len > 0) .{ .Uint = events[0].seq } else .{ .Null = {} },
@@ -539,7 +539,7 @@ pub const QueryResult = struct {
     count: usize,
     aggregates: ?[]AggregateValue,
     allocator: Allocator,
-    
+
     pub fn deinit(self: *QueryResult) void {
         self.allocator.free(self.events);
         if (self.aggregates) |aggs| {
@@ -549,17 +549,17 @@ pub const QueryResult = struct {
             self.allocator.free(aggs);
         }
     }
-    
+
     /// Convert to JSON
     pub fn toJson(self: QueryResult, allocator: Allocator) ![]u8 {
         var output = std.ArrayListUnmanaged(u8){};
         defer output.deinit(allocator);
-        
+
         const writer = output.writer(allocator);
-        
+
         try writer.writeAll("{\n");
         try writer.print("  \"count\": {d},\n", .{self.count});
-        
+
         // Write events
         try writer.writeAll("  \"events\": [\n");
         for (self.events, 0..) |event, i| {
@@ -572,7 +572,7 @@ pub const QueryResult = struct {
             try writer.writeAll("    }");
         }
         try writer.writeAll("\n  ]");
-        
+
         // Write aggregates
         if (self.aggregates) |aggs| {
             try writer.writeAll(",\n  \"aggregates\": [\n");
@@ -587,9 +587,9 @@ pub const QueryResult = struct {
             }
             try writer.writeAll("\n  ]");
         }
-        
+
         try writer.writeAll("\n}");
-        
+
         return output.toOwnedSlice(allocator);
     }
 };
@@ -627,9 +627,9 @@ pub const QueryParser = struct {
     allocator: Allocator,
     input: []const u8,
     pos: usize,
-    
+
     const Self = @This();
-    
+
     pub fn init(allocator: Allocator, input: []const u8) Self {
         return .{
             .allocator = allocator,
@@ -637,11 +637,11 @@ pub const QueryParser = struct {
             .pos = 0,
         };
     }
-    
+
     /// Parse a query string
     pub fn parse(self: *Self) !Query {
         self.skipWhitespace();
-        
+
         if (self.matchKeyword("SELECT")) {
             return self.parseSelect();
         } else if (self.matchKeyword("COUNT")) {
@@ -651,10 +651,10 @@ pub const QueryParser = struct {
         } else if (self.matchKeyword("DIFF")) {
             return self.parseDiff();
         }
-        
+
         return error.InvalidQuery;
     }
-    
+
     fn parseSelect(self: *Self) !Query {
         // Simplified parser
         var columns = std.ArrayListUnmanaged([]const u8){};
@@ -677,17 +677,17 @@ pub const QueryParser = struct {
         // Parse FROM
         self.skipWhitespace();
         if (!self.matchKeyword("FROM")) return error.ExpectedFrom;
-        
+
         self.skipWhitespace();
         const from = try self.parseIdentifier();
-        
+
         // Parse optional WHERE
         var where: ?*Expr = null;
         self.skipWhitespace();
         if (self.matchKeyword("WHERE")) {
             where = try self.parseWhere();
         }
-        
+
         return Query{
             .Select = .{
                 .columns = try columns.toOwnedSlice(self.allocator),
@@ -698,34 +698,34 @@ pub const QueryParser = struct {
             },
         };
     }
-    
+
     fn parseAggregate(self: *Self, func: AggregateFunction) !Query {
         _ = self;
         _ = func;
         return error.NotImplemented;
     }
-    
+
     fn parseTemporal(self: *Self) !Query {
         _ = self;
         return error.NotImplemented;
     }
-    
+
     fn parseDiff(self: *Self) !Query {
         _ = self;
         return error.NotImplemented;
     }
-    
+
     fn parseWhere(self: *Self) !*Expr {
         const expr = try self.allocator.create(Expr);
         errdefer self.allocator.destroy(expr);
-        
+
         self.skipWhitespace();
-        
+
         // Parse simple condition: column = value
         const column = try self.parseIdentifier();
-        
+
         self.skipWhitespace();
-        
+
         var op: BinaryOp = .Eq;
         if (self.match("=")) {
             op = .Eq;
@@ -734,20 +734,20 @@ pub const QueryParser = struct {
         } else {
             return error.ExpectedOperator;
         }
-        
+
         self.skipWhitespace();
-        
+
         // Parse value
         const value = try self.parseValue();
-        
+
         // Create column expression
         const col_expr = try self.allocator.create(Expr);
         col_expr.* = .{ .Column = column };
-        
+
         // Create value expression
         const val_expr = try self.allocator.create(Expr);
         val_expr.* = .{ .Literal = value };
-        
+
         // Create binary expression
         const bin = try self.allocator.create(BinaryExpr);
         bin.* = .{
@@ -755,78 +755,79 @@ pub const QueryParser = struct {
             .left = col_expr,
             .right = val_expr,
         };
-        
+
         expr.* = .{ .Binary = bin.* };
         self.allocator.destroy(bin);
 
         return expr;
     }
-    
+
     fn parseIdentifier(self: *Self) ![]const u8 {
         self.skipWhitespace();
-        
+
         const start = self.pos;
-        while (self.pos < self.input.len and 
-               (std.ascii.isAlphanumeric(self.input[self.pos]) or 
+        while (self.pos < self.input.len and
+            (std.ascii.isAlphanumeric(self.input[self.pos]) or
                 self.input[self.pos] == '_' or
-                self.input[self.pos] == ':')) {
+                self.input[self.pos] == ':'))
+        {
             self.pos += 1;
         }
-        
+
         if (self.pos == start) return error.ExpectedIdentifier;
-        
+
         return try self.allocator.dupe(u8, self.input[start..self.pos]);
     }
-    
+
     fn parseValue(self: *Self) !Value {
         self.skipWhitespace();
-        
+
         if (self.pos >= self.input.len) return error.ExpectedValue;
-        
+
         // String literal
         if (self.input[self.pos] == '\'' or self.input[self.pos] == '"') {
             const quote = self.input[self.pos];
             self.pos += 1;
-            
+
             const start = self.pos;
             while (self.pos < self.input.len and self.input[self.pos] != quote) {
                 self.pos += 1;
             }
-            
+
             const str = self.input[start..self.pos];
             if (self.pos < self.input.len) self.pos += 1; // Skip closing quote
-            
+
             return .{ .String = try self.allocator.dupe(u8, str) };
         }
-        
+
         // Number
         if (std.ascii.isDigit(self.input[self.pos]) or self.input[self.pos] == '-') {
             const start = self.pos;
             if (self.input[self.pos] == '-') self.pos += 1;
-            
+
             while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
                 self.pos += 1;
             }
-            
+
             const num = try std.fmt.parseInt(i64, self.input[start..self.pos], 10);
             return .{ .Int = num };
         }
-        
+
         return error.InvalidValue;
     }
-    
+
     fn skipWhitespace(self: *Self) void {
         while (self.pos < self.input.len and std.ascii.isWhitespace(self.input[self.pos])) {
             self.pos += 1;
         }
     }
-    
+
     fn matchKeyword(self: *Self, keyword: []const u8) bool {
         self.skipWhitespace();
-        
+
         if (self.pos + keyword.len > self.input.len) return false;
-        
-        const slice = self.input[self.pos..self.pos + keyword.len];
+
+        const slice = self.input[self.pos .. self.pos + keyword.len];
         if (std.ascii.eqlIgnoreCase(slice, keyword)) {
             // Make sure it's a complete word
             const end = self.pos + keyword.len;
@@ -835,20 +836,20 @@ pub const QueryParser = struct {
                 return true;
             }
         }
-        
+
         return false;
     }
-    
+
     fn match(self: *Self, s: []const u8) bool {
         self.skipWhitespace();
-        
+
         if (self.pos + s.len > self.input.len) return false;
-        
-        if (std.mem.eql(u8, self.input[self.pos..self.pos + s.len], s)) {
+
+        if (std.mem.eql(u8, self.input[self.pos .. self.pos + s.len], s)) {
             self.pos += s.len;
             return true;
         }
-        
+
         return false;
     }
 };
@@ -869,11 +870,11 @@ test "expression evaluation" {
         .type = .PlayerAction,
         .payload = "{}",
     };
-    
+
     // Test column expression
     const col_expr = Expr{ .Column = try testing.allocator.dupe(u8, "seq") };
     defer testing.allocator.free(col_expr.Column);
-    
+
     const val = col_expr.getValue(event);
     try testing.expectEqual(@as(u64, 42), val.Uint);
 }
@@ -881,28 +882,28 @@ test "expression evaluation" {
 test "query executor select" {
     var events = try EventLog.initInMemory(testing.allocator);
     defer events.deinit();
-    
+
     _ = try events.append(.WorldCreated, "a://world", "{}");
     _ = try events.append(.PlayerAction, "a://world", "{\"action\":\"jump\"}");
     _ = try events.append(.StateChanged, "a://world", "{\"x\":1}");
     _ = try events.append(.PlayerAction, "a://world", "{\"action\":\"run\"}");
-    
+
     const executor = QueryExecutor.init(testing.allocator);
-    
+
     // Create simple query: SELECT * FROM events WHERE type = 'PlayerAction'
     const col_val = try testing.allocator.create(Expr);
     col_val.* = .{ .Column = try testing.allocator.dupe(u8, "type") };
-    
+
     const str_val = try testing.allocator.create(Expr);
     str_val.* = .{ .Literal = .{ .String = try testing.allocator.dupe(u8, "PlayerAction") } };
-    
+
     const bin = try testing.allocator.create(BinaryExpr);
     bin.* = .{
         .op = .Eq,
         .left = col_val,
         .right = str_val,
     };
-    
+
     const where_expr = try testing.allocator.create(Expr);
     where_expr.* = .{ .Binary = bin.* };
     testing.allocator.destroy(bin);
@@ -920,26 +921,26 @@ test "query executor select" {
         },
     };
     defer query.deinit(testing.allocator);
-    
+
     var result = try executor.execute(query, &events);
     defer result.deinit();
-    
+
     try testing.expectEqual(@as(usize, 2), result.count);
 }
 
 test "query parser" {
     var parser = QueryParser.init(testing.allocator, "SELECT * FROM events WHERE type = 'PlayerAction'");
-    
+
     var query = try parser.parse();
     defer query.deinit(testing.allocator);
-    
+
     try testing.expectEqual(@as(std.meta.Tag(Query), .Select), std.meta.activeTag(query));
 }
 
 test "query result to json" {
     const events = try testing.allocator.alloc(Event, 2);
     defer testing.allocator.free(events);
-    
+
     events[0] = .{
         .timestamp = 1000,
         .seq = 1,
@@ -949,7 +950,7 @@ test "query result to json" {
         .type = .WorldCreated,
         .payload = "{}",
     };
-    
+
     events[1] = .{
         .timestamp = 2000,
         .seq = 2,
@@ -959,17 +960,17 @@ test "query result to json" {
         .type = .StateChanged,
         .payload = "{}",
     };
-    
+
     var result = QueryResult{
         .events = events,
         .count = 2,
         .aggregates = null,
         .allocator = testing.allocator,
     };
-    
+
     const json = try result.toJson(testing.allocator);
     defer testing.allocator.free(json);
-    
+
     try testing.expect(json.len > 0);
     try testing.expect(std.mem.containsAtLeast(u8, json, 1, "count"));
 }

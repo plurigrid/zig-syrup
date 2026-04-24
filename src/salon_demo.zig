@@ -9,7 +9,6 @@
 ///!   zig-out/bin/salon simulate
 ///!   echo '{"A":[0.1,0.2,0.3,0.7,0.5],"B":[0.3,0.3,0.8,0.2,0.1],"C":[0.5,0.9,0.4,0.1,0.05]}' | zig-out/bin/salon pipe
 ///!   echo '...' | zig-out/bin/salon snapshot
-
 const std = @import("std");
 const compat = @import("compat.zig");
 const salon = @import("salon.zig");
@@ -258,11 +257,9 @@ fn renderChairStatus(w: anytype, grid: *const Grid) !void {
         const st = chair.state;
         const band = chair.bands.dominant();
         try w.print("  \x1b[48;2;{d};{d};{d}m  \x1b[0m {s}  phi={d:.2} val={d:.2} ent={d:.2} trit={d: >2} dom={s}\n", .{
-            c.r,        c.g,        c.b,
-            chair.role.label(),
-            st.phi,     st.valence, st.entropy,
-            @as(i8, st.trit),
-            band,
+            c.r,                c.g,              c.b,
+            chair.role.label(), st.phi,           st.valence,
+            st.entropy,         @as(i8, st.trit), band,
         });
     }
 }

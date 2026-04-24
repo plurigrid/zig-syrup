@@ -14,7 +14,6 @@
 /// - Constraint-based state merging via propagator lattice
 /// - Focus propagation with adjacency halo visualization
 /// - Deterministic color assignment via SplitMix64 hash
-
 const std = @import("std");
 const ghostty_ix = @import("ghostty_ix");
 const spatial_propagator = @import("spatial_propagator");
@@ -157,7 +156,8 @@ pub const SpatialExecutor = struct {
         // dominant_trit: GF(3) assignment (-1, 0, +1)
 
         var output_buf: [512]u8 = undefined;
-        const output = try std.fmt.bufPrint(&output_buf,
+        const output = try std.fmt.bufPrint(
+            &output_buf,
             "BCI colors: phi={d:.2}, valence={d:.2}, fisher={d:.2}, trit={}",
             .{
                 bci.phi,

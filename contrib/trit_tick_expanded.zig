@@ -79,15 +79,15 @@ pub const EXPANDED_PER_FLICK: u64 = 72_893_895_360;
 // ============================================================================
 
 // Core primes (from original trit-tick, upgraded)
-pub const PRIME_2_EXP: u5 = 15;  // was 9: BioSemi 16384, CorTec 32768
-pub const PRIME_3_EXP: u5 = 3;   // was 2: 540 Hz monitor
-pub const PRIME_5_EXP: u5 = 6;   // was 4: 1 MHz ultrasound
-pub const PRIME_7_EXP: u5 = 2;   // unchanged: 44100 family
+pub const PRIME_2_EXP: u5 = 15; // was 9: BioSemi 16384, CorTec 32768
+pub const PRIME_3_EXP: u5 = 3; // was 2: 540 Hz monitor
+pub const PRIME_5_EXP: u5 = 6; // was 4: 1 MHz ultrasound
+pub const PRIME_7_EXP: u5 = 2; // unchanged: 44100 family
 
 // Device primes (new in expansion)
-pub const PRIME_11_EXP: u5 = 1;  // 165 Hz gaming monitor
-pub const PRIME_13_EXP: u5 = 1;  // 13 Hz fNIRS, 130 Hz DBS
-pub const PRIME_37_EXP: u5 = 1;  // 185 Hz DBS
+pub const PRIME_11_EXP: u5 = 1; // 165 Hz gaming monitor
+pub const PRIME_13_EXP: u5 = 1; // 13 Hz fNIRS, 130 Hz DBS
+pub const PRIME_37_EXP: u5 = 1; // 185 Hz DBS
 pub const PRIME_113_EXP: u5 = 1; // 4D/BTi MEG 1017 Hz
 pub const PRIME_127_EXP: u5 = 1; // 4D/BTi MEG 508 Hz
 
@@ -318,7 +318,7 @@ pub const Duration = struct {
 /// NTSC rates are p/1001. The expanded quantum handles them exactly because
 /// 1001 = 7 × 11 × 13, and 7², 11, 13 are all factors of TICKS_PER_SECOND.
 pub const NtscRate = struct {
-    numerator: u64,   // e.g. 30000
+    numerator: u64, // e.g. 30000
     denominator: u64, // always 1001
 
     pub fn ticksPerFrame(self: NtscRate) u128 {
@@ -327,9 +327,9 @@ pub const NtscRate = struct {
     }
 };
 
-pub const NTSC_24 = NtscRate{ .numerator = 24000, .denominator = 1001 };  // 23.976 fps
-pub const NTSC_30 = NtscRate{ .numerator = 30000, .denominator = 1001 };  // 29.97 fps
-pub const NTSC_60 = NtscRate{ .numerator = 60000, .denominator = 1001 };  // 59.94 fps
+pub const NTSC_24 = NtscRate{ .numerator = 24000, .denominator = 1001 }; // 23.976 fps
+pub const NTSC_30 = NtscRate{ .numerator = 30000, .denominator = 1001 }; // 29.97 fps
+pub const NTSC_60 = NtscRate{ .numerator = 60000, .denominator = 1001 }; // 59.94 fps
 
 // ============================================================================
 // CROSS-MODAL SYNC QUERIES
@@ -393,38 +393,42 @@ test "backward compatible: flicks divide expanded" {
 test "all 105 rates divide exactly" {
     const all_rates = [_]u64{
         // BCI consumer
-        220, 256, 250, 500, 1000, 16000, 200, 125, 128, 512,
+        220,     256,     250,     500,      1000,     16000, 200,    125,    128,    512,
         // BCI research
-        2048, 4096, 8192, 16384, 600, 1200, 2400, 4800, 9600, 19200, 38400,
-        1024, 5000, 10000, 25000, 50000, 100000, 20000,
+        2048,    4096,    8192,    16384,    600,      1200,  2400,   4800,   9600,   19200,
+        38400,   1024,    5000,    10000,    25000,    50000, 100000, 20000,
         // Clinical/intracortical
-        30000, 2500, 32768,
+         30000,  2500,
+        32768,
         // fNIRS
-        1, 2, 3, 4, 5, 6, 8, 10, 13, 25, 50, 100,
+          1,       2,       3,        4,        5,     6,      8,      10,     13,
+        25,      50,      100,
         // MEG
-        3000, 12000, 508, 1017, 2034,
+            3000,     12000,    508,   1017,   2034,
         // Ultrasound
-        250000, 500000, 1000000, 2000000,
+          250000, 500000,
+        1000000, 2000000,
         // EMG/ENG
-        4000, 15000,
+        4000,    15000,
         // Autonomic
-        32, 64,
+           32,       64,
         // Eye tracking
-        60, 120, 150, 300,
+           60,     120,    150,    300,
         // Motion/IMU
-        400, 800, 1600, 3200, 6400, 20,
+        400,     800,     1600,    3200,     6400,     20,
         // Haptic
-        40000,
+           40000,
         // Audio
-        8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000,
-        88200, 96000, 176400, 192000, 352800, 384000,
-        2822400, 5644800, 11289600, 22579200,
+         8000,   11025,  16000,
+        22050,   24000,   32000,   44100,    48000,    88200, 96000,  176400, 192000, 352800,
+        384000,  2822400, 5644800, 11289600, 22579200,
         // Video
-        24, 30, 48, 72, 75, 80, 90, 96, 144, 165, 240, 360, 480, 500, 540,
+        24,    30,     48,     72,     75,
+        80,      90,      96,      144,      165,      240,   360,    480,    500,    540,
         // Brain stim
-        40, 70, 130, 140, 185,
+        40,      70,      130,     140,      185,
         // Color/entropy
-        360,
+             360,
     };
     for (all_rates) |rate| {
         const r128 = @as(u128, rate);

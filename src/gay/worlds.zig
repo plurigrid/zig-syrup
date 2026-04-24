@@ -240,14 +240,20 @@ pub fn verifyModalLaws(frame: *const KripkeFrame, seed: u64) ModalLaws {
     const k_impl = box_impl.implies(&rhs);
     var k_valid = true;
     for (0..frame.worlds.len) |i| {
-        if (!k_impl.truth[i]) { k_valid = false; break; }
+        if (!k_impl.truth[i]) {
+            k_valid = false;
+            break;
+        }
     }
 
     // T axiom: box(p) -> p  (valid iff reflexive)
     const t_impl = box_p.implies(&p);
     var t_valid = true;
     for (0..frame.worlds.len) |i| {
-        if (!t_impl.truth[i]) { t_valid = false; break; }
+        if (!t_impl.truth[i]) {
+            t_valid = false;
+            break;
+        }
     }
 
     // Dual: diamond(p) == not(box(not(p)))
@@ -257,7 +263,10 @@ pub fn verifyModalLaws(frame: *const KripkeFrame, seed: u64) ModalLaws {
     const not_box_not_p = box_not_p.negate();
     var dual_valid = true;
     for (0..frame.worlds.len) |i| {
-        if (diamond_p.truth[i] != not_box_not_p.truth[i]) { dual_valid = false; break; }
+        if (diamond_p.truth[i] != not_box_not_p.truth[i]) {
+            dual_valid = false;
+            break;
+        }
     }
 
     return .{ .k_axiom = k_valid, .t_axiom = t_valid, .dual_law = dual_valid };
@@ -294,7 +303,10 @@ pub const SheafSemantics = struct {
         for (0..self.n_props) |pi| {
             var all_true = true;
             for (0..self.frame.worlds.len) |wi| {
-                if (!self.propositions[pi].truth[wi]) { all_true = false; break; }
+                if (!self.propositions[pi].truth[wi]) {
+                    all_true = false;
+                    break;
+                }
             }
             if (all_true) count += 1;
         }

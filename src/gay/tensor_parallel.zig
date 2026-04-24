@@ -79,12 +79,12 @@ pub fn xorFingerprint(data: []const f32) u32 {
 
 /// Describes how a tensor is partitioned across ranks.
 pub const TensorPartition = struct {
-    dim: u32,           // Which dimension is sharded (0=rows, 1=cols)
-    n_shards: u32,      // Total number of shards
-    shard_id: u32,      // This rank's shard (0-indexed)
-    global_size: u32,   // Full size along sharded dimension
-    local_size: u32,    // This shard's size
-    offset: u32,        // Starting index in global tensor
+    dim: u32, // Which dimension is sharded (0=rows, 1=cols)
+    n_shards: u32, // Total number of shards
+    shard_id: u32, // This rank's shard (0-indexed)
+    global_size: u32, // Full size along sharded dimension
+    local_size: u32, // This shard's size
+    offset: u32, // Starting index in global tensor
 
     pub fn init(dim: u32, n_shards: u32, shard_id: u32, global_size: u32) TensorPartition {
         const base_size = (global_size + n_shards - 1) / n_shards; // cld
@@ -138,8 +138,8 @@ pub const DistributedContext = struct {
     rank: u32,
     world_size: u32,
     seed: u64,
-    layer_start: u32,  // inclusive
-    layer_end: u32,    // inclusive
+    layer_start: u32, // inclusive
+    layer_end: u32, // inclusive
 
     pub fn init(rank: u32, world_size: u32, n_layers: u32) DistributedContext {
         const layers_per_rank = (n_layers + world_size - 1) / world_size;
@@ -284,8 +284,8 @@ pub const ExoPartition = struct {
     device_id: u32,
     memory_gb: f64,
     layer_start: u32, // inclusive
-    layer_end: u32,   // inclusive
-    weight: f64,      // fraction of total memory
+    layer_end: u32, // inclusive
+    weight: f64, // fraction of total memory
 };
 
 /// Create exo-style partitions based on device memory.

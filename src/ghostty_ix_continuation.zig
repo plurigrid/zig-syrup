@@ -16,7 +16,6 @@
 /// - Syrup encoding: Binary serialization for OCapN transport
 ///
 /// Trit Classification: PLUS (+1) generation (creates resumable state)
-
 const std = @import("std");
 const ghostty_ix = @import("ghostty_ix");
 const syrup = @import("syrup");
@@ -196,7 +195,8 @@ pub const ContinuationExecutor = struct {
         state.*.resumed = true;
 
         var output_buf: [512]u8 = undefined;
-        const output = try std.fmt.bufPrint(&output_buf,
+        const output = try std.fmt.bufPrint(
+            &output_buf,
             "continuation resumed: promise=0x{x}, cmd={}, registers={{phi={d:.2}, valence={d:.2}}}",
             .{
                 promise_id,
@@ -251,7 +251,8 @@ pub const ContinuationExecutor = struct {
         try self.paths.append(self.allocator, path);
 
         var output_buf: [256]u8 = undefined;
-        const output = try std.fmt.bufPrint(&output_buf,
+        const output = try std.fmt.bufPrint(
+            &output_buf,
             "homotopy path created: id={}, states={}",
             .{ path.id, path.states.items.len },
         );
@@ -340,7 +341,9 @@ pub const testing = struct {
         };
         const res1 = try executor.pause(cmd1);
         defer allocator.free(res1.output);
-        if (res1.next_state) |s| { allocator.free(s); }
+        if (res1.next_state) |s| {
+            allocator.free(s);
+        }
         const promise1 = executor.next_promise_id - 1;
 
         const cmd2 = Command{
@@ -350,12 +353,16 @@ pub const testing = struct {
         };
         const res2 = try executor.pause(cmd2);
         defer allocator.free(res2.output);
-        if (res2.next_state) |s| { allocator.free(s); }
+        if (res2.next_state) |s| {
+            allocator.free(s);
+        }
         const promise2 = executor.next_promise_id - 1;
 
         const path_result = try executor.createHomotopyPath(promise1, promise2);
         defer allocator.free(path_result.output);
-        if (path_result.next_state) |s| { allocator.free(s); }
+        if (path_result.next_state) |s| {
+            allocator.free(s);
+        }
 
         try std.testing.expect(path_result.success);
         try std.testing.expect(executor.paths.items.len == 1);

@@ -26,8 +26,8 @@ const colorAt = splitmix.colorAt;
 pub const CHAIN_LEN: usize = 12;
 
 pub const NOTE_NAMES = [12][]const u8{
-    "C", "C#", "D", "D#", "E", "F",
-    "F#", "G", "G#", "A", "A#", "B",
+    "C",  "C#", "D",  "D#", "E",  "F",
+    "F#", "G",  "G#", "A",  "A#", "B",
 };
 
 pub const SemiringKind = enum {

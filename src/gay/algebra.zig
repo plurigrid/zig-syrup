@@ -423,16 +423,16 @@ pub const TowerState = struct {
         const layer_names = [_]u64{
             0x636F6E636570745F, // concept_tensor
             0x6578706F6E656E74, // exponential
-            0x686967686572,     // higher
-            0x747261636564,     // traced
+            0x686967686572, // higher
+            0x747261636564, // traced
             0x74656E736F725F6E, // tensor_net
             0x74776F5F6D6F6E61, // two_monad
-            0x6B7269706B65,     // kripke
-            0x6D6F64616C,       // modal
-            0x7368656166,       // sheaf
+            0x6B7269706B65, // kripke
+            0x6D6F64616C, // modal
+            0x7368656166, // sheaf
             0x70726F626162696C, // probability
             0x72616E645F746F70, // random_topos
-            0x73796E746865,     // synthetic
+            0x73796E746865, // synthetic
         };
         const fp = splitmix64(self.seed ^ layer_names[layer] ^ @as(u64, layer));
         self.updateLayer(layer, fp);

@@ -31,10 +31,10 @@ test "Full Round-Trip: Narya Proof to Stellogen Execution" {
     // 4. Resolve references (#data, #refl) manually for the demo
     // In a full compiler, this is handled by the 'call' evaluator.
     // For this demo, we construct the constellation trace directly.
-    
+
     const x = ast.makeVar("X");
     const data_val = ast.makeAtom(ast.Face.fromPolarity(.null), "verified_datum");
-    
+
     // Star 1 (refl): [(-term X) (+term X)]
     const neg_term_x = try ast.makeFunc(allocator, ast.Face.fromPolarity(.neg), "term", &.{x});
     const pos_term_x = try ast.makeFunc(allocator, ast.Face.fromPolarity(.pos), "term", &.{x});
@@ -63,9 +63,9 @@ test "Full Round-Trip: Narya Proof to Stellogen Execution" {
     try std.testing.expectEqual(@as(usize, 1), result.stars.len);
     const final_star = result.stars[0];
     try std.testing.expectEqual(@as(usize, 1), final_star.content.len);
-    
+
     const expected_ray = try ast.makeFunc(allocator, ast.Face.fromPolarity(.pos), "term", &.{data_val});
     try std.testing.expect(final_star.content[0].eql(expected_ray));
-    
+
     std.debug.print("\n[STELLOGEN] Round-trip SUCCESS: Proof execution preserved datum '{s}'\n", .{data_val.function.id.name});
 }

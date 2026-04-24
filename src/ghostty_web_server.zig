@@ -6,9 +6,8 @@
 /// - Encodes VT output in binary frames (websocket_framing.zig)
 /// - Routes input events back to Ghostty terminal
 /// - Advertises on NATS mcp.terms.* subject
-
 const std = @import("std");
-const compat = @import("compat");
+const compat = std.Io;
 const websocket_framing = @import("websocket_framing");
 
 const Frame = websocket_framing.Frame;
@@ -40,7 +39,8 @@ pub const WebSocketConnection = struct {
         // RFC 6455: Look for "GET /" and "Upgrade: websocket"
 
         if (!std.mem.containsAtLeast(u8, http_request, 1, "Upgrade: websocket") and
-            !std.mem.containsAtLeast(u8, http_request, 1, "upgrade: websocket")) {
+            !std.mem.containsAtLeast(u8, http_request, 1, "upgrade: websocket"))
+        {
             return false;
         }
 
@@ -95,13 +95,11 @@ pub const WebSocketConnection = struct {
 
         // Send HTTP 101 upgrade response with computed accept key
         var response_buf: [256]u8 = undefined;
-        const response = try std.fmt.bufPrint(&response_buf,
-            "HTTP/1.1 101 Switching Protocols\r\n" ++
+        const response = try std.fmt.bufPrint(&response_buf, "HTTP/1.1 101 Switching Protocols\r\n" ++
             "Upgrade: websocket\r\n" ++
             "Connection: Upgrade\r\n" ++
             "Sec-WebSocket-Accept: {s}==\r\n" ++
-            "\r\n",
-            .{accept_key[0..out_idx]});
+            "\r\n", .{accept_key[0..out_idx]});
 
         _ = try self.stream.writeAll(response);
         self.is_upgraded = true;
@@ -181,8 +179,8 @@ pub const WebSocketConnection = struct {
             .window_width = w,
             .window_height = h,
             .is_focused = focused,
-            .cell_width = 9,    // Monospace: ~9px per character
-            .cell_height = 18,  // ~18px per line
+            .cell_width = 9, // Monospace: ~9px per character
+            .cell_height = 18, // ~18px per line
         };
 
         const payload_len = try spatial.encode(&payload);
@@ -425,15 +423,21 @@ pub const Server = struct {
 
         // Format: ESC [ < button ; col ; row M
         var pos: usize = 0;
-        buf[pos] = 0x1b; pos += 1; // ESC
-        buf[pos] = '[';  pos += 1;
-        buf[pos] = '<';  pos += 1;
+        buf[pos] = 0x1b;
+        pos += 1; // ESC
+        buf[pos] = '[';
+        pos += 1;
+        buf[pos] = '<';
+        pos += 1;
         pos += writeDecimal(buf[pos..], sgr_button);
-        buf[pos] = ';';  pos += 1;
+        buf[pos] = ';';
+        pos += 1;
         pos += writeDecimal(buf[pos..], col);
-        buf[pos] = ';';  pos += 1;
+        buf[pos] = ';';
+        pos += 1;
         pos += writeDecimal(buf[pos..], row);
-        buf[pos] = suffix; pos += 1;
+        buf[pos] = suffix;
+        pos += 1;
         return pos;
     }
 

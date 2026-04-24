@@ -636,9 +636,8 @@ pub const Decoder = struct {
 test "splitmix64 bijection: unmix(mix(x)) == x" {
     // Verify the inverse property for diverse inputs
     const test_values = [_]u64{
-        0, 1, 42, 0xDEADBEEF, 0xCAFEBABE,
-        0xFFFFFFFFFFFFFFFF, 0x9e3779b97f4a7c15,
-        0x0123456789ABCDEF, 0xFEDCBA9876543210,
+        0,                  1,                  42,                 0xDEADBEEF,         0xCAFEBABE,
+        0xFFFFFFFFFFFFFFFF, 0x9e3779b97f4a7c15, 0x0123456789ABCDEF, 0xFEDCBA9876543210,
     };
     for (test_values) |x| {
         try std.testing.expectEqual(x, SplitMix64.unmix(SplitMix64.mix(x)));

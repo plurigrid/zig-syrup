@@ -717,11 +717,13 @@ pub fn oracle(
     const balance_a = lts_a.gf3Balance();
     const balance_b = lts_b.gf3Balance();
     if (balance_a != balance_b) {
-        return .{ .non_equivalent = .{
-            .state_a = lts_a.initial,
-            .state_b = lts_b.initial,
-            .diverging_label = 0, // GF(3) violation, no specific label
-        } };
+        return .{
+            .non_equivalent = .{
+                .state_a = lts_a.initial,
+                .state_b = lts_b.initial,
+                .diverging_label = 0, // GF(3) violation, no specific label
+            },
+        };
     }
 
     return checkBisimulation(allocator, lts_a, lts_b);

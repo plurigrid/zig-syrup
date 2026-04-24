@@ -363,8 +363,8 @@ fn buildFuzzExpr(allocator: std.mem.Allocator, input: []const u8, max_depth: u8,
     }
 
     const ops = [_][]const u8{
-        "compose",          "map",       "filter",
-        "reduce",           "sigmoid",   "fisher_rao_distance",
+        "compose",             "map",                "filter",
+        "reduce",              "sigmoid",            "fisher_rao_distance",
         "golden_spiral_color", "aptos_commit_color",
     };
     const op = ops[seed % ops.len];
