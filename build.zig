@@ -1855,6 +1855,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
+    test_step.dependOn(&stranded_check_obj.step); // compile-check the 8 novel files
     // GATED zig-0.16: test_step.dependOn(&run_xev_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_geo_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_bridge_tests.step);
