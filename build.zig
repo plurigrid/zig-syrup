@@ -1800,11 +1800,51 @@ pub fn build(b: *std.Build) void {
     const run_wgpu_compute_tests = b.addRunArtifact(wgpu_compute_tests);
 
     // Stranded-files compile check (not on default test_step until each verified)
+    // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.
+    const ocapn_location_mod = b.addModule("ocapn_location", .{
+        .root_source_file = b.path("src/ocapn_location.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_location_mod.addImport("syrup", syrup_mod);
+    const ocapn_handshake_mod = b.addModule("ocapn_handshake", .{
+        .root_source_file = b.path("src/ocapn_handshake.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_handshake_mod.addImport("syrup", syrup_mod);
+    ocapn_handshake_mod.addImport("ocapn_location", ocapn_location_mod);
+    const ocapn_transport_mod = b.addModule("ocapn_transport", .{
+        .root_source_file = b.path("src/ocapn_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_transport_mod.addImport("syrup", syrup_mod);
+    const ocapn_bootstrap_mod = b.addModule("ocapn_bootstrap", .{
+        .root_source_file = b.path("src/ocapn_bootstrap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_bootstrap_mod.addImport("syrup", syrup_mod);
+    const ocapn_session_mod = b.addModule("ocapn_session", .{
+        .root_source_file = b.path("src/ocapn_session.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const stranded_check_mod = b.createModule(.{
         .root_source_file = b.path("src/_stranded_integration_check.zig"),
         .target = target,
         .optimize = optimize,
     });
+    stranded_check_mod.addImport("syrup", syrup_mod);
+    stranded_check_mod.addImport("compat", compat_mod);
+    stranded_check_mod.addImport("continuation", continuation_mod);
+    stranded_check_mod.addImport("ocapn_location", ocapn_location_mod);
+    stranded_check_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    stranded_check_mod.addImport("ocapn_transport", ocapn_transport_mod);
+    stranded_check_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    stranded_check_mod.addImport("ocapn_session", ocapn_session_mod);
     const stranded_check_tests = b.addTest(.{ .root_module = stranded_check_mod });
     const run_stranded_check = b.addRunArtifact(stranded_check_tests);
     const stranded_step = b.step("test-stranded-integration", "Compile-check the 8 stranded-on-main files from the 2026-04-24 merge train");
