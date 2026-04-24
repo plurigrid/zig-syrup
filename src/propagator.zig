@@ -1420,8 +1420,10 @@ test "Φ witness is invariant under η;ε roundtrip on committed cells" {
     const allocator = std.testing.allocator;
     const LCell = Cell(f32, latticeMerge(f32));
 
-    var c0 = LCell.init(allocator, "p0"); defer c0.deinit();
-    var c1 = LCell.init(allocator, "p1"); defer c1.deinit();
+    var c0 = LCell.init(allocator, "p0");
+    defer c0.deinit();
+    var c1 = LCell.init(allocator, "p1");
+    defer c1.deinit();
     try c0.set_content(0.3);
     try c1.set_content(0.7);
     const cells = [_]*LCell{ &c0, &c1 };
@@ -1466,8 +1468,10 @@ test "PhiWitness.klTritUpdate: surprisal-satisficing trit between prior and post
     const allocator = std.testing.allocator;
     const LCell = Cell(f32, latticeMerge(f32));
 
-    var c0 = LCell.init(allocator, "p0"); defer c0.deinit();
-    var c1 = LCell.init(allocator, "p1"); defer c1.deinit();
+    var c0 = LCell.init(allocator, "p0");
+    defer c0.deinit();
+    var c1 = LCell.init(allocator, "p1");
+    defer c1.deinit();
     try c0.set_content(0.25);
     try c1.set_content(0.75);
     const cells = [_]*LCell{ &c0, &c1 };
@@ -1633,9 +1637,12 @@ test "Cell inject(.contradict) propagates contradiction through network" {
     const allocator = std.testing.allocator;
     const LCell = Cell(f32, latticeMerge(f32));
 
-    var a = LCell.init(allocator, "a"); defer a.deinit();
-    var b = LCell.init(allocator, "b"); defer b.deinit();
-    var c = LCell.init(allocator, "c"); defer c.deinit();
+    var a = LCell.init(allocator, "a");
+    defer a.deinit();
+    var b = LCell.init(allocator, "b");
+    defer b.deinit();
+    var c = LCell.init(allocator, "c");
+    defer c.deinit();
 
     try a.set_content(1.0);
     try b.set_content(2.0);
@@ -1685,9 +1692,12 @@ test "Cell inject drives propagator network via neighbor alert" {
     const allocator = std.testing.allocator;
     const LCell = Cell(f32, latticeMerge(f32));
 
-    var a = LCell.init(allocator, "a"); defer a.deinit();
-    var b = LCell.init(allocator, "b"); defer b.deinit();
-    var c = LCell.init(allocator, "c"); defer c.deinit();
+    var a = LCell.init(allocator, "a");
+    defer a.deinit();
+    var b = LCell.init(allocator, "b");
+    defer b.deinit();
+    var c = LCell.init(allocator, "c");
+    defer c.deinit();
 
     const inputs = [_]*LCell{ &a, &b };
     const outputs = [_]*LCell{&c};
@@ -1746,9 +1756,12 @@ test "adder propagator as p_a (x) p_b (x) p_c: shape total = product of componen
     );
 
     // Build the adder propagator and fire it.
-    var a_cell = LCell.init(allocator, "a"); defer a_cell.deinit();
-    var b_cell = LCell.init(allocator, "b"); defer b_cell.deinit();
-    var c_cell = LCell.init(allocator, "c"); defer c_cell.deinit();
+    var a_cell = LCell.init(allocator, "a");
+    defer a_cell.deinit();
+    var b_cell = LCell.init(allocator, "b");
+    defer b_cell.deinit();
+    var c_cell = LCell.init(allocator, "c");
+    defer c_cell.deinit();
 
     try a_cell.set_content(2.0);
     try b_cell.set_content(3.0);

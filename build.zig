@@ -564,7 +564,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     bristol_mod.addImport("syrup", syrup_mod);
-    
+
     // Bristol module (for reusability)
     const bristol_lib = b.addModule("bristol", .{
         .root_source_file = b.path("src/bristol.zig"),
@@ -810,7 +810,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
 
     // Color SIMD module tests
     const color_simd_test_mod = b.createModule(.{
@@ -1148,7 +1147,7 @@ pub fn build(b: *std.Build) void {
     });
     world_demo_mod.addImport("syrup", syrup_mod);
     world_demo_mod.addImport("worlds", worlds_mod);
-    
+
     const world_demo_exe = b.addExecutable(.{
         .name = "world-demo",
         .root_module = world_demo_mod,
@@ -1445,7 +1444,7 @@ pub fn build(b: *std.Build) void {
     bci_demo_mod.addImport("syrup", syrup_mod);
     bci_demo_mod.addImport("worlds", worlds_mod);
     bci_demo_mod.addImport("propagator", propagator_mod);
-    
+
     const bci_demo_exe = b.addExecutable(.{
         .name = "bci-demo",
         .root_module = bci_demo_mod,
@@ -1548,17 +1547,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     cross_runtime_mod.addImport("syrup", syrup_mod);
-    
+
     const cross_runtime_exe = b.addExecutable(.{
         .name = "cross-runtime-exchange",
         .root_module = cross_runtime_mod,
     });
     b.installArtifact(cross_runtime_exe);
-    
+
     const cross_runtime_cmd = b.addRunArtifact(cross_runtime_exe);
     const cross_runtime_step = b.step("cross-runtime", "Run cross-runtime syrup exchange demo");
     cross_runtime_step.dependOn(&cross_runtime_cmd.step);
-    
+
     // Bandwidth Benchmark
     const bandwidth_mod = b.createModule(.{
         .root_source_file = b.path("benchmarks/bandwidth_benchmark.zig"),
@@ -1566,13 +1565,13 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
     bandwidth_mod.addImport("syrup", syrup_mod);
-    
+
     const bandwidth_exe = b.addExecutable(.{
         .name = "bandwidth-benchmark",
         .root_module = bandwidth_mod,
     });
     b.installArtifact(bandwidth_exe);
-    
+
     const bandwidth_cmd = b.addRunArtifact(bandwidth_exe);
     const bandwidth_step = b.step("bandwidth", "Run bandwidth benchmark");
     bandwidth_step.dependOn(&bandwidth_cmd.step);
@@ -1609,7 +1608,6 @@ pub fn build(b: *std.Build) void {
 
     // A/B testing engine (ab_test.zig)
     // Removed duplicate block here
-
 
     // Worlds root module integration tests
     // const worlds_test_mod = b.createModule(.{
@@ -2874,7 +2872,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_eyetracking_tests.step);
     test_bci_step.dependOn(&run_eyetracking_tests.step);
 
-
     // ========================================
     // Pose Bridge (Body Tracking via MediaPipe)
     // ========================================
@@ -3186,14 +3183,14 @@ pub fn build(b: *std.Build) void {
     zoad_mod.addImport("acp", acp_mod);
     zoad_mod.addImport("syrup", syrup_mod);
     zoad_mod.addImport("terminal", terminal_mod);
-    
+
     const nc_backend_mod = b.createModule(.{
         .root_source_file = b.path("src/notcurses_backend.zig"),
         .target = target,
         .optimize = optimize,
     });
     nc_backend_mod.addImport("retty", retty_mod);
-    
+
     // Simple TCP module
     const simple_tcp_mod = b.createModule(.{
         .root_source_file = b.path("src/simple_tcp.zig"),
@@ -3223,7 +3220,7 @@ pub fn build(b: *std.Build) void {
         .name = "zoad",
         .root_module = zoad_mod,
     });
-    
+
     // NOTE: zoad requires notcurses C library and headers
     // Build with: zig build zoad (requires notcurses library installed)
     // On macOS: brew install notcurses
@@ -3264,11 +3261,11 @@ pub fn build(b: *std.Build) void {
     zeta_test_mod.addImport("spectral_tensor", spectral_tensor_mod);
     zeta_test_mod.addImport("retty", retty_mod);
     zeta_test_mod.addImport("lux_color", lux_color_mod);
-    
+
     const zeta_tests = b.addTest(.{ .root_module = zeta_test_mod });
     const run_zeta_tests = b.addRunArtifact(zeta_tests);
     test_step.dependOn(&run_zeta_tests.step);
-    
+
     const test_zeta_step = b.step("test-zeta", "Run Zeta World tests");
     test_zeta_step.dependOn(&run_zeta_tests.step);
 
@@ -3617,5 +3614,4 @@ pub fn build(b: *std.Build) void {
 
     const test_gay_step = b.step("test-gay", "Run all 28 gay submodule tests");
     test_gay_step.dependOn(&run_gay_tests.step);
-
 }

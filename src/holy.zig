@@ -318,8 +318,8 @@ pub const counterfactuals = [_]Counterfactual{
     },
     .{
         .premise = "Gay-TOFU 3x3x3 Hamming swarm on TempleOS 16-color CGA palette",
-        .affected_paths = &[_]usize{ 4 },
-        .predicted_trit_change = &[_]Trit{ .zero },
+        .affected_paths = &[_]usize{4},
+        .predicted_trit_change = &[_]Trit{.zero},
         .reasoning = "16 colors < 27 tensor elements. Lossy projection from GF(3)^3 to CGA. Hamming structure preserved; color fidelity deformed. DolDoc can render the lattice as $TR$ trees.",
     },
 };

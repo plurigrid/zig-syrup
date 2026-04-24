@@ -39,7 +39,7 @@ pub fn main() !void {
     };
 
     const result = try dispatcher.execute(query_cmd);
-    std.debug.print("✓ Execute query: success={}, output={s}\n", .{result.success, result.output});
+    std.debug.print("✓ Execute query: success={}, output={s}\n", .{ result.success, result.output });
     allocator.free(result.output);
 
     // Test 4: Check trit balance
