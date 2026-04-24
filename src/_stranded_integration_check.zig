@@ -10,19 +10,12 @@
 
 const std = @import("std");
 
-comptime {
-    _ = @import("ocapn_vat.zig");
-    _ = @import("ocapn_handoff.zig");
-    _ = @import("ocapn_ws.zig");
-    _ = @import("ocapn_tor.zig");
-    _ = @import("holy.zig");
-    _ = @import("holyzig.zig");
-    _ = @import("backward_fiber.zig");
-    _ = @import("world_control.zig");
-}
-
-test "stranded integration check — all 8 files compile" {
-    // Comptime @import above already forces compile of each module.
-    // This test is a placeholder so `zig test` registers at least one test.
-    try std.testing.expect(true);
-}
+// Export each module so addObject forces them through semantic analysis.
+pub const ocapn_vat = @import("ocapn_vat.zig");
+pub const ocapn_handoff = @import("ocapn_handoff.zig");
+pub const ocapn_ws = @import("ocapn_ws.zig");
+pub const ocapn_tor = @import("ocapn_tor.zig");
+pub const holy = @import("holy.zig");
+pub const holyzig = @import("holyzig.zig");
+pub const backward_fiber = @import("backward_fiber.zig");
+pub const world_control = @import("world_control.zig");
