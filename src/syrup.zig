@@ -93,9 +93,8 @@ const FixedBufWriter = struct {
     }
 
     pub fn print(self: *FixedBufWriter, comptime fmt: []const u8, args: anytype) Error!void {
-        var tmp: [4096]u8 = undefined;
-        const written = std.fmt.bufPrint(&tmp, fmt, args) catch return error.NoSpaceLeft;
-        try self.writeAll(written);
+        const slice = std.fmt.bufPrint(self.buf[self.pos.*..], fmt, args) catch return error.NoSpaceLeft;
+        self.pos.* += slice.len;
     }
 
     pub fn write(self: *FixedBufWriter, data: []const u8) Error!usize {
@@ -124,7 +123,7 @@ pub const BigInt = struct {
     }
 
     fn compareMagnitudes(a: []const u8, b: []const u8) Order {
-        // Strip leading zeros using std.mem.trimLeft
+        // Strip leading zeros using std.mem.trimStart
         const a_trimmed = std.mem.trimStart(u8, a, &.{0});
         const b_trimmed = std.mem.trimStart(u8, b, &.{0});
         const len_cmp = std.math.order(a_trimmed.len, b_trimmed.len);
@@ -193,18 +192,18 @@ pub const Value = union(enum) {
     };
 
     /// Tagged value per OCapN Model spec - pair of tag (string) and value
-    pub const Tagged = struct {
-        tag: []const u8,
-        payload: *const Value,
-    };
+pub const Tagged = struct {
+    tag: []const u8,
+    payload: *const Value,
+};
 
     /// Error type for CapTP error propagation
     /// Mirrors desc:error: <desc:error message identifier data>
-    pub const Error = struct {
-        message: []const u8,
-        identifier: []const u8,
-        data: *const Value,
-    };
+pub const Error = struct {
+    message: []const u8,
+    identifier: []const u8,
+    data: *const Value,
+};
 
     // ========================================================================
     // CONSTRUCTORS - Fluent builder methods
@@ -293,8 +292,7 @@ pub const Value = union(enum) {
             .record => |r| {
                 for (r.fields) |f| f.deinitAll(allocator);
                 allocator.free(r.fields);
-                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
-                allocator.free(label_slice);
+                allocator.destroy(@constCast(r.label));
             },
             .list => |items| {
                 for (items) |item| item.deinitAll(allocator);
@@ -313,13 +311,11 @@ pub const Value = union(enum) {
             },
             .tagged => |t| {
                 t.payload.deinitAll(allocator);
-                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
-                allocator.free(payload_slice);
+                allocator.destroy(@constCast(t.payload));
             },
             .@"error" => |e| {
                 e.data.deinitAll(allocator);
-                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
-                allocator.free(data_slice);
+                allocator.destroy(@constCast(e.data));
             },
             .string => |s| allocator.free(s),
             .bytes => |b| allocator.free(b),
@@ -336,8 +332,7 @@ pub const Value = union(enum) {
             .record => |r| {
                 for (r.fields) |f| f.deinitContainers(allocator);
                 allocator.free(r.fields);
-                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
-                allocator.free(label_slice);
+                allocator.destroy(@constCast(r.label));
             },
             .list => |items| {
                 for (items) |item| item.deinitContainers(allocator);
@@ -355,12 +350,10 @@ pub const Value = union(enum) {
                 allocator.free(entries);
             },
             .tagged => |t| {
-                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
-                allocator.free(payload_slice);
+                allocator.destroy(@constCast(t.payload));
             },
             .@"error" => |e| {
-                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
-                allocator.free(data_slice);
+                allocator.destroy(@constCast(e.data));
             },
             else => {},
         }
@@ -387,7 +380,7 @@ pub const Value = union(enum) {
         // For strings/symbols/bytes: compare by wire format (length then content)
         return switch (self) {
             .undefined, .null => {
-                // These types are singleton-like in record-like context,
+                // These types are singleton-like in record-like context, 
                 // but handled here if they appear directly
                 // undefined < null
                 if (self == .undefined and other == .null) return .lt;
@@ -427,15 +420,15 @@ pub const Value = union(enum) {
     fn compareLengthPrefixed(a: []const u8, b: []const u8) Order {
         // We must compare the serialized length strings (e.g. "9" vs "10")
         // "9" > "10" lexicographically, so len=9 > len=10 in wire format.
-
+        
         var a_buf: [32]u8 = undefined;
         var b_buf: [32]u8 = undefined;
         const a_str = std.fmt.bufPrint(&a_buf, "{}", .{a.len}) catch unreachable;
         const b_str = std.fmt.bufPrint(&b_buf, "{}", .{b.len}) catch unreachable;
-
+        
         const len_cmp = std.mem.order(u8, a_str, b_str);
         if (len_cmp != .eq) return len_cmp;
-
+        
         // Same length string implies same length value. Compare content.
         return std.mem.order(u8, a, b);
     }
@@ -1168,7 +1161,7 @@ pub const Parser = struct {
     ) ParseError![]Value {
         var items = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
         errdefer items.deinit(self.allocator);
-
+        
         var last_start: usize = 0;
         var last_end: usize = 0;
 
@@ -1208,7 +1201,7 @@ pub const Parser = struct {
         self.pos += 1;
         var entries = std.ArrayListUnmanaged(Value.DictEntry){ .items = &.{}, .capacity = 0 };
         errdefer entries.deinit(self.allocator);
-
+        
         var last_key_start: usize = 0;
         var last_key_end: usize = 0;
 
@@ -2437,20 +2430,20 @@ pub const CapTPDescriptors = struct {
     /// Pre-encoded descriptor labels for single-byte lookup
     pub const labels = struct {
         pub const op_deliver = "10'op:deliver";
-        pub const op_deliver_only = "14'op:deliver-only";
+        pub const op_deliver_only = "15'op:deliver-only";
         pub const op_pick = "7'op:pick";
         pub const op_abort = "8'op:abort";
         pub const op_listen = "9'op:listen";
-        pub const op_gc_export = "12'op:gc-export";
-        pub const op_gc_answer = "12'op:gc-answer";
+        pub const op_gc_export = "13'op:gc-exports";
+        pub const op_gc_answer = "13'op:gc-answers";
         pub const desc_export = "11'desc:export";
-        pub const desc_import = "15'desc:import-object";
-        pub const desc_promise = "16'desc:import-promise";
+        pub const desc_import = "18'desc:import-object";
+        pub const desc_promise = "19'desc:import-promise";
         pub const desc_answer = "11'desc:answer";
         pub const desc_tag = "8'desc:tag";
         pub const desc_error = "10'desc:error";
-        pub const desc_handoff_give = "16'desc:handoff-give";
-        pub const desc_handoff_receive = "19'desc:handoff-receive";
+        pub const desc_handoff_give = "17'desc:handoff-give";
+        pub const desc_handoff_receive = "20'desc:handoff-receive";
     };
 
     /// Pre-computed record starters for common descriptors

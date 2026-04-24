@@ -5,6 +5,14 @@
 
 const std = @import("std");
 const World = @import("world.zig").World;
+
+// 0.16 compat
+fn milliTimestamp() i64 {
+    if (@hasDecl(std.time, "milliTimestamp")) return @field(std.time, "milliTimestamp")();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i64, @intCast(ts.sec)) * 1000 + @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+}
 const WorldVariant = @import("world.zig").WorldVariant;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const StringHashMap = std.StringHashMap;
@@ -21,9 +29,9 @@ pub const SessionMetrics = struct {
     engagement_score: f64, // 0-100
     success_score: f64, // 0-100
     error_count: u32,
-
+    
     pub fn duration(self: SessionMetrics) i64 {
-        const end = self.end_time orelse std.time.milliTimestamp();
+        const end = self.end_time orelse milliTimestamp();
         return end - self.start_time;
     }
 };
@@ -71,25 +79,25 @@ pub const ABTest = struct {
     metrics: ArrayListUnmanaged(SessionMetrics),
     random: Random,
     start_time: ?i64,
-
+    
     pub fn init(
         allocator: std.mem.Allocator,
         config: ABTestConfig,
         random_seed: u64,
     ) !ABTest {
         var prng = std.Random.DefaultPrng.init(random_seed);
-
+        
         return ABTest{
             .allocator = allocator,
             .config = config,
             .worlds = StringHashMap(*World).init(allocator),
             .player_assignments = StringHashMap(WorldVariant).init(allocator),
-            .metrics = .{},
+            .metrics = .empty,
             .random = prng.random(),
             .start_time = null,
         };
     }
-
+    
     pub fn deinit(self: *ABTest) void {
         var it = self.worlds.valueIterator();
         while (it.next()) |world| world.*.destroy();
@@ -97,14 +105,14 @@ pub const ABTest = struct {
         var wk_it = self.worlds.keyIterator();
         while (wk_it.next()) |key| self.allocator.free(key.*);
         self.worlds.deinit();
-
+        
         // Free allocated keys in player_assignments map
         var pk_it = self.player_assignments.keyIterator();
         while (pk_it.next()) |key| self.allocator.free(key.*);
         self.player_assignments.deinit();
         self.metrics.deinit(self.allocator);
     }
-
+    
     /// Register a world variant
     pub fn addWorld(self: *ABTest, variant: WorldVariant, world: *World) !void {
         const key = try std.fmt.allocPrint(self.allocator, "{s}{s}", .{
@@ -113,7 +121,7 @@ pub const ABTest = struct {
         });
         try self.worlds.put(key, world);
     }
-
+    
     /// Get world by variant
     pub fn getWorld(self: *ABTest, variant: WorldVariant, name: []const u8) ?*World {
         const key = std.fmt.allocPrint(self.allocator, "{s}{s}", .{
@@ -122,7 +130,7 @@ pub const ABTest = struct {
         defer self.allocator.free(key);
         return self.worlds.get(key);
     }
-
+    
     /// Assignment strategies
     pub const AssignmentStrategy = enum {
         RoundRobin,
@@ -130,7 +138,7 @@ pub const ABTest = struct {
         Random,
         Manual,
     };
-
+    
     /// Assign player to variant
     pub fn assignPlayer(
         self: *ABTest,
@@ -142,22 +150,22 @@ pub const ABTest = struct {
         if (self.player_assignments.get(player_id)) |existing| {
             return existing;
         }
-
+        
         const variant = switch (strategy) {
             .RoundRobin => self.roundRobinAssign(),
             .HashBased => self.hashBasedAssign(player_id),
             .Random => self.randomAssign(),
             .Manual => manual_variant orelse self.randomAssign(),
         };
-
+        
         try self.player_assignments.put(
             try self.allocator.dupe(u8, player_id),
             variant,
         );
-
+        
         return variant;
     }
-
+    
     fn roundRobinAssign(self: *ABTest) WorldVariant {
         const count = self.player_assignments.count();
         return switch (count % 3) {
@@ -166,7 +174,7 @@ pub const ABTest = struct {
             else => .C,
         };
     }
-
+    
     fn hashBasedAssign(self: *ABTest, player_id: []const u8) WorldVariant {
         _ = self;
         var hasher = std.hash.Wyhash.init(0);
@@ -178,7 +186,7 @@ pub const ABTest = struct {
             else => .C,
         };
     }
-
+    
     fn randomAssign(self: *ABTest) WorldVariant {
         return switch (self.random.int(u8) % 3) {
             0 => .A,
@@ -186,34 +194,34 @@ pub const ABTest = struct {
             else => .C,
         };
     }
-
+    
     /// Start the test
     pub fn start(self: *ABTest) void {
-        self.start_time = std.time.milliTimestamp();
+        self.start_time = milliTimestamp();
     }
-
+    
     /// Record session metrics
     pub fn recordMetrics(self: *ABTest, metrics: SessionMetrics) !void {
         try self.metrics.append(self.allocator, metrics);
     }
-
+    
     /// Check if test should end
     pub fn shouldEnd(self: *ABTest) bool {
         if (self.start_time == null) return false;
-
-        const elapsed = std.time.milliTimestamp() - self.start_time.?;
+        
+        const elapsed = milliTimestamp() - self.start_time.?;
         if (elapsed >= self.config.duration_ms) return true;
-
+        
         if (self.metrics.items.len >= self.config.min_samples) return true;
-
+        
         return false;
     }
-
+    
     /// Get metrics aggregated by variant
     pub fn getVariantMetrics(self: *ABTest) !StringHashMap(VariantMetrics) {
         var result = StringHashMap(VariantMetrics).init(self.allocator);
         errdefer result.deinit();
-
+        
         // Initialize all variants
         for ([_]WorldVariant{ .A, .B, .C }) |v| {
             try result.put(v.prefix(), .{
@@ -226,24 +234,24 @@ pub const ABTest = struct {
                 .conversion_rate = 0,
             });
         }
-
+        
         // Aggregate metrics
         for (self.metrics.items) |m| {
             const variant = WorldVariant.fromString(m.world_uri) orelse continue;
             const key = variant.prefix();
-
+            
             if (result.getPtr(key)) |agg| {
                 agg.sessions += 1;
                 agg.total_duration_ms += m.duration();
                 agg.total_errors += m.error_count;
-
+                
                 // Running average for engagement and success
                 const n = @as(f64, @floatFromInt(agg.sessions));
                 agg.avg_engagement = ((agg.avg_engagement * (n - 1)) + m.engagement_score) / n;
                 agg.avg_success = ((agg.avg_success * (n - 1)) + m.success_score) / n;
             }
         }
-
+        
         // Calculate conversion rates
         var it = result.valueIterator();
         while (it.next()) |agg| {
@@ -256,22 +264,23 @@ pub const ABTest = struct {
                         conversions += 1;
                     }
                 }
-                agg.conversion_rate = @as(f64, @floatFromInt(conversions)) /
+                agg.conversion_rate = @as(f64, @floatFromInt(conversions)) / 
                     @as(f64, @floatFromInt(agg.sessions));
             }
         }
-
+        
         return result;
     }
-
+    
     /// Calculate composite score for a variant
     fn compositeScore(self: *ABTest, metrics: VariantMetrics) f64 {
         const weights = self.config.metric_weights;
-        return metrics.avg_engagement * weights.engagement +
+        return 
+            metrics.avg_engagement * weights.engagement +
             metrics.avg_success * weights.success +
             @as(f64, @floatFromInt(metrics.total_duration_ms)) / 1000.0 * weights.duration;
     }
-
+    
     /// Statistical test between two variants (Welch's t-test approximation)
     pub fn compareVariants(
         self: *ABTest,
@@ -281,21 +290,21 @@ pub const ABTest = struct {
         // Collect scores for each variant
         var scores_a = std.ArrayListUnmanaged(f64){};
         defer scores_a.deinit(self.allocator);
-
+        
         var scores_b = std.ArrayListUnmanaged(f64){};
         defer scores_b.deinit(self.allocator);
-
+        
         for (self.metrics.items) |m| {
             const variant = WorldVariant.fromString(m.world_uri) orelse continue;
             const score = m.engagement_score * 0.4 + m.success_score * 0.6;
-
+            
             if (variant == a) {
                 try scores_a.append(self.allocator, score);
             } else if (variant == b) {
                 try scores_b.append(self.allocator, score);
             }
         }
-
+        
         if (scores_a.items.len < 2 or scores_b.items.len < 2) {
             return TestResult{
                 .variant_a = a,
@@ -306,43 +315,43 @@ pub const ABTest = struct {
                 .significant = false,
             };
         }
-
+        
         // Calculate means
         const mean_a = mean(scores_a.items);
         const mean_b = mean(scores_b.items);
-
+        
         // Calculate standard errors
         const se_a = stdError(scores_a.items);
         const se_b = stdError(scores_b.items);
-
+        
         // t-statistic
         const se_diff = @sqrt(se_a * se_a + se_b * se_b);
         const t_stat = @abs(mean_a - mean_b) / se_diff;
-
+        
         // Degrees of freedom (Welch-Satterthwaite)
         const n_a = @as(f64, @floatFromInt(scores_a.items.len));
         const n_b = @as(f64, @floatFromInt(scores_b.items.len));
         const df = @floor((se_a * se_a + se_b * se_b) * (se_a * se_a + se_b * se_b) /
             ((se_a * se_a * se_a * se_a) / (n_a - 1) + (se_b * se_b * se_b * se_b) / (n_b - 1)));
         _ = df;
-
+        
         // Approximate p-value (simplified)
         // For 95% confidence, t > 1.96 for large df
         const critical_t = 1.96;
         const significant = t_stat > critical_t;
-
+        
         const confidence = @min(1.0, t_stat / critical_t * 0.95);
-
+        
         const winner = if (significant)
             (if (mean_a > mean_b) a else b)
         else
             null;
-
+        
         const improvement = if (mean_b > 0)
             @abs(mean_a - mean_b) / mean_b * 100
         else
             0;
-
+        
         return TestResult{
             .variant_a = a,
             .variant_b = b,
@@ -352,29 +361,29 @@ pub const ABTest = struct {
             .significant = significant,
         };
     }
-
+    
     /// Determine overall winner across all variants
     pub fn determineWinner(self: *ABTest) !?WorldVariant {
         const comparisons = try self.compareVariants(.A, .B);
         if (!comparisons.significant) return null;
-
+        
         const best = comparisons.winner.?;
         const vs_c = try self.compareVariants(best, .C);
-
+        
         if (vs_c.significant and vs_c.winner == .C) {
             return .C;
         }
         return best;
     }
-
+    
     /// Generate report
     pub fn generateReport(self: *ABTest, writer: anytype) !void {
         try writer.print("A/B Test Report: {s}\n", .{self.config.name});
         try writer.print("================================\n\n", .{});
-
+        
         const variant_metrics = try self.getVariantMetrics();
         defer variant_metrics.deinit();
-
+        
         try writer.print("Variant Performance:\n", .{});
         var it = variant_metrics.iterator();
         while (it.next()) |entry| {
@@ -387,15 +396,15 @@ pub const ABTest = struct {
                 m.conversion_rate * 100,
             });
         }
-
+        
         try writer.print("\nStatistical Comparisons:\n", .{});
-
+        
         const pairs = [_]struct { WorldVariant, WorldVariant }{
             .{ .A, .B },
             .{ .A, .C },
             .{ .B, .C },
         };
-
+        
         for (pairs) |pair| {
             const result = try self.compareVariants(pair[0], pair[1]);
             try writer.print("  {s} vs {s}: ", .{ pair[0].prefix(), pair[1].prefix() });
@@ -409,7 +418,7 @@ pub const ABTest = struct {
                 try writer.print("No significant difference\n", .{});
             }
         }
-
+        
         if (try self.determineWinner()) |winner| {
             try writer.print("\nOVERALL WINNER: {s}\n", .{winner.prefix()});
         } else {
@@ -443,7 +452,7 @@ fn stdError(data: []const f64) f64 {
 
 test "ABTest player assignment" {
     const allocator = std.testing.allocator;
-
+    
     var ab_test_instance = try ABTest.init(allocator, .{
         .name = "test",
         .duration_ms = 60000,
@@ -452,13 +461,13 @@ test "ABTest player assignment" {
         .metric_weights = .{ .engagement = 0.3, .success = 0.5, .duration = 0.2 },
     }, 12345);
     defer ab_test_instance.deinit();
-
+    
     // Test round-robin
     const v1 = try ab_test_instance.assignPlayer("player1", .RoundRobin, null);
     const v2 = try ab_test_instance.assignPlayer("player2", .RoundRobin, null);
     const v3 = try ab_test_instance.assignPlayer("player3", .RoundRobin, null);
     const v4 = try ab_test_instance.assignPlayer("player4", .RoundRobin, null);
-
+    
     try std.testing.expectEqual(WorldVariant.A, v1);
     try std.testing.expectEqual(WorldVariant.B, v2);
     try std.testing.expectEqual(WorldVariant.C, v3);
@@ -467,7 +476,7 @@ test "ABTest player assignment" {
 
 test "ABTest metrics aggregation" {
     const allocator = std.testing.allocator;
-
+    
     var ab_test_instance = try ABTest.init(allocator, .{
         .name = "test",
         .duration_ms = 60000,
@@ -476,7 +485,7 @@ test "ABTest metrics aggregation" {
         .metric_weights = .{ .engagement = 0.3, .success = 0.5, .duration = 0.2 },
     }, 12345);
     defer ab_test_instance.deinit();
-
+    
     // Record some metrics
     try ab_test_instance.recordMetrics(.{
         .player_id = "p1",
@@ -489,7 +498,7 @@ test "ABTest metrics aggregation" {
         .success_score = 80.0,
         .error_count = 2,
     });
-
+    
     try ab_test_instance.recordMetrics(.{
         .player_id = "p2",
         .world_uri = "a://baseline",
@@ -501,10 +510,10 @@ test "ABTest metrics aggregation" {
         .success_score = 90.0,
         .error_count = 0,
     });
-
+    
     var metrics = try ab_test_instance.getVariantMetrics();
     defer metrics.deinit();
-
+    
     const a_metrics = metrics.get("a://").?;
     try std.testing.expectEqual(@as(u32, 2), a_metrics.sessions);
     try std.testing.expectEqual(@as(f64, 80.0), a_metrics.avg_engagement);

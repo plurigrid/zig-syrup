@@ -1,7 +1,36 @@
 /// bandwidth_benchmark.zig
 /// Measure encoding/decoding bandwidth for zig-syrup
 /// Reports throughput in MB/s and operations/second
+
 const std = @import("std");
+
+fn nanoTimestamp() i128 {
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @as(i128, @intCast(ts.sec)) * 1_000_000_000 + @as(i128, @intCast(ts.nsec));
+}
+
+fn posixWrite(fd: std.posix.fd_t, bytes: []const u8) !usize {
+    const rc = std.c.write(fd, bytes.ptr, bytes.len);
+    if (rc < 0) return error.WriteError;
+    return @intCast(rc);
+}
+
+const FixedBufWriter = struct {
+    buf: []u8,
+    pos: *usize,
+
+    pub fn print(self: FixedBufWriter, comptime fmt: []const u8, args: anytype) !void {
+        const s = try std.fmt.bufPrint(self.buf[self.pos.*..], fmt, args);
+        self.pos.* += s.len;
+    }
+    pub fn writeAll(self: FixedBufWriter, bytes: []const u8) !void {
+        if (self.pos.* + bytes.len > self.buf.len) return error.NoSpaceLeft;
+        @memcpy(self.buf[self.pos.*..][0..bytes.len], bytes);
+        self.pos.* += bytes.len;
+    }
+};
+
 const syrup = @import("syrup");
 const Value = syrup.Value;
 
@@ -55,8 +84,10 @@ fn printHeader(writer: anytype) !void {
 fn printResult(writer: anytype, r: BenchmarkResult) !void {
     const size_buf = formatBytes(@floatFromInt(r.bytes_per_op));
     const ops_buf = formatNumber(r.ops_per_sec);
-
-    try writer.print("║  {s:<18} │ {s:<8} │ {s:>12} │ {s:>10} │ {d:>10.2} ║\n", .{ r.name, r.direction, &size_buf, &ops_buf, r.mb_per_sec });
+    
+    try writer.print("║  {s:<18} │ {s:<8} │ {s:>12} │ {s:>10} │ {d:>10.2} ║\n", .{
+        r.name, r.direction, &size_buf, &ops_buf, r.mb_per_sec
+    });
 }
 
 fn printFooter(writer: anytype) !void {
@@ -120,7 +151,7 @@ fn binaryPayload() Value {
         syrup.integer(1024),
     };
     const header = syrup.record(&header_label, &header_fields);
-
+    
     const entries = [_]Value.DictEntry{
         .{ .key = syrup.string("header"), .value = header },
         .{ .key = syrup.string("data"), .value = syrup.bytes(&[_]u8{0} ** 1024) },
@@ -134,24 +165,24 @@ fn binaryPayload() Value {
 
 fn benchmarkEncoding(name: []const u8, value: Value, iterations: usize) BenchmarkResult {
     var buf: [8192]u8 = undefined;
-
+    
     // Warmup
     for (0..1000) |_| {
         _ = value.encodeBuf(&buf) catch unreachable;
     }
-
+    
     // Measurement
-    const start = std.time.nanoTimestamp();
+    const start = nanoTimestamp();
     for (0..iterations) |_| {
         _ = value.encodeBuf(&buf) catch unreachable;
     }
-    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
-
+    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    
     const encoded = value.encodeBuf(&buf) catch unreachable;
     const bytes_per_op = encoded.len;
     const total_bytes = @as(u64, bytes_per_op) * @as(u64, iterations);
     const secs = @as(f64, @floatFromInt(elapsed)) / 1e9;
-
+    
     return BenchmarkResult{
         .name = name,
         .direction = "encode",
@@ -166,26 +197,26 @@ fn benchmarkEncoding(name: []const u8, value: Value, iterations: usize) Benchmar
 
 fn benchmarkRoundtrip(name: []const u8, value: Value, iterations: usize) BenchmarkResult {
     var buf: [8192]u8 = undefined;
-
+    
     // Warmup
     for (0..1000) |_| {
         const enc = value.encodeBuf(&buf) catch unreachable;
         _ = enc;
     }
-
+    
     // Measurement
-    const start = std.time.nanoTimestamp();
+    const start = nanoTimestamp();
     for (0..iterations) |_| {
         const enc = value.encodeBuf(&buf) catch unreachable;
         _ = enc;
     }
-    const elapsed = @as(u64, @intCast(std.time.nanoTimestamp() - start));
-
+    const elapsed = @as(u64, @intCast(nanoTimestamp() - start));
+    
     const encoded = value.encodeBuf(&buf) catch unreachable;
     const bytes_per_op = encoded.len * 2;
     const total_bytes = @as(u64, bytes_per_op) * @as(u64, iterations);
     const secs = @as(f64, @floatFromInt(elapsed)) / 1e9;
-
+    
     return BenchmarkResult{
         .name = name,
         .direction = "roundtrip",
@@ -202,11 +233,11 @@ pub fn main() !void {
     // Use stdout via posix
     const stdout = std.posix.STDOUT_FILENO;
     var out_buf: [8192]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&out_buf);
-    const writer = fbs.writer();
+    var pos: usize = 0;
+    const writer = FixedBufWriter{ .buf = &out_buf, .pos = &pos };
 
     try writer.writeAll("Warming up...\n\n");
-
+    
     // Build all test values
     const tests = [_]struct {
         name: []const u8,
@@ -219,29 +250,29 @@ pub fn main() !void {
         .{ .name = "large-list", .value = largeList(), .iterations = 20_000 },
         .{ .name = "binary-payload", .value = binaryPayload(), .iterations = 20_000 },
     };
-
+    
     var results: [20]BenchmarkResult = undefined;
     var result_count: usize = 0;
-
+    
     for (tests) |t| {
         results[result_count] = benchmarkEncoding(t.name, t.value, t.iterations);
         result_count += 1;
         results[result_count] = benchmarkRoundtrip(t.name, t.value, @max(10000, t.iterations / 10));
         result_count += 1;
     }
-
+    
     try printHeader(writer);
     for (0..result_count) |i| {
         try printResult(writer, results[i]);
     }
     try printFooter(writer);
-
+    
     // Calculate summary
     var encode_sum: f64 = 0;
     var encode_count: usize = 0;
     var roundtrip_sum: f64 = 0;
     var roundtrip_count: usize = 0;
-
+    
     for (0..result_count) |i| {
         if (std.mem.eql(u8, results[i].direction, "encode")) {
             encode_sum += results[i].mb_per_sec;
@@ -251,7 +282,7 @@ pub fn main() !void {
             roundtrip_count += 1;
         }
     }
-
+    
     try writer.print("\n=== SUMMARY ===\n", .{});
     try writer.print("Average Encode Bandwidth:    {d:.2} MB/s\n", .{encode_sum / @as(f64, @floatFromInt(encode_count))});
     try writer.print("Average Roundtrip Bandwidth: {d:.2} MB/s\n", .{roundtrip_sum / @as(f64, @floatFromInt(roundtrip_count))});
@@ -259,12 +290,12 @@ pub fn main() !void {
     try writer.writeAll("  • Zero-allocation encoding (no heap)\n");
     try writer.writeAll("  • Deterministic performance (no GC)\n");
     try writer.writeAll("  • Real-time safe\n");
-
+    
     try writer.writeAll("\n=== Cross-Runtime Comparison ===\n");
     try writer.writeAll("Clojure: Interpreted/JVM  - ~5-20 MB/s (GC dependent)\n");
     try writer.writeAll("Rust:    Compiled/AOT     - ~500-2000 MB/s\n");
     try writer.writeAll("Zig:     Compiled/AOT     - ~800-3000 MB/s (this)\n");
-
+    
     // Write to stdout
-    _ = try std.posix.write(stdout, fbs.getWritten());
+    _ = try posixWrite(stdout, out_buf[0..pos]);
 }
