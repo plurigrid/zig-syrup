@@ -1845,17 +1845,22 @@ pub fn build(b: *std.Build) void {
     stranded_check_mod.addImport("ocapn_transport", ocapn_transport_mod);
     stranded_check_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
     stranded_check_mod.addImport("ocapn_session", ocapn_session_mod);
-    // Use addObject instead of addTest so the module's target is honored — addTest
-    // appears to use a restricted target on 0.16-dev.3070 that strips std.net and
-    // std.crypto.random even when .target = native is explicitly passed to the
-    // module.
+    // Compile-check object (always works — honors module target directly).
     const stranded_check_obj = b.addObject(.{ .name = "stranded_check", .root_module = stranded_check_mod });
     const stranded_step = b.step("test-stranded-integration", "Compile-check the 8 stranded-on-main files from the 2026-04-24 merge train");
     stranded_step.dependOn(&stranded_check_obj.step);
 
+    // Attempt: also build tests from the same module. Added to its own step
+    // (not default) so if addTest still chokes on 0.16-dev.3070's target
+    // handling we don't gate the compile-check.
+    const stranded_tests = b.addTest(.{ .root_module = stranded_check_mod });
+    const run_stranded_tests = b.addRunArtifact(stranded_tests);
+    const stranded_run_step = b.step("test-stranded-run", "Run tests inside the 8 stranded-on-main files");
+    stranded_run_step.dependOn(&run_stranded_tests.step);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
-    test_step.dependOn(&stranded_check_obj.step); // compile-check the 8 novel files
+    test_step.dependOn(&run_stranded_tests.step); // run tests in the 8 novel files
     // GATED zig-0.16: test_step.dependOn(&run_xev_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_geo_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_bridge_tests.step);
