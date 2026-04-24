@@ -170,7 +170,6 @@ fn dot(a: []const f64, b: []const f64) f64 {
     return sum;
 }
 
-
 /// Compute k smallest eigenvalues/eigenvectors of symmetric matrix
 /// Uses Jacobi for robustness on small-to-mid matrices (n < 200)
 pub fn eigendecompose(

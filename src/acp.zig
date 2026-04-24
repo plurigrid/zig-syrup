@@ -5,7 +5,7 @@
 //!
 //! Borrowed from:
 //! - xenodium/acp.el (protocol flow)
-//! - soramimi/mcp-sdk-cpp (struct patterns)  
+//! - soramimi/mcp-sdk-cpp (struct patterns)
 //! - toad/src/toad/acp/protocol.py (type definitions)
 //! - agentclientprotocol/registry (agent schema)
 //!
@@ -687,7 +687,7 @@ pub const PermissionOutcome = union(enum) {
     cancelled: void,
 };
 
-/// Response: session/request_permission  
+/// Response: session/request_permission
 pub const RequestPermissionResponse = struct {
     outcome: PermissionOutcome,
 };

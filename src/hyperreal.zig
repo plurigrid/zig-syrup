@@ -163,7 +163,7 @@ pub const HyperColor = struct {
 test "HyperReal arithmetic" {
     const H = HyperReal(f64);
     const x = H.init(10.0, 1.0); // 10 + ε
-    const y = H.init(5.0, 2.0);  // 5 + 2ε
+    const y = H.init(5.0, 2.0); // 5 + 2ε
 
     // Addition: 15 + 3ε
     const sum = x.add(y);

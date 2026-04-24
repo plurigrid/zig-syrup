@@ -359,9 +359,9 @@ pub fn monsterPrimeCount(n: u64) u8 {
 
 /// Temporal ecstasis (Heidegger's threefold time-structure).
 pub const Ecstasis = enum(i8) {
-    retention = -1,   // Gewesenheit: having-been
-    impression = 0,   // Gegenwart: present moment
-    protention = 1,   // Zukunft: not-yet, structural anticipation
+    retention = -1, // Gewesenheit: having-been
+    impression = 0, // Gegenwart: present moment
+    protention = 1, // Zukunft: not-yet, structural anticipation
 
     pub fn fromTrit(t: Trit) Ecstasis {
         return @enumFromInt(@intFromEnum(t));

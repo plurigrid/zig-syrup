@@ -9,8 +9,8 @@
 ///!   zig-out/bin/salon simulate
 ///!   echo '{"A":[0.1,0.2,0.3,0.7,0.5],"B":[0.3,0.3,0.8,0.2,0.1],"C":[0.5,0.9,0.4,0.1,0.05]}' | zig-out/bin/salon pipe
 ///!   echo '...' | zig-out/bin/salon snapshot
-
 const std = @import("std");
+const compat = @import("compat.zig");
 const salon = @import("salon.zig");
 
 const Grid = salon.Grid;
@@ -19,14 +19,14 @@ const Chair = salon.Chair;
 const RGB = salon.RGB;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = compat.makeDebugAllocator();
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    const stdout = std.fs.File.stdout().deprecatedWriter();
+    var stdout = CompatWriter{};
 
     if (args.len < 2) {
         try printUsage(stdout);
@@ -140,8 +140,7 @@ fn runSimulation(w: anytype) !void {
 }
 
 fn runSnapshot(allocator: std.mem.Allocator, w: anytype) !void {
-    const stdin = std.fs.File.stdin();
-    const input = try stdin.readToEndAlloc(allocator, 1024 * 1024);
+    const input = try readAllStdin(allocator, 1024 * 1024);
     defer allocator.free(input);
 
     // Parse JSON: {"A":[d,t,a,b,g],"B":[...],"C":[...]}
@@ -205,6 +204,49 @@ fn jsonFloat(v: std.json.Value) f32 {
     };
 }
 
+/// Zig 0.16 compat: stdout writer without deprecatedWriter.
+const CompatWriter = struct {
+    pub const Error = error{};
+    pub fn writeAll(self: *CompatWriter, bytes: []const u8) Error!void {
+        _ = self;
+        compat.stdoutWrite(bytes);
+    }
+    pub fn writeByte(self: *CompatWriter, byte: u8) Error!void {
+        try self.writeAll(&.{byte});
+    }
+    pub fn writeBytesNTimes(self: *CompatWriter, bytes: []const u8, n: usize) Error!void {
+        for (0..n) |_| try self.writeAll(bytes);
+    }
+    pub fn print(self: *CompatWriter, comptime fmt: []const u8, args: anytype) Error!void {
+        std.fmt.format(self, fmt, args) catch {};
+    }
+    pub fn writeByteNTimes(self: *CompatWriter, byte: u8, n: usize) Error!void {
+        var buf: [256]u8 = undefined;
+        const fill = @min(n, buf.len);
+        @memset(buf[0..fill], byte);
+        var remaining = n;
+        while (remaining > 0) {
+            const chunk = @min(remaining, buf.len);
+            try self.writeAll(buf[0..chunk]);
+            remaining -= chunk;
+        }
+    }
+};
+
+/// Read all of stdin into an allocated buffer (compat: no readToEndAlloc).
+fn readAllStdin(allocator: std.mem.Allocator, max_bytes: usize) ![]u8 {
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    var tmp: [4096]u8 = undefined;
+    while (true) {
+        const n = compat.stdinRead(&tmp);
+        if (n == 0) break;
+        if (buf.items.len + n > max_bytes) return error.StreamTooLong;
+        try buf.appendSlice(tmp[0..n]);
+    }
+    return buf.toOwnedSlice();
+}
+
 // ============================================================
 // ANSI terminal rendering
 // ============================================================
@@ -215,11 +257,9 @@ fn renderChairStatus(w: anytype, grid: *const Grid) !void {
         const st = chair.state;
         const band = chair.bands.dominant();
         try w.print("  \x1b[48;2;{d};{d};{d}m  \x1b[0m {s}  phi={d:.2} val={d:.2} ent={d:.2} trit={d: >2} dom={s}\n", .{
-            c.r,        c.g,        c.b,
-            chair.role.label(),
-            st.phi,     st.valence, st.entropy,
-            @as(i8, st.trit),
-            band,
+            c.r,                c.g,              c.b,
+            chair.role.label(), st.phi,           st.valence,
+            st.entropy,         @as(i8, st.trit), band,
         });
     }
 }

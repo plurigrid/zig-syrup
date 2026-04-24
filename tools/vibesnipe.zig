@@ -46,24 +46,16 @@ pub fn main() !void {
     _ = try std.posix.write(std.posix.STDOUT_FILENO, fbs.getWritten());
 }
 
-fn emitIncrement(
-    allocator: std.mem.Allocator, 
-    writer: anytype, 
-    from: []const u8, 
-    to: []const u8, 
-    asset: []const u8, 
-    amount: i64, 
-    vibe: []const u8
-) !void {
+fn emitIncrement(allocator: std.mem.Allocator, writer: anytype, from: []const u8, to: []const u8, asset: []const u8, amount: i64, vibe: []const u8) !void {
     // Construct the Record
     const label = syrup.Value.fromSymbol("increment");
-    
+
     var dict_entries = std.ArrayListUnmanaged(syrup.Value.DictEntry){};
     defer dict_entries.deinit(allocator);
-    
+
     // Keys must be sorted: amount, asset, epoch, from, to, vibe
     // 'a'mount, 'a'sset, 'e'poch, 'f'rom, 't'o, 'v'ibe
-    
+
     // amount
     try dict_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("amount"), .value = syrup.Value.fromInteger(amount) });
     // asset
@@ -76,30 +68,30 @@ fn emitIncrement(
     try dict_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("to"), .value = syrup.Value.fromSymbol(to) });
     // vibe
     try dict_entries.append(allocator, .{ .key = syrup.Value.fromSymbol("vibe"), .value = syrup.Value.fromString(vibe) });
-    
+
     const dict_slice = try dict_entries.toOwnedSlice(allocator);
     defer allocator.free(dict_slice);
 
     const dict = syrup.Value.fromDictionary(dict_slice);
-    
+
     // Fields list (just the dict)
     const fields_alloc = try allocator.alloc(syrup.Value, 1);
     defer allocator.free(fields_alloc);
     fields_alloc[0] = dict;
-    
+
     const record = syrup.Value.fromRecord(&label, fields_alloc);
-    
+
     // Encode
     var buf: [4096]u8 = undefined;
     const encoded = try record.encodeBuf(&buf);
-    
+
     // Compute CID
     var hash: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(encoded, &hash, .{});
     const cid = std.fmt.bytesToHex(&hash, .lower);
-    
+
     try writer.print("\n=== VIBESNIPE DETECTED ===\n", .{});
-    try writer.print("From: {s} -> To: {s}\n", .{from, to});
+    try writer.print("From: {s} -> To: {s}\n", .{ from, to });
     try writer.print("CID:  {s}\n", .{cid});
     try writer.print("Data: {s}\n", .{encoded});
 }

@@ -1367,11 +1367,15 @@ test "e2e: chat-message encode round-trip" {
     const ts: u64 = 1709251200000;
 
     const written = pumpkin_encode_chat_message(
-        room.ptr, room.len,
-        sender.ptr, sender.len,
-        body.ptr, body.len,
+        room.ptr,
+        room.len,
+        sender.ptr,
+        sender.len,
+        body.ptr,
+        body.len,
         ts,
-        &buf, buf.len,
+        &buf,
+        buf.len,
     );
 
     try std.testing.expect(written > 0);
@@ -1393,9 +1397,11 @@ test "e2e: presence-update encode round-trip" {
     const user = "bob";
 
     const written = pumpkin_encode_presence(
-        user.ptr, user.len,
+        user.ptr,
+        user.len,
         @intFromEnum(PresenceStatus.online),
-        &buf, buf.len,
+        &buf,
+        buf.len,
     );
 
     try std.testing.expect(written > 0);
@@ -1416,17 +1422,23 @@ test "e2e: room-join and room-leave encode" {
     const user = "carol";
 
     const join_len = pumpkin_encode_room_join(
-        room.ptr, room.len,
-        user.ptr, user.len,
-        &buf, buf.len,
+        room.ptr,
+        room.len,
+        user.ptr,
+        user.len,
+        &buf,
+        buf.len,
     );
     try std.testing.expect(join_len > 0);
     try std.testing.expect(std.mem.startsWith(u8, buf[5..join_len], "9'room-join"));
 
     const leave_len = pumpkin_encode_room_leave(
-        room.ptr, room.len,
-        user.ptr, user.len,
-        &buf, buf.len,
+        room.ptr,
+        room.len,
+        user.ptr,
+        user.len,
+        &buf,
+        buf.len,
     );
     try std.testing.expect(leave_len > 0);
     try std.testing.expect(std.mem.startsWith(u8, buf[5..leave_len], "10'room-leave"));
@@ -1438,9 +1450,12 @@ test "e2e: dm-send encode" {
     const body = "secret message";
 
     const written = pumpkin_encode_dm(
-        recipient.ptr, recipient.len,
-        body.ptr, body.len,
-        &buf, buf.len,
+        recipient.ptr,
+        recipient.len,
+        body.ptr,
+        body.len,
+        &buf,
+        buf.len,
     );
 
     try std.testing.expect(written > 0);
@@ -1452,9 +1467,11 @@ test "e2e: history-request encode" {
     const room = "lobby";
 
     const written = pumpkin_encode_history_request(
-        room.ptr, room.len,
+        room.ptr,
+        room.len,
         50,
-        &buf, buf.len,
+        &buf,
+        buf.len,
     );
 
     try std.testing.expect(written > 0);
@@ -1505,9 +1522,12 @@ test "e2e: seal and unseal round-trip (passport.zig identity-bound)" {
     @memset(&alice_pub, 0xAA);
 
     const ct_len = pumpkin_seal_message(
-        plaintext.ptr, plaintext.len,
-        &alice_priv, &bob_pub,
-        &ciphertext, ciphertext.len,
+        plaintext.ptr,
+        plaintext.len,
+        &alice_priv,
+        &bob_pub,
+        &ciphertext,
+        ciphertext.len,
         &nonce,
     );
 
@@ -1519,10 +1539,13 @@ test "e2e: seal and unseal round-trip (passport.zig identity-bound)" {
 
     // Unseal with bob's key
     const pt_len = pumpkin_unseal_message(
-        &ciphertext, ct_len,
-        &bob_priv, &alice_pub,
+        &ciphertext,
+        ct_len,
+        &bob_priv,
+        &alice_pub,
         &nonce,
-        &decrypted, decrypted.len,
+        &decrypted,
+        decrypted.len,
     );
 
     try std.testing.expectEqual(plaintext.len, pt_len);
@@ -1545,9 +1568,12 @@ test "e2e: seal tampered ciphertext fails MAC" {
     @memset(&sender_pub, 0x11);
 
     const ct_len = pumpkin_seal_message(
-        plaintext.ptr, plaintext.len,
-        &sender_priv, &recip_pub,
-        &ciphertext, ciphertext.len,
+        plaintext.ptr,
+        plaintext.len,
+        &sender_priv,
+        &recip_pub,
+        &ciphertext,
+        ciphertext.len,
         &nonce,
     );
     try std.testing.expect(ct_len > 0);
@@ -1556,10 +1582,13 @@ test "e2e: seal tampered ciphertext fails MAC" {
     ciphertext[0] ^= 0xFF;
 
     const pt_len = pumpkin_unseal_message(
-        &ciphertext, ct_len,
-        &recip_priv, &sender_pub,
+        &ciphertext,
+        ct_len,
+        &recip_priv,
+        &sender_pub,
         &nonce,
-        &decrypted, decrypted.len,
+        &decrypted,
+        decrypted.len,
     );
 
     // MAC verification should fail → returns 0
@@ -1575,9 +1604,12 @@ test "e2e: sealed-envelope encode" {
     @memset(&pubkey, 0xDD);
 
     const written = pumpkin_encode_sealed_envelope(
-        ciphertext.ptr, ciphertext.len,
-        &nonce, &pubkey,
-        &buf, buf.len,
+        ciphertext.ptr,
+        ciphertext.len,
+        &nonce,
+        &pubkey,
+        &buf,
+        buf.len,
     );
 
     try std.testing.expect(written > 0);
@@ -1595,8 +1627,10 @@ test "e2e: full pumpkin-chat session simulation" {
     // 1. Encode op:start-session handshake
     var handshake_buf: [256]u8 = undefined;
     const hs_len = captp_encode_start_session(
-        &session.my_pubkey, 1069,
-        &handshake_buf, handshake_buf.len,
+        &session.my_pubkey,
+        1069,
+        &handshake_buf,
+        handshake_buf.len,
     );
     try std.testing.expect(hs_len > 0);
     session.state = .handshake_sent;
@@ -1624,9 +1658,12 @@ test "e2e: full pumpkin-chat session simulation" {
     const room = "pumpkin-lobby";
     const user = "bob";
     const join_len = pumpkin_encode_room_join(
-        room.ptr, room.len,
-        user.ptr, user.len,
-        &join_buf, join_buf.len,
+        room.ptr,
+        room.len,
+        user.ptr,
+        user.len,
+        &join_buf,
+        join_buf.len,
     );
     try std.testing.expect(join_len > 0);
 
@@ -1634,20 +1671,26 @@ test "e2e: full pumpkin-chat session simulation" {
     var msg_buf: [1024]u8 = undefined;
     const body = "gm from zig-syrup pumpkin-chat!";
     const msg_len = pumpkin_encode_chat_message(
-        room.ptr, room.len,
-        user.ptr, user.len,
-        body.ptr, body.len,
+        room.ptr,
+        room.len,
+        user.ptr,
+        user.len,
+        body.ptr,
+        body.len,
         1709251200000,
-        &msg_buf, msg_buf.len,
+        &msg_buf,
+        msg_buf.len,
     );
     try std.testing.expect(msg_len > 0);
 
     // 6. Request history
     var hist_buf: [256]u8 = undefined;
     const hist_len = pumpkin_encode_history_request(
-        room.ptr, room.len,
+        room.ptr,
+        room.len,
         25,
-        &hist_buf, hist_buf.len,
+        &hist_buf,
+        hist_buf.len,
     );
     try std.testing.expect(hist_len > 0);
 
@@ -1656,27 +1699,35 @@ test "e2e: full pumpkin-chat session simulation" {
     const dm_recipient = "alice";
     const dm_body = "hey, join #pumpkin-lobby";
     const dm_len = pumpkin_encode_dm(
-        dm_recipient.ptr, dm_recipient.len,
-        dm_body.ptr, dm_body.len,
-        &dm_buf, dm_buf.len,
+        dm_recipient.ptr,
+        dm_recipient.len,
+        dm_body.ptr,
+        dm_body.len,
+        &dm_buf,
+        dm_buf.len,
     );
     try std.testing.expect(dm_len > 0);
 
     // 8. Leave room
     var leave_buf: [256]u8 = undefined;
     const leave_len = pumpkin_encode_room_leave(
-        room.ptr, room.len,
-        user.ptr, user.len,
-        &leave_buf, leave_buf.len,
+        room.ptr,
+        room.len,
+        user.ptr,
+        user.len,
+        &leave_buf,
+        leave_buf.len,
     );
     try std.testing.expect(leave_len > 0);
 
     // 9. Go offline
     var pres_buf: [256]u8 = undefined;
     const pres_len = pumpkin_encode_presence(
-        user.ptr, user.len,
+        user.ptr,
+        user.len,
         @intFromEnum(PresenceStatus.offline),
-        &pres_buf, pres_buf.len,
+        &pres_buf,
+        pres_buf.len,
     );
     try std.testing.expect(pres_len > 0);
 
@@ -1707,11 +1758,15 @@ test "e2e: websocket captp frame wrap/unwrap round-trip" {
     const sender = "ws-user";
     const body = "over websocket!";
     const syrup_len = pumpkin_encode_chat_message(
-        room.ptr, room.len,
-        sender.ptr, sender.len,
-        body.ptr, body.len,
+        room.ptr,
+        room.len,
+        sender.ptr,
+        sender.len,
+        body.ptr,
+        body.len,
         1709251200000,
-        &syrup_buf, syrup_buf.len,
+        &syrup_buf,
+        syrup_buf.len,
     );
     try std.testing.expect(syrup_len > 0);
 
@@ -1754,9 +1809,12 @@ test "e2e: sealed message over websocket full pipeline" {
 
     // Seal
     const ct_len = pumpkin_seal_message(
-        plaintext.ptr, plaintext.len,
-        &alice_priv, &bob_pub,
-        &ciphertext, ciphertext.len,
+        plaintext.ptr,
+        plaintext.len,
+        &alice_priv,
+        &bob_pub,
+        &ciphertext,
+        ciphertext.len,
         &nonce,
     );
     try std.testing.expect(ct_len > 0);
@@ -1766,9 +1824,12 @@ test "e2e: sealed message over websocket full pipeline" {
     var alice_pub: [32]u8 = undefined;
     @memset(&alice_pub, 0xAA);
     const env_len = pumpkin_encode_sealed_envelope(
-        &ciphertext, ct_len,
-        &nonce, &alice_pub,
-        &env_buf, env_buf.len,
+        &ciphertext,
+        ct_len,
+        &nonce,
+        &alice_pub,
+        &env_buf,
+        env_buf.len,
     );
     try std.testing.expect(env_len > 0);
 
@@ -1789,10 +1850,13 @@ test "e2e: sealed message over websocket full pipeline" {
     @memset(&bob_priv, 0xBB);
     var decrypted: [256]u8 = undefined;
     const pt_len = pumpkin_unseal_message(
-        &ciphertext, ct_len,
-        &bob_priv, &alice_pub,
+        &ciphertext,
+        ct_len,
+        &bob_priv,
+        &alice_pub,
         &nonce,
-        &decrypted, decrypted.len,
+        &decrypted,
+        decrypted.len,
     );
     try std.testing.expectEqual(plaintext.len, pt_len);
     try std.testing.expectEqualSlices(u8, plaintext, decrypted[0..pt_len]);
@@ -1816,9 +1880,11 @@ test "e2e: GF(3) conservation across pumpkin-chat session" {
     for (users, 0..) |user, i| {
         // Encode presence for each
         const len = pumpkin_encode_presence(
-            user.ptr, user.len,
+            user.ptr,
+            user.len,
             @intFromEnum(PresenceStatus.online),
-            &buf, buf.len,
+            &buf,
+            buf.len,
         );
         try std.testing.expect(len > 0);
 

@@ -223,9 +223,7 @@ pub fn buildXterm16LUT(allocator: Allocator) !QuantizationLUT {
 // ============================================================================
 
 test "quantize_primary_colors" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var lut = try buildXterm256LUT(allocator);
     defer lut.deinit();
@@ -242,9 +240,7 @@ test "quantize_primary_colors" {
 }
 
 test "quantize_lut_consistency" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var lut = try buildXterm256LUT(allocator);
     defer lut.deinit();
@@ -282,9 +278,7 @@ test "xterm16_palette_size" {
 }
 
 test "batch_quantization" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var lut = try buildXterm256LUT(allocator);
     defer lut.deinit();

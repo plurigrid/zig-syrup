@@ -1,5 +1,5 @@
 //! # Colorable Combinatorial Complex Interface
-//! 
+//!
 //! GF(3) trit coloring, voice mapping, and Strange Loop pioneer profiles.
 
 const std = @import("std");

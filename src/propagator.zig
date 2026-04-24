@@ -205,6 +205,137 @@ pub fn neurofeedback_gate(args: []const ?f32) ?f32 {
 }
 
 // =============================================================================
+// Substrate Witness Gate
+// =============================================================================
+
+/// Computational substrate identifier.
+pub const Substrate = enum {
+    tree_walk, // nanoclj sequential eval (fuel-bounded, no TCO)
+    bytecode_vm, // nanoclj register VM (22-opcode, linear dispatch)
+    inet, // nanoclj interaction net (GF(3) trit-balanced, optimal sharing)
+    lokke_guile, // Lokke/Guile Scheme (proper tail calls, GMP, CPS)
+};
+
+/// Result of a four-substrate witness comparison.
+/// Maps to the CellValue lattice: agreement → Value, disagreement → Contradiction.
+pub const SubstrateWitness = struct {
+    tree_walk_answer: bool,
+    inet_answer: bool,
+    lokke_answer: bool,
+    both_halted: bool,
+    inet_trit_balanced: bool,
+
+    pub fn agrees(self: SubstrateWitness) bool {
+        return self.tree_walk_answer == self.inet_answer and
+            self.tree_walk_answer == self.lokke_answer;
+    }
+
+    /// Sequential substrates (tree-walk + lokke) agree but inet diverges.
+    pub fn sequentialAgree(self: SubstrateWitness) bool {
+        return self.tree_walk_answer == self.lokke_answer;
+    }
+
+    /// Count how many substrates say true.
+    pub fn trueCount(self: SubstrateWitness) u8 {
+        var n: u8 = 0;
+        if (self.tree_walk_answer) n += 1;
+        if (self.inet_answer) n += 1;
+        if (self.lokke_answer) n += 1;
+        return n;
+    }
+};
+
+/// Witness gate: args[0] = tree-walk result (1.0=true, 0.0=false),
+/// args[1] = inet result, args[2] = trit sum from EEG epoch.
+/// Returns the trit sum if substrates agree, null (forcing contradiction
+/// via lattice merge on the output cell) if they disagree.
+pub fn witness_gate(args: []const ?f32) ?f32 {
+    const tw = args[0] orelse return null;
+    const inet = args[1] orelse return null;
+    const trit_sum = args[2] orelse return null;
+
+    const tw_bool = tw > 0.5;
+    const inet_bool = inet > 0.5;
+
+    if (tw_bool == inet_bool) {
+        return trit_sum;
+    } else {
+        return null; // Substrates disagree — propagator produces nothing
+    }
+}
+
+/// Classifier ill-posedness: same EEG channel, two classification methods,
+/// different trit assignments. This is orthogonal to Church-Turing divergence.
+/// range-based: trit = if (max-min > threshold) 1 else 0
+/// stddev-based: trit = if (stddev > threshold) 1 else 0
+/// On boundary channels (e.g. Ch7 at ~33k range, ~17k stddev, threshold 50k/5k),
+/// these methods disagree.
+pub const ClassifierWitness = struct {
+    channel: u8,
+    range_trit: i2, // -1, 0, +1 via range method
+    stddev_trit: i2, // -1, 0, +1 via stddev method
+
+    pub fn agrees(self: ClassifierWitness) bool {
+        return self.range_trit == self.stddev_trit;
+    }
+};
+
+/// Classifier gate: args[0] = range-based trit, args[1] = stddev-based trit.
+/// Returns the trit if both methods agree, null on classifier divergence.
+pub fn classifier_gate(args: []const ?f32) ?f32 {
+    const range_trit = args[0] orelse return null;
+    const std_trit = args[1] orelse return null;
+
+    if (range_trit == std_trit) {
+        return range_trit;
+    } else {
+        return null; // Classifier substrate divergence
+    }
+}
+
+/// Epochal time witness: encodes Hickey/Fogus model where identity is a
+/// succession of immutable values, and the transition function f(old)->new
+/// is itself substrate-dependent. Each epoch is a value; the identity is
+/// the recording session; perception is the substrate's readback.
+pub const EpochalWitness = struct {
+    epoch: u32,
+    glimpse_start: u64, // ticks at epoch start (564,480 per sample @ 250Hz)
+    trit_sum: i8, // sum of per-channel trits for this epoch
+    substrate: SubstrateWitness, // four-substrate comparison
+    classifier: ?ClassifierWitness, // null if classifiers agree
+
+    /// The epoch is well-posed if all substrates and classifiers agree.
+    pub fn isWellPosed(self: EpochalWitness) bool {
+        if (!self.substrate.agrees()) return false;
+        if (self.classifier) |c| return c.agrees();
+        return true;
+    }
+
+    /// Count the number of distinct ill-posedness sources.
+    pub fn illPosedCount(self: EpochalWitness) u8 {
+        var n: u8 = 0;
+        if (!self.substrate.agrees()) n += 1; // Church-Turing divergence
+        if (self.classifier) |c| {
+            if (!c.agrees()) n += 1; // Classifier divergence
+        }
+        return n;
+    }
+};
+
+/// Epochal gate: args[0] = epoch trit sum, args[1] = substrate agreement (1/0),
+/// args[2] = classifier agreement (1/0). Returns trit sum only if both agree.
+pub fn epochal_gate(args: []const ?f32) ?f32 {
+    const trit_sum = args[0] orelse return null;
+    const substrate_ok = args[1] orelse return null;
+    const classifier_ok = args[2] orelse return null;
+
+    if (substrate_ok > 0.5 and classifier_ok > 0.5) {
+        return trit_sum;
+    }
+    return null; // ill-posed epoch: at least one divergence source
+}
+
+// =============================================================================
 // Spatial Propagator Functions
 // =============================================================================
 
@@ -367,4 +498,162 @@ test "focus_brightness mapping" {
     try std.testing.expectEqual(@as(?f32, 1.0), focus_brightness(&.{1.0}));
     try std.testing.expectEqual(@as(?f32, 0.6), focus_brightness(&.{0.0}));
     try std.testing.expectApproxEqAbs(@as(f32, 0.8), focus_brightness(&.{0.5}).?, 0.001);
+}
+
+test "witness_gate substrates agree" {
+    // Both say true (1.0), trit sum = 5.0 → passes through
+    const result = witness_gate(&.{ 1.0, 1.0, 5.0 });
+    try std.testing.expectEqual(@as(?f32, 5.0), result);
+}
+
+test "witness_gate substrates disagree" {
+    // tree-walk=true, inet=false → null (Church-Turing divergence)
+    const result = witness_gate(&.{ 1.0, 0.0, 5.0 });
+    try std.testing.expect(result == null);
+}
+
+test "witness_gate with lattice cell contradiction" {
+    const allocator = std.testing.allocator;
+    const LCell = Cell(f32, latticeMerge(f32));
+
+    // Simulate: tree-walk says trit_sum=5, inet says trit_sum=3
+    var tw_cell = LCell.init(allocator, "tree_walk");
+    defer tw_cell.deinit();
+    var inet_cell = LCell.init(allocator, "inet");
+    defer inet_cell.deinit();
+
+    try tw_cell.set_content(5.0);
+    try inet_cell.set_content(5.0);
+
+    // Same value: no contradiction
+    try std.testing.expect(!tw_cell.get_cell_value().isContradiction());
+
+    // Different substrate answers merge to contradiction
+    var merged_cell = LCell.init(allocator, "merged");
+    defer merged_cell.deinit();
+    try merged_cell.set_content(5.0); // tree-walk says 5
+    try merged_cell.set_content(3.0); // inet says 3
+    try std.testing.expect(merged_cell.get_cell_value().isContradiction());
+}
+
+test "SubstrateWitness all agree" {
+    const w = SubstrateWitness{
+        .tree_walk_answer = true,
+        .inet_answer = true,
+        .lokke_answer = true,
+        .both_halted = true,
+        .inet_trit_balanced = true,
+    };
+    try std.testing.expect(w.agrees());
+    try std.testing.expect(w.sequentialAgree());
+    try std.testing.expectEqual(@as(u8, 3), w.trueCount());
+}
+
+test "SubstrateWitness inet diverges" {
+    const w = SubstrateWitness{
+        .tree_walk_answer = true,
+        .inet_answer = false,
+        .lokke_answer = true,
+        .both_halted = true,
+        .inet_trit_balanced = true,
+    };
+    try std.testing.expect(!w.agrees());
+    try std.testing.expect(w.sequentialAgree());
+    try std.testing.expectEqual(@as(u8, 2), w.trueCount());
+}
+
+test "Substrate enum" {
+    try std.testing.expect(@intFromEnum(Substrate.tree_walk) != @intFromEnum(Substrate.lokke_guile));
+}
+
+test "ClassifierWitness agrees" {
+    const cw = ClassifierWitness{
+        .channel = 3,
+        .range_trit = 1,
+        .stddev_trit = 1,
+    };
+    try std.testing.expect(cw.agrees());
+}
+
+test "ClassifierWitness diverges on Ch7" {
+    // Real case: Ch7 E15, range=32601 -> trit=0, stddev=17077 -> trit=1
+    const cw = ClassifierWitness{
+        .channel = 7,
+        .range_trit = 0,
+        .stddev_trit = 1,
+    };
+    try std.testing.expect(!cw.agrees());
+}
+
+test "classifier_gate agrees" {
+    const args = [_]?f32{ 1.0, 1.0 };
+    const result = classifier_gate(&args);
+    try std.testing.expect(result != null);
+    try std.testing.expectEqual(@as(f32, 1.0), result.?);
+}
+
+test "classifier_gate diverges" {
+    const args = [_]?f32{ 0.0, 1.0 };
+    const result = classifier_gate(&args);
+    try std.testing.expect(result == null);
+}
+
+test "EpochalWitness well-posed" {
+    const ew = EpochalWitness{
+        .epoch = 5,
+        .glimpse_start = 5 * 250 * 564_480,
+        .trit_sum = 5,
+        .substrate = .{
+            .tree_walk_answer = true,
+            .inet_answer = true,
+            .lokke_answer = true,
+            .both_halted = true,
+            .inet_trit_balanced = true,
+        },
+        .classifier = null, // classifiers agree (no divergence)
+    };
+    try std.testing.expect(ew.isWellPosed());
+    try std.testing.expectEqual(@as(u8, 0), ew.illPosedCount());
+}
+
+test "EpochalWitness double ill-posed (E15)" {
+    // Epoch 15: Church-Turing divergence + classifier divergence
+    const ew = EpochalWitness{
+        .epoch = 15,
+        .glimpse_start = 15 * 250 * 564_480,
+        .trit_sum = 4,
+        .substrate = .{
+            .tree_walk_answer = true,
+            .inet_answer = false, // inet diverges
+            .lokke_answer = true,
+            .both_halted = true,
+            .inet_trit_balanced = true,
+        },
+        .classifier = .{
+            .channel = 7,
+            .range_trit = 0, // range says clean
+            .stddev_trit = 1, // stddev says flicker
+        },
+    };
+    try std.testing.expect(!ew.isWellPosed());
+    try std.testing.expectEqual(@as(u8, 2), ew.illPosedCount());
+}
+
+test "epochal_gate well-posed passes" {
+    const args = [_]?f32{ 5.0, 1.0, 1.0 };
+    const result = epochal_gate(&args);
+    try std.testing.expect(result != null);
+    try std.testing.expectEqual(@as(f32, 5.0), result.?);
+}
+
+test "epochal_gate ill-posed blocks" {
+    // substrate disagrees
+    const args1 = [_]?f32{ 5.0, 0.0, 1.0 };
+    try std.testing.expect(epochal_gate(&args1) == null);
+    // classifier disagrees
+    const args2 = [_]?f32{ 4.0, 1.0, 0.0 };
+    try std.testing.expect(epochal_gate(&args2) == null);
+    // both disagree
+    const args3 = [_]?f32{ 4.0, 0.0, 0.0 };
+    try std.testing.expect(epochal_gate(&args3) == null);
 }

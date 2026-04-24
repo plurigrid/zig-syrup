@@ -1,5 +1,5 @@
 //! # Sendable Interface & BLE Transport
-//! 
+//!
 //! Syrup-encoded serialization and Swift-optimized BLE GATT characteristics.
 //! Applicable in lux-flox-remote ecosystem for BCI data interchange.
 

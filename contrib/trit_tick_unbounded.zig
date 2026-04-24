@@ -349,10 +349,10 @@ pub fn extendEpoch(basis: *PrimeBasis, new_rate: u64) !?EpochTransition {
 /// This means: the code never breaks. It only gets slower.
 /// And "slower" means: 32 multiply-adds instead of 1 compare.
 pub const RegisterTier = enum(u8) {
-    u128_tier,  // 16 primes, 1-instruction compare
-    u256_tier,  // 32 primes, 2-instruction compare (or SIMD)
-    u512_tier,  // 61 primes, log-sum compare
-    unbounded,  // any number of primes, exact rational compare
+    u128_tier, // 16 primes, 1-instruction compare
+    u256_tier, // 32 primes, 2-instruction compare (or SIMD)
+    u512_tier, // 61 primes, log-sum compare
+    unbounded, // any number of primes, exact rational compare
 };
 
 pub fn currentTier(basis: *const PrimeBasis) RegisterTier {

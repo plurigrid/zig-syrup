@@ -33,7 +33,6 @@
 ///!
 ///! Wire format: all inter-component data is Syrup-canonical,
 ///! so every epoch has a deterministic CID regardless of origin chair.
-
 const std = @import("std");
 const syrup = @import("syrup.zig");
 

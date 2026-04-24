@@ -8,8 +8,8 @@
 //!   - 6 bytes of aux data (3 × int16 accelerometer)
 //!   - 1 stop byte (0xC0)
 //!
-//! Timestamps use trit-tick units (1/141,120,000 s) for exact integer
-//! arithmetic.  See trit_tick.zig for the derivation.
+//! Timestamps use glimpse units (1/141,120,000 s) for exact integer
+//! arithmetic.  See glimpse.zig for the derivation.
 //! Total: 33 bytes @ 250 Hz = 8.25 KB/sec
 //!
 //! Channels: [Fp1, Fp2, C3, C4, P3, P4, O1, O2] (10-20 electrode placement)
@@ -18,7 +18,7 @@
 //! Scale: (Vref / (Gain × 2^24)) × 1e6 to get microvolts
 
 const std = @import("std");
-const trit_tick = @import("trit_tick.zig");
+const glimpse = @import("glimpse.zig");
 
 // ============================================================================
 // CONSTANTS
@@ -47,14 +47,14 @@ pub const CHANNEL_LABELS = [_][]const u8{ "Fp1", "Fp2", "C3", "C4", "P3", "P4", 
 // ============================================================================
 
 /// Raw 24-bit signed integer ADC value
-pub const ADC24 = i32;  // Stored in i32 but only 24 bits used
+pub const ADC24 = i32; // Stored in i32 but only 24 bits used
 
 /// Single EEG sample from Cyton device
 pub const CytonSample = struct {
-    timestamp: i64,                        // Trit-ticks (1/141,120,000 s). See trit_tick.zig.
-    sample_number: u8,                     // 0-255 counter (wraps)
-    channels: [CYTON_NUM_CHANNELS]f32,    // 8 channels in microvolts
-    accel: [3]i16,                         // 3-axis accelerometer (raw)
+    timestamp: i64, // Glimpses (1/141,120,000 s). See glimpse.zig.
+    sample_number: u8, // 0-255 counter (wraps)
+    channels: [CYTON_NUM_CHANNELS]f32, // 8 channels in microvolts
+    accel: [3]i16, // 3-axis accelerometer (raw)
 
     pub fn format(
         self: CytonSample,
@@ -111,7 +111,7 @@ pub fn parseCytonPacket(data: [CYTON_PACKET_LEN]u8, timestamp: i64) ParseError!C
 
         // Sign-extend from 24-bit to 32-bit
         if ((raw & 0x800000) != 0) {
-            raw |= @as(i32, -16777216);  // 0xFF000000 in 32-bit signed
+            raw |= @as(i32, -16777216); // 0xFF000000 in 32-bit signed
         }
 
         // Convert to microvolts
@@ -161,7 +161,7 @@ pub fn parseStream(
         // Try to parse
         if (parseCytonPacket(packet, timestamp)) |sample| {
             try samples.append(allocator, sample);
-            timestamp += @as(i64, @intCast(trit_tick.TICKS_PER_SECOND / @as(u64, @intFromFloat(CYTON_SAMPLE_RATE)))); // exact: 564,480 trit-ticks per sample
+            timestamp += @as(i64, @intCast(glimpse.TICKS_PER_SECOND / @as(u64, @intFromFloat(CYTON_SAMPLE_RATE)))); // exact: 564,480 glimpses per sample
         } else |_| {
             // Skip this packet and continue searching
         }
@@ -202,12 +202,12 @@ test "parse valid cyton packet" {
     }
 }
 
-test "parse positive adc value" {
+test "parse negative adc value (0x800000 = max negative in 24-bit signed)" {
     var packet: [CYTON_PACKET_LEN]u8 = undefined;
     packet[0] = CYTON_START_BYTE;
     packet[1] = 0;
 
-    // Channel 0: 0x800000 (8388608, midpoint)
+    // Channel 0: 0x800000 = -8388608 in 24-bit two's complement (rail negative)
     packet[2] = 0x80;
     packet[3] = 0x00;
     packet[4] = 0x00;
@@ -222,8 +222,8 @@ test "parse positive adc value" {
     packet[32] = CYTON_STOP_BYTE;
 
     const sample = try parseCytonPacket(packet, 0);
-    // 0x800000 × scale ≈ 0.268 µV (very small)
-    try std.testing.expectApproxEqAbs(sample.channels[0], 0.268, 0.001);
+    // -8388608 × CYTON_SCALE = -93750.0 µV (maximum negative rail)
+    try std.testing.expectApproxEqAbs(sample.channels[0], -93750.0, 1.0);
 }
 
 test "reject invalid start byte" {
@@ -245,9 +245,7 @@ test "reject invalid stop byte" {
 }
 
 test "parse stream with multiple packets" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     // Create stream: valid packet + garbage + valid packet
     var stream: [CYTON_PACKET_LEN * 2 + 10]u8 = undefined;

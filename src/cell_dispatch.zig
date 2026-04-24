@@ -52,16 +52,16 @@ pub const DispatchError = error{
 pub const AcpSender = struct {
     ptr: *anyopaque,
     vtable: *const VTable,
-    
+
     pub const VTable = struct {
         send: *const fn (ptr: *anyopaque, batch: CellBatch, allocator: Allocator) anyerror!void,
         deinit: ?*const fn (ptr: *anyopaque) void = null,
     };
-    
+
     pub fn send(self: AcpSender, batch: CellBatch, allocator: Allocator) !void {
         return self.vtable.send(self.ptr, batch, allocator);
     }
-    
+
     pub fn deinit(self: AcpSender) void {
         if (self.vtable.deinit) |deinit_fn| {
             deinit_fn(self.ptr);
@@ -98,7 +98,7 @@ pub const Cell = extern struct {
         pub const blink: u32 = 16;
         pub const strikethrough: u32 = 32;
     };
-    
+
     pub const LayerMask: u32 = 0xF0;
     pub const GenerationMask: u32 = 0xFF00;
     pub const StyleMask: u32 = 0x0F;
@@ -175,7 +175,7 @@ pub const Cell = extern struct {
     pub fn packSyrup(self: Cell, allocator: Allocator) Allocator.Error!syrup.Value {
         const fields = try allocator.alloc(syrup.Value, 4);
         errdefer allocator.free(fields);
-        
+
         fields[0] = .{ .integer = @intCast(self.codepoint) };
         fields[1] = .{ .integer = @intCast(self.fg) };
         fields[2] = .{ .integer = @intCast(self.bg) };
@@ -190,7 +190,7 @@ pub const Cell = extern struct {
             else => return error.InvalidCellEncoding,
         };
         if (list.len != 4) return error.InvalidCellLength;
-        
+
         // Validate all fields are integers
         for (list, 0..) |field, i| {
             _ = i;
@@ -199,7 +199,7 @@ pub const Cell = extern struct {
                 else => return error.InvalidCellEncoding,
             }
         }
-        
+
         return .{
             .codepoint = @intCast(list[0].integer),
             .fg = @intCast(list[1].integer),
@@ -211,9 +211,9 @@ pub const Cell = extern struct {
     /// Equality comparison
     pub fn eql(a: Cell, b: Cell) bool {
         return a.codepoint == b.codepoint and
-               a.fg == b.fg and
-               a.bg == b.bg and
-               a.attrs == b.attrs;
+            a.fg == b.fg and
+            a.bg == b.bg and
+            a.attrs == b.attrs;
     }
 
     /// Hash function for hash maps
@@ -281,13 +281,13 @@ pub const CellBatch = struct {
     pub fn init(allocator: Allocator, origin: CellCoord, w: u32, h: u32) Error!CellBatch {
         if (w == 0 or h == 0) return error.InvalidDimensions;
         if (w > 4096 or h > 4096) return error.InvalidDimensions; // Reasonable limits
-        
+
         const count = @as(usize, w) * @as(usize, h);
         const cells = try allocator.alloc(Cell, count);
         errdefer allocator.free(cells);
-        
+
         @memset(cells, Cell.init(0, 0, 0));
-        
+
         return .{
             .origin = origin,
             .width = w,
@@ -353,12 +353,12 @@ pub const CellBatch = struct {
     pub fn markDirty(self: *CellBatch) void {
         SimdOps.markDirtyBatch(self.cells);
     }
-    
+
     /// Mark all cells as clean for a specific generation (SIMD-accelerated)
     pub fn markCleanSimd(self: *CellBatch, gen: u8) void {
         SimdOps.markCleanBatch(self.cells, gen);
     }
-    
+
     /// Count dirty cells (SIMD-accelerated)
     pub fn dirtyCountSimd(self: CellBatch, current_gen: u8) u32 {
         return SimdOps.countDirtyBatch(self.cells, current_gen);
@@ -384,13 +384,13 @@ pub const CellBatch = struct {
 
         pub fn next(self: *Iterator) ?Entry {
             if (self.index >= self.batch.cells.len) return null;
-            
+
             const x = @as(u32, @intCast(self.index % self.batch.width));
             const y = @as(u32, @intCast(self.index / self.batch.width));
             const cell = &self.batch.cells[self.index];
-            
+
             self.index += 1;
-            
+
             return .{ .x = x, .y = y, .cell = cell };
         }
 
@@ -419,16 +419,13 @@ pub const CellBatch = struct {
 
         const fields = try allocator.alloc(syrup.Value, 4);
         errdefer allocator.free(fields);
-        
+
         fields[0] = .{ .integer = @intCast(self.origin.x) };
         fields[1] = .{ .integer = @intCast(self.origin.y) };
         fields[2] = .{ .integer = @intCast(self.width) };
         fields[3] = .{ .list = try cells_list.toOwnedSlice() };
 
-        return .{ .record = .{ 
-            .label = try allocator.create(syrup.Value), 
-            .fields = fields 
-        } };
+        return .{ .record = .{ .label = try allocator.create(syrup.Value), .fields = fields } };
     }
 };
 
@@ -462,7 +459,7 @@ pub const TransducerContext = struct {
 /// A cell transformation function
 pub const CellTransform = *const fn (Cell, TransducerContext) Cell;
 
-/// A cell predicate function  
+/// A cell predicate function
 pub const CellPredicate = *const fn (Cell, TransducerContext) bool;
 
 /// A transducer pipeline - composable transformations
@@ -557,9 +554,9 @@ pub fn dimColors(comptime factor: u8) CellTransform {
             const g = (cell.fg >> 8) & 0xFF;
             const b = cell.fg & 0xFF;
             c.fg = (cell.fg & 0xFF000000) |
-                   (@as(u32, r * factor / 255) << 16) |
-                   (@as(u32, g * factor / 255) << 8) |
-                   @as(u32, b * factor / 255);
+                (@as(u32, r * factor / 255) << 16) |
+                (@as(u32, g * factor / 255) << 8) |
+                @as(u32, b * factor / 255);
             return c;
         }
     }.transform;
@@ -604,7 +601,7 @@ pub const VecSize = 4;
 pub const SimdOps = struct {
     /// Vector type for u32 operations (4 cells × 4 u32 fields)
     pub const U32Vec = @Vector(VecSize, u32);
-    
+
     /// Bulk clear cells using SIMD - sets all fields to space/default colors
     /// Falls back to scalar for non-SIMD targets
     pub fn clearBatch(cells: []Cell) void {
@@ -615,21 +612,21 @@ pub const SimdOps = struct {
             }
             return;
         }
-        
+
         // Process 4 cells at a time using SIMD
         const clear_cell = Cell.init(' ', 0xFFFFFFFF, 0xFF000000);
         const codepoint_vec: U32Vec = @splat(clear_cell.codepoint);
         const fg_vec: U32Vec = @splat(clear_cell.fg);
         const bg_vec: U32Vec = @splat(clear_cell.bg);
         const attrs_vec: U32Vec = @splat(clear_cell.attrs);
-        
+
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
             // Store SIMD vectors directly to cell array
             // Each cell is 16 bytes: [codepoint, fg, bg, attrs]
             const base = i * 4; // 4 u32s per cell
             _ = base;
-            
+
             // Scalar fallback for individual cells in the vector
             // (direct SIMD struct store requires aligned memory)
             for (0..VecSize) |j| {
@@ -639,13 +636,13 @@ pub const SimdOps = struct {
                 cells[i + j].attrs = attrs_vec[j];
             }
         }
-        
+
         // Handle remaining cells
         while (i < cells.len) : (i += 1) {
             cells[i] = clear_cell;
         }
     }
-    
+
     /// Bulk set foreground color using SIMD
     pub fn setFgBatch(cells: []Cell, fg: u32) void {
         if (cells.len < VecSize) {
@@ -654,21 +651,21 @@ pub const SimdOps = struct {
             }
             return;
         }
-        
+
         const fg_vec: U32Vec = @splat(fg);
-        
+
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
             for (0..VecSize) |j| {
                 cells[i + j].fg = fg_vec[j];
             }
         }
-        
+
         while (i < cells.len) : (i += 1) {
             cells[i].fg = fg;
         }
     }
-    
+
     /// Bulk set background color using SIMD
     pub fn setBgBatch(cells: []Cell, bg: u32) void {
         if (cells.len < VecSize) {
@@ -677,71 +674,71 @@ pub const SimdOps = struct {
             }
             return;
         }
-        
+
         const bg_vec: U32Vec = @splat(bg);
-        
+
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
             for (0..VecSize) |j| {
                 cells[i + j].bg = bg_vec[j];
             }
         }
-        
+
         while (i < cells.len) : (i += 1) {
             cells[i].bg = bg;
         }
     }
-    
+
     /// Bulk mark cells as dirty using SIMD
     pub fn markDirtyBatch(cells: []Cell) void {
         const dirty_attrs: u32 = (0xFF << 8); // Generation 0xFF = dirty
-        
+
         if (cells.len < VecSize) {
             for (cells) |*c| {
                 c.attrs = (c.attrs & ~Cell.GenerationMask) | dirty_attrs;
             }
             return;
         }
-        
+
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
             for (0..VecSize) |j| {
                 cells[i + j].attrs = (cells[i + j].attrs & ~Cell.GenerationMask) | dirty_attrs;
             }
         }
-        
+
         while (i < cells.len) : (i += 1) {
             cells[i].attrs = (cells[i].attrs & ~Cell.GenerationMask) | dirty_attrs;
         }
     }
-    
+
     /// Bulk mark cells as clean for a specific generation using SIMD
     pub fn markCleanBatch(cells: []Cell, gen: u8) void {
         const gen_attrs: u32 = @as(u32, gen) << 8;
-        
+
         if (cells.len < VecSize) {
             for (cells) |*c| {
                 c.attrs = (c.attrs & ~Cell.GenerationMask) | gen_attrs;
             }
             return;
         }
-        
+
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
             for (0..VecSize) |j| {
                 cells[i + j].attrs = (cells[i + j].attrs & ~Cell.GenerationMask) | gen_attrs;
             }
         }
-        
+
         while (i < cells.len) : (i += 1) {
             cells[i].attrs = (cells[i].attrs & ~Cell.GenerationMask) | gen_attrs;
         }
     }
-    
+
     /// Count dirty cells using SIMD-optimized comparison
     pub fn countDirtyBatch(cells: []Cell, current_gen: u8) u32 {
         var count: u32 = 0;
-        
+
         // Process 4 cells at a time
         var i: usize = 0;
         while (i + VecSize <= cells.len) : (i += VecSize) {
@@ -750,26 +747,26 @@ pub const SimdOps = struct {
             for (0..VecSize) |j| {
                 gens[j] = @truncate(cells[i + j].attrs >> 8);
             }
-            
+
             // Compare with current_gen (0xFF is always dirty)
             const current_gen_vec: @Vector(VecSize, u8) = @splat(current_gen);
             const dirty_marker: @Vector(VecSize, u8) = @splat(0xFF);
-            
+
             const is_current = gens == current_gen_vec;
             const is_dirty_marker = gens == dirty_marker;
             const is_dirty = is_dirty_marker | ~is_current;
-            
+
             // Count true values
             for (0..VecSize) |j| {
                 if (is_dirty[j]) count += 1;
             }
         }
-        
+
         // Handle remaining cells
         while (i < cells.len) : (i += 1) {
             if (cells[i].isDirty(current_gen)) count += 1;
         }
-        
+
         return count;
     }
 };
@@ -787,35 +784,35 @@ pub const GpuBuffer = struct {
     capacity: u32,
     /// Number of active (dirty) cells
     active_count: u32,
-    
+
     /// Create a GPU-compatible buffer (naturally aligned for GPU DMA)
     pub fn init(allocator: Allocator, capacity: u32) Allocator.Error!GpuBuffer {
         // Allocate cells - Cell struct is 16 bytes naturally
         const cells = try allocator.alloc(Cell, capacity);
         @memset(cells, Cell.init(' ', 0xFFFFFFFF, 0xFF000000));
-        
+
         return .{
             .cells = cells,
             .capacity = capacity,
             .active_count = 0,
         };
     }
-    
+
     pub fn deinit(self: *GpuBuffer, allocator: Allocator) void {
         allocator.free(self.cells);
     }
-    
+
     /// Get buffer size in bytes (for GPU upload)
     pub fn byteSize(self: GpuBuffer) usize {
         return self.cells.len * @sizeOf(Cell);
     }
-    
+
     /// Prepare buffer for GPU upload - marks all as dirty and returns slice
     pub fn prepareUpload(self: *GpuBuffer) []const Cell {
         self.active_count = @intCast(self.cells.len);
         return self.cells;
     }
-    
+
     /// Compact buffer to only include dirty cells
     /// Returns number of cells remaining
     pub fn compactDirty(self: *GpuBuffer, current_gen: u8) u32 {
@@ -829,7 +826,7 @@ pub const GpuBuffer = struct {
         self.active_count = write_idx;
         return write_idx;
     }
-    
+
     /// Upload cells from a batch into the GPU buffer
     pub fn uploadBatch(self: *GpuBuffer, batch: CellBatch, offset: u32) u32 {
         const to_copy = @min(batch.cells.len, self.cells.len - offset);
@@ -837,7 +834,7 @@ pub const GpuBuffer = struct {
         self.active_count = @max(self.active_count, @as(u32, @intCast(offset + to_copy)));
         return @intCast(to_copy);
     }
-    
+
     /// Create an index buffer of dirty cell positions (for indexed rendering)
     pub fn buildDirtyIndexBuffer(
         self: GpuBuffer,
@@ -846,13 +843,13 @@ pub const GpuBuffer = struct {
     ) Allocator.Error![]u32 {
         var indices = try std.ArrayList(u32).initCapacity(allocator, 16);
         errdefer indices.deinit(allocator);
-        
+
         for (self.cells, 0..) |cell, i| {
             if (cell.isDirty(current_gen)) {
                 try indices.append(allocator, @intCast(i));
             }
         }
-        
+
         return indices.toOwnedSlice(allocator);
     }
 };
@@ -863,7 +860,7 @@ pub const ComputeDispatch = struct {
     work_group_size: u32 = 256,
     /// Number of work groups to dispatch
     num_work_groups: u32,
-    
+
     /// Calculate dispatch parameters for a batch
     pub fn forBatch(batch_size: u32, work_group_size: u32) ComputeDispatch {
         return .{
@@ -871,7 +868,7 @@ pub const ComputeDispatch = struct {
             .num_work_groups = (batch_size + work_group_size - 1) / work_group_size,
         };
     }
-    
+
     /// Total threads that will be launched
     pub fn totalThreads(self: ComputeDispatch) u32 {
         return self.work_group_size * self.num_work_groups;
@@ -968,14 +965,14 @@ pub const DispatchEngine = struct {
         // For large batches, use thread pool
         const chunk_size = 256;
         const num_chunks = (batch.cells.len + chunk_size - 1) / chunk_size;
-        
+
         var total_processed: std.atomic.Value(u32) = .init(0);
         var wg: std.Thread.WaitGroup = .{};
 
         for (0..num_chunks) |chunk_idx| {
             const start = chunk_idx * chunk_size;
             const end = @min(start + chunk_size, batch.cells.len);
-            
+
             const args = .{
                 batch,
                 start,
@@ -1012,7 +1009,7 @@ pub const DispatchEngine = struct {
         self.stats.batches_dispatched += 1;
         self.stats.cells_processed += total;
         self.stats.cells_skipped += @as(u64, batch.cells.len) - total;
-        
+
         return total;
     }
 
@@ -1024,7 +1021,7 @@ pub const DispatchEngine = struct {
     ) ![]CellBatch {
         const world_damage = tracker.getWorld(world_id) orelse return &[_]CellBatch{};
         const regions = try world_damage.coalesce();
-        
+
         var batches = std.ArrayList(CellBatch).init(self.allocator);
         errdefer {
             for (batches.items) |*b| b.deinit();
@@ -1053,7 +1050,7 @@ pub const DispatchEngine = struct {
                     // Calculate actual batch size (clip to region bounds)
                     const actual_w = @min(bw, @as(u32, @intCast(@max(0, max_x - x + 1))));
                     const actual_h = @min(bh, @as(u32, @intCast(@max(0, max_y - y + 1))));
-                    
+
                     if (actual_w == 0 or actual_h == 0) continue;
 
                     var batch = try CellBatch.init(self.allocator, origin, actual_w, actual_h);
@@ -1061,7 +1058,7 @@ pub const DispatchEngine = struct {
 
                     // Mark all cells as dirty (since they came from damage regions)
                     batch.markDirty();
-                    
+
                     try batches.append(batch);
                 }
             }
@@ -1097,91 +1094,91 @@ const testing = std.testing;
 
 test "Cell basic operations" {
     var cell = Cell.init('A', 0xFFFFFFFF, 0xFF000000);
-    
+
     try testing.expectEqual(@as(u32, 'A'), cell.codepoint);
     // Gen 0 is clean (not yet drawn)
     try testing.expect(!cell.isDirty(0));
     try testing.expect(!cell.isDirty(1));
-    
+
     // Mark as explicitly dirty
     cell.markDirty();
     try testing.expect(cell.isDirty(0));
     try testing.expect(cell.isDirty(1));
-    
+
     cell.markClean(1);
     try testing.expect(!cell.isDirty(1));
     try testing.expect(cell.isDirty(2));
-    
+
     cell.markDirty();
     try testing.expect(cell.isDirty(0));
 }
 
 test "Cell style operations" {
     var cell = Cell.init('B', 0xFFFF0000, 0xFF000000);
-    
+
     cell = cell.withStyle(Cell.Style.bold);
     try testing.expectEqual(@as(u32, Cell.Style.bold), cell.style());
-    
+
     cell.setLayer(5);
     try testing.expectEqual(@as(u8, 5), cell.layer());
-    
+
     // Verify style preserved when setting layer
     try testing.expectEqual(@as(u32, Cell.Style.bold), cell.style());
 }
 
 test "Cell batch operations" {
     const allocator = testing.allocator;
-    
+
     const origin = CellCoord.init(10, 20, 1);
     var batch = try CellBatch.init(allocator, origin, 8, 8);
     defer batch.deinit();
-    
+
     try testing.expectEqual(@as(u32, 8), batch.width);
     try testing.expectEqual(@as(u32, 8), batch.height);
     try testing.expectEqual(@as(usize, 64), batch.cells.len);
-    
+
     const cell = Cell.init('X', 0xFFFF0000, 0xFF000000);
-    
+
     try testing.expect(batch.set(0, 0, cell));
     try testing.expect(batch.set(7, 7, cell));
     try testing.expect(!batch.set(8, 8, cell)); // Out of bounds
-    
+
     const retrieved = batch.get(0, 0).?;
     try testing.expectEqual(cell.codepoint, retrieved.codepoint);
-    
+
     try testing.expect(batch.get(8, 0) == null); // Out of bounds
 }
 
 test "Cell batch fill and mark" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 4, 4);
     defer batch.deinit();
-    
+
     const cell = Cell.init(' ', 0xFFFFFFFF, 0xFF000000);
     batch.fill(cell);
-    
+
     // All should be clean for gen 0
     try testing.expectEqual(@as(u32, 0), batch.dirtyCount(0));
-    
+
     batch.markDirty();
     try testing.expectEqual(@as(u32, 16), batch.dirtyCount(0));
-    
+
     batch.markClean(1);
     try testing.expectEqual(@as(u32, 0), batch.dirtyCount(1));
 }
 
 test "Cell batch iterator" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 2, 2);
     defer batch.deinit();
-    
+
     _ = batch.set(0, 0, Cell.init('A', 0, 0));
     _ = batch.set(1, 0, Cell.init('B', 0, 0));
     _ = batch.set(0, 1, Cell.init('C', 0, 0));
     _ = batch.set(1, 1, Cell.init('D', 0, 0));
-    
+
     var it = batch.iterator();
     var count: u32 = 0;
     while (it.next()) |entry| {
@@ -1200,14 +1197,14 @@ test "Cell batch iterator" {
 
 test "Cell Syrup serialization" {
     const allocator = testing.allocator;
-    
+
     const cell = Cell{
         .codepoint = 'π',
         .fg = 0xFFFF0000,
         .bg = 0xFF00FF00,
         .attrs = Cell.Style.bold | (@as(u32, 1) << 8),
     };
-    
+
     const val = try cell.packSyrup(allocator);
     defer {
         switch (val) {
@@ -1215,7 +1212,7 @@ test "Cell Syrup serialization" {
             else => {},
         }
     }
-    
+
     const unpacked = try Cell.unpackSyrup(val);
     try testing.expectEqual(cell.codepoint, unpacked.codepoint);
     try testing.expectEqual(cell.fg, unpacked.fg);
@@ -1232,44 +1229,44 @@ test "Cell Syrup invalid length" {
     const allocator = testing.allocator;
     const fields = try allocator.alloc(syrup.Value, 3);
     defer allocator.free(fields);
-    
+
     const val = syrup.Value{ .list = fields };
     try testing.expectError(error.InvalidCellLength, Cell.unpackSyrup(val));
 }
 
 test "Pipeline filter and map" {
     const allocator = testing.allocator;
-    
+
     var pipeline = try Pipeline.init(allocator);
     defer pipeline.deinit();
-    
+
     try pipeline.filter(filterDirty);
     try pipeline.map(invertColors);
-    
+
     const ctx = TransducerContext.init(allocator, 1, 1);
-    
+
     // Dirty cell should pass through and be inverted
     var dirty = Cell.init('A', 0xFFFFFFFF, 0xFF000000);
     dirty.markDirty(); // Mark as explicitly dirty
-    
+
     const result = pipeline.apply(dirty, ctx);
     try testing.expect(result != null);
     try testing.expectEqual(@as(u32, 0xFF000000), result.?.fg); // Inverted
-    
+
     // Clean cell should be filtered out
     var clean = Cell.init('B', 0xFFFFFFFF, 0xFF000000);
     clean.markClean(1);
-    
+
     const filtered = pipeline.apply(clean, ctx);
     try testing.expect(filtered == null);
 }
 
 test "Pipeline batch processing" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 4, 4);
     defer batch.deinit();
-    
+
     // Set some dirty cells
     var i: u32 = 0;
     while (i < 4) : (i += 1) {
@@ -1277,17 +1274,17 @@ test "Pipeline batch processing" {
         cell.markDirty();
         _ = batch.set(@intCast(i), @intCast(i), cell);
     }
-    
+
     var pipeline = try Pipeline.init(allocator);
     defer pipeline.deinit();
     try pipeline.filter(filterDirty);
     try pipeline.map(setFg(0xFF00FF00));
-    
+
     const ctx = TransducerContext.init(allocator, 1, 1);
     const processed = pipeline.applyBatch(&batch, ctx);
-    
+
     try testing.expectEqual(@as(u32, 4), processed);
-    
+
     // Verify colors changed
     for (0..4) |j| {
         const cell = batch.get(@intCast(j), @intCast(j)).?;
@@ -1305,12 +1302,12 @@ test "DispatchEngine init/deinit" {
 
 test "DispatchEngine invalid config" {
     const allocator = testing.allocator;
-    
+
     try testing.expectError(error.InvalidBatchDimensions, DispatchEngine.init(allocator, .{
         .batch_width = 0,
         .batch_height = 64,
     }));
-    
+
     try testing.expectError(error.InvalidBatchDimensions, DispatchEngine.init(allocator, .{
         .batch_width = 10000,
         .batch_height = 64,
@@ -1326,21 +1323,21 @@ test "Cell equality and hash" {
     const a = Cell.init('A', 0xFFFF0000, 0xFF000000);
     const b = Cell.init('A', 0xFFFF0000, 0xFF000000);
     const c = Cell.init('B', 0xFFFF0000, 0xFF000000);
-    
+
     try testing.expect(a.eql(b));
     try testing.expect(!a.eql(c));
-    
+
     try testing.expectEqual(a.hash(), b.hash());
 }
 
 test "CellCoord conversion" {
     const cc = CellCoord.init(10, 20, 5);
     const tc = cc.toTileCoord();
-    
+
     try testing.expectEqual(@as(i32, 10), tc.x);
     try testing.expectEqual(@as(i32, 20), tc.y);
     try testing.expectEqual(@as(i32, 0), tc.z);
-    
+
     const cc2 = CellCoord.fromTileCoord(tc, 5);
     try testing.expectEqual(cc.x, cc2.x);
     try testing.expectEqual(cc.y, cc2.y);
@@ -1349,14 +1346,14 @@ test "CellCoord conversion" {
 
 test "CellBatch bounds checking" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 2, 2);
     defer batch.deinit();
-    
+
     // Valid accesses
     try testing.expect(batch.get(0, 0) != null);
     try testing.expect(batch.get(1, 1) != null);
-    
+
     // Invalid accesses
     try testing.expect(batch.get(2, 0) == null);
     try testing.expect(batch.get(0, 2) == null);
@@ -1365,7 +1362,7 @@ test "CellBatch bounds checking" {
 
 test "CellBatch init validation" {
     const allocator = testing.allocator;
-    
+
     try testing.expectError(error.InvalidDimensions, CellBatch.init(allocator, CellCoord.init(0, 0, 1), 0, 10));
     try testing.expectError(error.InvalidDimensions, CellBatch.init(allocator, CellCoord.init(0, 0, 1), 10, 0));
     try testing.expectError(error.InvalidDimensions, CellBatch.init(allocator, CellCoord.init(0, 0, 1), 10000, 10));
@@ -1373,15 +1370,15 @@ test "CellBatch init validation" {
 
 test "filterStyle predicate" {
     const ctx = TransducerContext.init(undefined, 1, 0);
-    
+
     const bold_pred = filterStyle(Cell.Style.bold);
-    
+
     var cell = Cell.init('A', 0, 0);
     try testing.expect(!bold_pred(cell, ctx));
-    
+
     cell = cell.withStyle(Cell.Style.bold);
     try testing.expect(bold_pred(cell, ctx));
-    
+
     // Test combined styles
     cell = cell.withStyle(Cell.Style.bold | Cell.Style.italic);
     try testing.expect(bold_pred(cell, ctx));
@@ -1390,15 +1387,15 @@ test "filterStyle predicate" {
 test "dimColors transform" {
     const dim = dimColors(128);
     const ctx = TransducerContext.init(undefined, 1, 0);
-    
+
     const cell = Cell.init('A', 0xFFFFFFFF, 0xFF000000);
     const dimmed = dim(cell, ctx);
-    
+
     // White dimmed by 128/255 should be approximately gray
     const r = (dimmed.fg >> 16) & 0xFF;
     const g = (dimmed.fg >> 8) & 0xFF;
     const b = dimmed.fg & 0xFF;
-    
+
     // Each channel should be approximately half
     try testing.expect(r >= 120 and r <= 135);
     try testing.expect(g >= 120 and g <= 135);
@@ -1407,10 +1404,10 @@ test "dimColors transform" {
 
 test "clearCell transform" {
     const ctx = TransducerContext.init(undefined, 1, 0);
-    
+
     const cell = Cell.init('X', 0xFFFF0000, 0xFF00FF00);
     const cleared = clearCell(cell, ctx);
-    
+
     try testing.expectEqual(@as(u32, ' '), cleared.codepoint);
     try testing.expectEqual(@as(u32, 0xFFFFFFFF), cleared.fg);
     try testing.expectEqual(@as(u32, 0xFF000000), cleared.bg);
@@ -1427,17 +1424,17 @@ test "CellBatch large batch parallel dispatch" {
 
 test "SimdOps clearBatch" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 10, 10);
     defer batch.deinit();
-    
+
     // Fill with non-default values
     const filled = Cell.init('X', 0xFFFF0000, 0xFF00FF00);
     batch.fill(filled);
-    
+
     // Clear using SIMD
     SimdOps.clearBatch(batch.cells);
-    
+
     // Verify all cells cleared
     for (batch.cells) |cell| {
         try testing.expectEqual(@as(u32, ' '), cell.codepoint);
@@ -1448,13 +1445,13 @@ test "SimdOps clearBatch" {
 
 test "SimdOps setFgBatch" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 8, 8);
     defer batch.deinit();
-    
+
     const new_fg: u32 = 0xFF00FF00;
     SimdOps.setFgBatch(batch.cells, new_fg);
-    
+
     for (batch.cells) |cell| {
         try testing.expectEqual(new_fg, cell.fg);
     }
@@ -1462,13 +1459,13 @@ test "SimdOps setFgBatch" {
 
 test "SimdOps setBgBatch" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 8, 8);
     defer batch.deinit();
-    
+
     const new_bg: u32 = 0xFF0000FF;
     SimdOps.setBgBatch(batch.cells, new_bg);
-    
+
     for (batch.cells) |cell| {
         try testing.expectEqual(new_bg, cell.bg);
     }
@@ -1476,38 +1473,38 @@ test "SimdOps setBgBatch" {
 
 test "SimdOps markDirtyBatch and markCleanBatch" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 8, 8);
     defer batch.deinit();
-    
+
     // Initially clean for gen 0
     try testing.expectEqual(@as(u32, 0), batch.dirtyCount(0));
-    
+
     // Mark all dirty
     SimdOps.markDirtyBatch(batch.cells);
-    
+
     // All should be dirty for any generation
     try testing.expectEqual(@as(u32, 64), batch.dirtyCount(0));
     try testing.expectEqual(@as(u32, 64), batch.dirtyCount(1));
-    
+
     // Mark clean for gen 1
     SimdOps.markCleanBatch(batch.cells, 1);
-    
+
     try testing.expectEqual(@as(u32, 64), batch.dirtyCount(0)); // Still dirty for gen 0
     try testing.expectEqual(@as(u32, 0), batch.dirtyCount(1)); // Clean for gen 1
 }
 
 test "SimdOps countDirtyBatch" {
     const allocator = testing.allocator;
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 4, 4);
     defer batch.deinit();
-    
+
     // Mark half dirty
     for (0..8) |i| {
         batch.cells[i].markDirty();
     }
-    
+
     const dirty_count = SimdOps.countDirtyBatch(batch.cells, 0);
     try testing.expectEqual(@as(u32, 8), dirty_count);
 }
@@ -1517,9 +1514,9 @@ test "SimdOps small batch scalar fallback" {
     var cells: [2]Cell = undefined;
     cells[0] = Cell.init('A', 0xFFFF0000, 0xFF000000);
     cells[1] = Cell.init('B', 0xFF00FF00, 0xFF000000);
-    
+
     SimdOps.clearBatch(&cells);
-    
+
     try testing.expectEqual(@as(u32, ' '), cells[0].codepoint);
     try testing.expectEqual(@as(u32, ' '), cells[1].codepoint);
 }
@@ -1530,10 +1527,10 @@ test "SimdOps small batch scalar fallback" {
 
 test "GpuBuffer init/deinit" {
     const allocator = testing.allocator;
-    
+
     var buf = try GpuBuffer.init(allocator, 256);
     defer buf.deinit(allocator);
-    
+
     try testing.expectEqual(@as(u32, 256), buf.capacity);
     try testing.expectEqual(@as(u32, 0), buf.active_count);
     try testing.expectEqual(@as(usize, 256 * 16), buf.byteSize());
@@ -1541,15 +1538,15 @@ test "GpuBuffer init/deinit" {
 
 test "GpuBuffer compactDirty" {
     const allocator = testing.allocator;
-    
+
     var buf = try GpuBuffer.init(allocator, 16);
     defer buf.deinit(allocator);
-    
+
     // Mark some cells dirty
     buf.cells[0].markDirty();
     buf.cells[3].markDirty();
     buf.cells[7].markDirty();
-    
+
     const remaining = buf.compactDirty(0);
     try testing.expectEqual(@as(u32, 3), remaining);
     try testing.expectEqual(@as(u32, 3), buf.active_count);
@@ -1557,16 +1554,16 @@ test "GpuBuffer compactDirty" {
 
 test "GpuBuffer uploadBatch" {
     const allocator = testing.allocator;
-    
+
     var buf = try GpuBuffer.init(allocator, 32);
     defer buf.deinit(allocator);
-    
+
     var batch = try CellBatch.init(allocator, CellCoord.init(0, 0, 1), 4, 4);
     defer batch.deinit();
-    
+
     const cell = Cell.init('X', 0xFFFF0000, 0xFF000000);
     batch.fill(cell);
-    
+
     const uploaded = buf.uploadBatch(batch, 0);
     try testing.expectEqual(@as(u32, 16), uploaded);
     try testing.expectEqual(@as(u32, 16), buf.active_count);
@@ -1574,18 +1571,18 @@ test "GpuBuffer uploadBatch" {
 
 test "GpuBuffer buildDirtyIndexBuffer" {
     const allocator = testing.allocator;
-    
+
     var buf = try GpuBuffer.init(allocator, 16);
     defer buf.deinit(allocator);
-    
+
     // Mark cells at positions 1, 3, 5 as dirty
     buf.cells[1].markDirty();
     buf.cells[3].markDirty();
     buf.cells[5].markDirty();
-    
+
     const indices = try buf.buildDirtyIndexBuffer(allocator, 0);
     defer allocator.free(indices);
-    
+
     try testing.expectEqual(@as(usize, 3), indices.len);
     try testing.expectEqual(@as(u32, 1), indices[0]);
     try testing.expectEqual(@as(u32, 3), indices[1]);
@@ -1594,7 +1591,7 @@ test "GpuBuffer buildDirtyIndexBuffer" {
 
 test "ComputeDispatch forBatch" {
     const dispatch = ComputeDispatch.forBatch(1000, 256);
-    
+
     try testing.expectEqual(@as(u32, 256), dispatch.work_group_size);
     try testing.expectEqual(@as(u32, 4), dispatch.num_work_groups);
     try testing.expectEqual(@as(u32, 1024), dispatch.totalThreads());

@@ -109,13 +109,33 @@ fn recordBody(value: syrup.Value) ![]const syrup.Value.DictEntry {
             if (record_value.fields.len != 1) return ArtifactError.InvalidArtifact;
             break :blk try expectDict(record_value.fields[0]);
         },
+        // Handle dict-encoded records: {$label: "world", $fields: [...]}
+        .dictionary => |entries| blk: {
+            var label_ok = false;
+            var fields_val: ?syrup.Value = null;
+            for (entries) |entry| {
+                if (matchesString(entry.key, "$label")) {
+                    if (matchesString(entry.value, "world")) label_ok = true;
+                } else if (matchesString(entry.key, "$fields")) {
+                    fields_val = entry.value;
+                }
+            }
+            if (!label_ok) return ArtifactError.InvalidArtifact;
+            const fields = fields_val orelse return ArtifactError.MissingField;
+            const items = switch (fields) {
+                .list => |list| list,
+                else => return ArtifactError.WrongType,
+            };
+            if (items.len != 1) return ArtifactError.InvalidArtifact;
+            break :blk try expectDict(items[0]);
+        },
         else => ArtifactError.WrongType,
     };
 }
 
 fn dictValue(entries: []const syrup.Value.DictEntry, key: []const u8) !syrup.Value {
     for (entries) |entry| {
-        if (matchesSymbol(entry.key, key)) return entry.value;
+        if (matchesSymbol(entry.key, key) or matchesString(entry.key, key)) return entry.value;
     }
     return ArtifactError.MissingField;
 }
@@ -123,6 +143,14 @@ fn dictValue(entries: []const syrup.Value.DictEntry, key: []const u8) !syrup.Val
 fn matchesSymbol(value: syrup.Value, key: []const u8) bool {
     return switch (value) {
         .symbol => |symbol_name| std.mem.eql(u8, symbol_name, key),
+        else => false,
+    };
+}
+
+fn matchesString(value: syrup.Value, key: []const u8) bool {
+    return switch (value) {
+        .string => |s| std.mem.eql(u8, s, key),
+        .symbol => |s| std.mem.eql(u8, s, key),
         else => false,
     };
 }

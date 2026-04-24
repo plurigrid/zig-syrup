@@ -48,11 +48,9 @@ pub const DSI24_SCALE: f64 = (DSI24_VREF / (DSI24_GAIN * @as(f64, 1 << 24))) * 1
 
 // Channel labels: full 10-20 montage + references
 pub const CHANNEL_LABELS = [DSI24_NUM_TOTAL_CHANNELS][]const u8{
-    "Fp1", "Fp2", "F7",  "F3",  "Fz",  "F4",  "F8",
-    "T7",  "C3",  "Cz",  "C4",  "T8",
-    "P7",  "P3",  "Pz",  "P4",  "P8",
-    "O1",  "O2",
-    "A1",  "A2",
+    "Fp1",  "Fp2",  "F7",   "F3", "Fz", "F4", "F8",
+    "T7",   "C3",   "Cz",   "C4", "T8", "P7", "P3",
+    "Pz",   "P4",   "P8",   "O1", "O2", "A1", "A2",
     "AUX1", "AUX2", "AUX3",
 };
 
@@ -271,9 +269,7 @@ test "reject short packet" {
 }
 
 test "parse stream with two packets" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var stream = [_]u8{0} ** (DSI24_PACKET_LEN * 2);
     // Packet 1

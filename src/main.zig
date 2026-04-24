@@ -7,7 +7,7 @@
 //!   label: "skill:invoke" (string, not symbol!)
 //!   fields: [
 //!     'gay-mcp      (symbol)
-//!     'palette      (symbol)  
+//!     'palette      (symbol)
 //!     {"n": 4, "seed": 1069}  (dictionary)
 //!     0             (integer)
 //!   ]

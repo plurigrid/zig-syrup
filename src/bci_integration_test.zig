@@ -660,3 +660,230 @@ test "integration: ERC online learning from zero weights with FFT pipeline" {
     // Last processed was delta → minus → -1.0
     try std.testing.expectEqual(@as(?f32, -1.0), cell.get_content());
 }
+
+// ============================================================================
+// TEST 17: Substrate witness gate — EEG trit through Church-Turing witness
+// ============================================================================
+
+test "integration: substrate witness gate detects divergence" {
+    const allocator = std.testing.allocator;
+    const LCell = propagator.Cell(f32, comptime propagator.latticeMerge(f32));
+
+    // Simulate Cyton epoch: 8 channels classified as trits
+    // Pattern from real recording: [+1 0 +1 +1 +1 +1 +1 -1] sum=+5
+    const epoch_trits = [8]f32{ 1, 0, 1, 1, 1, 1, 1, -1 };
+    var trit_sum: f32 = 0;
+    for (epoch_trits) |t| trit_sum += t;
+    try std.testing.expectEqual(@as(f32, 5.0), trit_sum);
+
+    // Substrate witness results (from nanoclj semi-decide):
+    // tree-walk says sum matches target (true), inet says it doesn't (false)
+    const tw_answer: f32 = 1.0; // true
+    const inet_answer: f32 = 0.0; // false — substrates disagree
+
+    // witness_gate returns null on disagreement
+    const gate_result = propagator.witness_gate(&.{ tw_answer, inet_answer, trit_sum });
+    try std.testing.expect(gate_result == null);
+
+    // When substrates agree, gate passes the trit sum through
+    const agree_result = propagator.witness_gate(&.{ 1.0, 1.0, trit_sum });
+    try std.testing.expectEqual(@as(?f32, 5.0), agree_result);
+
+    // Wire into lattice cell: two epochs with different trit sums → contradiction
+    var epoch_cell = LCell.init(allocator, "epoch_witness");
+    defer epoch_cell.deinit();
+
+    // Epoch 0: pattern sum=+5
+    try epoch_cell.set_content(5.0);
+    try std.testing.expectEqual(@as(?f32, 5.0), epoch_cell.get_content());
+
+    // Epoch 1: different pattern sum=+3
+    try epoch_cell.set_content(3.0);
+    try std.testing.expect(epoch_cell.get_cell_value().isContradiction());
+
+    // SubstrateWitness: tree-walk + lokke agree, inet diverges
+    const witness = propagator.SubstrateWitness{
+        .tree_walk_answer = true,
+        .inet_answer = false,
+        .lokke_answer = true,
+        .both_halted = true,
+        .inet_trit_balanced = true,
+    };
+    try std.testing.expect(!witness.agrees());
+    try std.testing.expect(witness.sequentialAgree());
+}
+
+// ============================================================================
+// TEST 18: Full Cyton epoch pipeline — trit classify → witness gate → lattice
+// Simulates 29 epochs from real Cyton recording patterns.
+// ============================================================================
+
+test "integration: 29-epoch Cyton witness pipeline with glimpse timestamps" {
+    const allocator = std.testing.allocator;
+    const LCell = propagator.Cell(f32, comptime propagator.latticeMerge(f32));
+    const glimpse = @import("glimpse");
+
+    const SAMPLE_RATE: u64 = 250;
+    const TICKS_PER_SAMPLE = glimpse.TICKS_PER_SECOND / SAMPLE_RATE;
+
+    // Verify exact division
+    try std.testing.expectEqual(@as(u64, 0), glimpse.TICKS_PER_SECOND % SAMPLE_RATE);
+    try std.testing.expectEqual(@as(u64, 564_480), TICKS_PER_SAMPLE);
+
+    // Real Cyton patterns: 27 epochs of sum=+5, 2 epochs of sum=+3
+    const EPOCHS = 29;
+    var witness_results: [EPOCHS]struct { sum: f32, tw: f32, inet: f32 } = undefined;
+    for (0..EPOCHS) |ep| {
+        if (ep == 7 or ep == 19) {
+            // Pattern B: [+1 0 -1 +1 +1 +1 +1 -1] sum=+3
+            witness_results[ep] = .{ .sum = 3.0, .tw = 1.0, .inet = 0.0 };
+        } else {
+            // Pattern A: [+1 0 +1 +1 +1 +1 +1 -1] sum=+5
+            witness_results[ep] = .{ .sum = 5.0, .tw = 1.0, .inet = 0.0 };
+        }
+    }
+
+    // Process each epoch through witness_gate
+    var agreed: u32 = 0;
+    var disagreed: u32 = 0;
+    var lattice_cell = LCell.init(allocator, "cyton_witness");
+    defer lattice_cell.deinit();
+
+    for (0..EPOCHS) |ep| {
+        const w = witness_results[ep];
+        const epoch_glimpse = ep * SAMPLE_RATE * TICKS_PER_SAMPLE;
+        _ = epoch_glimpse;
+
+        const gate = propagator.witness_gate(&.{ w.tw, w.inet, w.sum });
+        if (gate != null) {
+            agreed += 1;
+        } else {
+            disagreed += 1;
+        }
+    }
+
+    // All 29 epochs should show substrate disagreement (tw=true, inet=false)
+    try std.testing.expectEqual(@as(u32, 0), agreed);
+    try std.testing.expectEqual(@as(u32, 29), disagreed);
+
+    // Lattice merge of different trit sums produces contradiction
+    try lattice_cell.set_content(5.0);
+    try std.testing.expectEqual(@as(?f32, 5.0), lattice_cell.get_content());
+    try lattice_cell.set_content(3.0);
+    try std.testing.expect(lattice_cell.get_cell_value().isContradiction());
+
+    // Total glimpse span for 29 epochs: 29 * 250 * 564,480
+    const total_glimpses = EPOCHS * SAMPLE_RATE * TICKS_PER_SAMPLE;
+    try std.testing.expectEqual(@as(u64, 4_092_480_000), total_glimpses);
+}
+
+// ============================================================================
+// TEST 19: Classifier substrate divergence — range vs stddev on Ch7 E15
+// ============================================================================
+test "19. classifier substrate divergence on channel 7 epoch 15" {
+    const LCell = propagator.Cell(f32, comptime propagator.latticeMerge(f32));
+
+    // Real Cyton data: Ch7 oscillates ~11k-44k uV
+    // Range = 32601 < 50000 threshold -> trit = 0 (clean)
+    // StdDev = 17077 > 5000 threshold -> trit = 1 (flicker)
+    const cw = propagator.ClassifierWitness{
+        .channel = 7,
+        .range_trit = 0, // range method: clean
+        .stddev_trit = 1, // stddev method: flicker
+    };
+    try std.testing.expect(!cw.agrees());
+
+    // classifier_gate returns null on divergence -> lattice contradiction
+    const args = [_]?f32{ 0.0, 1.0 };
+    const result = propagator.classifier_gate(&args);
+    try std.testing.expect(result == null);
+
+    // This gives us TWO kinds of ill-posedness:
+    // 1. Church-Turing: tree-walk vs inet (same expression, different answers)
+    // 2. Classifier:    range vs stddev   (same data, different trits)
+    // Both are captured in the propagator lattice as contradictions.
+    var cell = LCell.init(std.testing.allocator, "ch7_classifier");
+    defer cell.deinit();
+
+    // Range says sum=4 for E15 (Ch7=0), stddev says sum=5 (Ch7=1)
+    try cell.set_content(4.0);
+    try cell.set_content(5.0);
+    try std.testing.expect(cell.get_cell_value().isContradiction());
+}
+
+// ============================================================================
+// TEST 20: Epochal time model — 29 epochs with ill-posedness classification
+// Hickey/Fogus: identity = series of immutable values; perception = snapshot
+// ============================================================================
+test "20. epochal time witness — 29 Cyton epochs with ill-posedness" {
+    const glimpse = @import("glimpse");
+    const TICKS_PER_SAMPLE = glimpse.TICKS_PER_SECOND / 250;
+
+    // Build 29 epochal witnesses from real Cyton patterns
+    const EPOCHS = 29;
+    var witnesses: [EPOCHS]propagator.EpochalWitness = undefined;
+    for (0..EPOCHS) |ep| {
+        const epoch: u32 = @intCast(ep);
+        // All epochs: inet diverges from tree-walk/lokke (Church-Turing)
+        const substrate = propagator.SubstrateWitness{
+            .tree_walk_answer = true,
+            .inet_answer = false,
+            .lokke_answer = true,
+            .both_halted = true,
+            .inet_trit_balanced = true,
+        };
+
+        // ALL epochs: Ch2 classifier divergence (range=-1 rail, stddev=+1 flicker)
+        // Lokke epochal witness confirmed: range vs stddev disagree on Ch2
+        // in every epoch. Ch6/Ch7 diverge in some epochs too.
+        const classifier: ?propagator.ClassifierWitness =
+            .{ .channel = 2, .range_trit = -1, .stddev_trit = 1 };
+
+        // Trit sums: E0-E1 sum=3, E15-E19 sum=4, rest sum=5
+        const trit_sum: i8 = if (ep <= 1) 3 else if (ep >= 15 and ep <= 19) 4 else 5;
+
+        witnesses[ep] = .{
+            .epoch = epoch,
+            .glimpse_start = @as(u64, ep) * 250 * TICKS_PER_SAMPLE,
+            .trit_sum = trit_sum,
+            .substrate = substrate,
+            .classifier = classifier,
+        };
+    }
+
+    // Count ill-posedness sources across all epochs
+    var well_posed: u32 = 0;
+    var single_ill: u32 = 0; // Church-Turing only
+    var double_ill: u32 = 0; // Church-Turing + classifier
+    for (witnesses) |w| {
+        const count = w.illPosedCount();
+        if (count == 0) {
+            well_posed += 1;
+        } else if (count == 1) {
+            single_ill += 1;
+        } else {
+            double_ill += 1;
+        }
+    }
+
+    // All 29 epochs have at least Church-Turing divergence
+    try std.testing.expectEqual(@as(u32, 0), well_posed);
+    // 0 single: Lokke revealed Ch2 diverges in ALL epochs, not just E15-E19
+    try std.testing.expectEqual(@as(u32, 0), single_ill);
+    // All 29 double ill-posed: Church-Turing + classifier (Ch2 range/stddev)
+    try std.testing.expectEqual(@as(u32, 29), double_ill);
+
+    // Verify glimpse timeline: last epoch starts at expected tick
+    const last = witnesses[28];
+    try std.testing.expectEqual(@as(u64, 28 * 250 * TICKS_PER_SAMPLE), last.glimpse_start);
+
+    // Epochal gate: well-posed epochs would pass, ill-posed block
+    // All 29 are ill-posed (substrate disagrees), so all return null
+    for (witnesses) |w| {
+        const sub_ok: f32 = if (w.substrate.agrees()) 1.0 else 0.0;
+        const cls_ok: f32 = if (w.classifier) |c| (if (c.agrees()) @as(f32, 1.0) else @as(f32, 0.0)) else 1.0;
+        const args = [_]?f32{ @as(f32, @floatFromInt(w.trit_sum)), sub_ok, cls_ok };
+        const result = propagator.epochal_gate(&args);
+        try std.testing.expect(result == null); // all ill-posed
+    }
+}

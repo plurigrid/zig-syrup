@@ -239,10 +239,10 @@ fn renderThrobber(buf: *retty.Buffer, area: retty.Rect, offset: u16, busy: bool)
     // Animated gradient bar using ━ chars (13-color purple↔cyan)
     // Same pattern as zeta's EntropyDashboard gauge but as raw cells
     const gradient = [13]retty.Color{
-        Dracula.purple, retty.Color.rgb(172, 157, 251),
+        Dracula.purple,                 retty.Color.rgb(172, 157, 251),
         retty.Color.rgb(155, 167, 253), retty.Color.rgb(139, 177, 253),
         retty.Color.rgb(139, 195, 253), retty.Color.rgb(139, 213, 253),
-        Dracula.cyan, retty.Color.rgb(139, 213, 253),
+        Dracula.cyan,                   retty.Color.rgb(139, 213, 253),
         retty.Color.rgb(139, 195, 253), retty.Color.rgb(139, 177, 253),
         retty.Color.rgb(155, 167, 253), retty.Color.rgb(172, 157, 251),
         Dracula.purple,
@@ -595,7 +595,7 @@ fn handleInput(app: *AppState, ev: nc_backend.NotcursesBackend.InputEvent) !void
 // ============================================================================
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -625,10 +625,10 @@ pub fn main() !void {
         // Vertical split: Throbber/Zeta | Main | Prompt | Footer
         var v_chunks: [4]retty.Rect = undefined;
         retty.Layout.vertical(&.{
-            .{ .length = THROBBER_HEIGHT },  // Zeta spectral dashboard
-            .{ .min = 0 },                   // Main area (fills)
-            .{ .length = PROMPT_HEIGHT },     // Prompt + info bar
-            .{ .length = FOOTER_HEIGHT },     // Footer
+            .{ .length = THROBBER_HEIGHT }, // Zeta spectral dashboard
+            .{ .min = 0 }, // Main area (fills)
+            .{ .length = PROMPT_HEIGHT }, // Prompt + info bar
+            .{ .length = FOOTER_HEIGHT }, // Footer
         }).split(screen, &v_chunks);
 
         const throbber_area = v_chunks[0];
@@ -640,8 +640,8 @@ pub fn main() !void {
         const sw = app.sidebarWidth(main_area.width);
         var h_chunks: [2]retty.Rect = undefined;
         retty.Layout.horizontal(&.{
-            .{ .length = sw },               // Sidebar
-            .{ .min = 0 },                   // Conversation (fills)
+            .{ .length = sw }, // Sidebar
+            .{ .min = 0 }, // Conversation (fills)
         }).split(main_area, &h_chunks);
 
         const sidebar_area = h_chunks[0];

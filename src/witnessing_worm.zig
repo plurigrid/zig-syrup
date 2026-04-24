@@ -511,116 +511,116 @@ fn initLocomotionCircuit(neurons: []Neuron) void {
 ///
 /// The shader encodes the connectome adjacency as a flat buffer,
 /// enabling the GPU to propagate both wavefronts simultaneously.
-pub fn generateWitnessWGSL(n_neurons: u32) []const u8 {
+pub fn generateWitnessWGSL(_: u32) []const u8 {
     // Comptime WGSL generation for the witnessing protocol
     return
-        \\// Witnessing Worm — GPU-parallel wavefront propagation
-        \\// C. elegans bidirectional proof of recency and subsequency
-        \\
-        \\struct Neuron {
-        \\  oppositional: i32,       // GF(3) trit: -1, 0, +1
-        \\  recency: u32,            // tick of last visit
-        \\  forward_subseq: u32,     // forward wave ordinal
-        \\  backward_subseq: u32,    // backward wave ordinal
-        \\  resym_count: u32,        // resymmetrization counter
-        \\  crossing_depth: i32,     // oppositional intensity
-        \\  is_forward_front: u32,   // 1 if in current forward wavefront
-        \\  is_backward_front: u32,  // 1 if in current backward wavefront
-        \\};
-        \\
-        \\@group(0) @binding(0) var<storage, read_write> neurons: array<Neuron>;
-        \\@group(0) @binding(1) var<storage, read> adjacency: array<u32>;
-        \\@group(0) @binding(2) var<storage, read> adj_offsets: array<u32>;
-        \\@group(0) @binding(3) var<uniform> params: vec4<u32>; // (n_neurons, tick, 0, 0)
-        \\
-        \\// GF(3) addition: (a + b) mod 3 mapped to {-1, 0, +1}
-        \\fn gf3_add(a: i32, b: i32) -> i32 {
-        \\  let sum = a + b;
-        \\  if (sum > 1) { return -1; }  // wrap +2 → -1
-        \\  if (sum < -1) { return 1; }  // wrap -2 → +1
-        \\  return sum;
-        \\}
-        \\
-        \\@compute @workgroup_size(64)
-        \\fn propagate_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
-        \\  let idx = gid.x;
-        \\  let n = params.x;
-        \\  let tick = params.y;
-        \\  if (idx >= n) { return; }
-        \\
-        \\  // Check if any neighbor is in the forward front
-        \\  let start = adj_offsets[idx];
-        \\  let end = adj_offsets[idx + 1u];
-        \\  var activated = false;
-        \\
-        \\  for (var j = start; j < end; j = j + 1u) {
-        \\    let neighbor = adjacency[j];
-        \\    if (neurons[neighbor].is_forward_front == 1u) {
-        \\      activated = true;
-        \\      break;
-        \\    }
-        \\  }
-        \\
-        \\  if (activated && neurons[idx].is_forward_front == 0u) {
-        \\    neurons[idx].oppositional = gf3_add(neurons[idx].oppositional, 1);
-        \\    neurons[idx].recency = tick;
-        \\    neurons[idx].forward_subseq = tick;
-        \\    neurons[idx].is_forward_front = 1u;
-        \\
-        \\    // Crossing detection
-        \\    if (neurons[idx].is_backward_front == 1u) {
-        \\      neurons[idx].crossing_depth = neurons[idx].crossing_depth + 1;
-        \\      if (neurons[idx].oppositional == 0) {
-        \\        neurons[idx].resym_count = neurons[idx].resym_count + 1u;
-        \\      }
-        \\    }
-        \\  }
-        \\}
-        \\
-        \\@compute @workgroup_size(64)
-        \\fn propagate_backward(@builtin(global_invocation_id) gid: vec3<u32>) {
-        \\  let idx = gid.x;
-        \\  let n = params.x;
-        \\  let tick = params.y;
-        \\  if (idx >= n) { return; }
-        \\
-        \\  let start = adj_offsets[idx];
-        \\  let end = adj_offsets[idx + 1u];
-        \\  var activated = false;
-        \\
-        \\  for (var j = start; j < end; j = j + 1u) {
-        \\    let neighbor = adjacency[j];
-        \\    if (neurons[neighbor].is_backward_front == 1u) {
-        \\      activated = true;
-        \\      break;
-        \\    }
-        \\  }
-        \\
-        \\  if (activated && neurons[idx].is_backward_front == 0u) {
-        \\    neurons[idx].oppositional = gf3_add(neurons[idx].oppositional, -1);
-        \\    neurons[idx].recency = tick;
-        \\    neurons[idx].backward_subseq = tick;
-        \\    neurons[idx].is_backward_front = 1u;
-        \\
-        \\    if (neurons[idx].is_forward_front == 1u) {
-        \\      neurons[idx].crossing_depth = neurons[idx].crossing_depth + 1;
-        \\      if (neurons[idx].oppositional == 0) {
-        \\        neurons[idx].resym_count = neurons[idx].resym_count + 1u;
-        \\      }
-        \\    }
-        \\  }
-        \\}
-        \\
-        \\@compute @workgroup_size(64)
-        \\fn reduce_oppositional(@builtin(global_invocation_id) gid: vec3<u32>) {
-        \\  // Parallel reduction of oppositional sum for resymmetrization check
-        \\  // Each thread contributes its neuron's trit to a workgroup sum
-        \\  let idx = gid.x;
-        \\  let n = params.x;
-        \\  if (idx >= n) { return; }
-        \\  // Output: neurons[0].crossing_depth accumulates global oppositional sum
-        \\  // (In practice, use atomicAdd or multi-pass reduction)
-        \\}
+    \\// Witnessing Worm — GPU-parallel wavefront propagation
+    \\// C. elegans bidirectional proof of recency and subsequency
+    \\
+    \\struct Neuron {
+    \\  oppositional: i32,       // GF(3) trit: -1, 0, +1
+    \\  recency: u32,            // tick of last visit
+    \\  forward_subseq: u32,     // forward wave ordinal
+    \\  backward_subseq: u32,    // backward wave ordinal
+    \\  resym_count: u32,        // resymmetrization counter
+    \\  crossing_depth: i32,     // oppositional intensity
+    \\  is_forward_front: u32,   // 1 if in current forward wavefront
+    \\  is_backward_front: u32,  // 1 if in current backward wavefront
+    \\};
+    \\
+    \\@group(0) @binding(0) var<storage, read_write> neurons: array<Neuron>;
+    \\@group(0) @binding(1) var<storage, read> adjacency: array<u32>;
+    \\@group(0) @binding(2) var<storage, read> adj_offsets: array<u32>;
+    \\@group(0) @binding(3) var<uniform> params: vec4<u32>; // (n_neurons, tick, 0, 0)
+    \\
+    \\// GF(3) addition: (a + b) mod 3 mapped to {-1, 0, +1}
+    \\fn gf3_add(a: i32, b: i32) -> i32 {
+    \\  let sum = a + b;
+    \\  if (sum > 1) { return -1; }  // wrap +2 → -1
+    \\  if (sum < -1) { return 1; }  // wrap -2 → +1
+    \\  return sum;
+    \\}
+    \\
+    \\@compute @workgroup_size(64)
+    \\fn propagate_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
+    \\  let idx = gid.x;
+    \\  let n = params.x;
+    \\  let tick = params.y;
+    \\  if (idx >= n) { return; }
+    \\
+    \\  // Check if any neighbor is in the forward front
+    \\  let start = adj_offsets[idx];
+    \\  let end = adj_offsets[idx + 1u];
+    \\  var activated = false;
+    \\
+    \\  for (var j = start; j < end; j = j + 1u) {
+    \\    let neighbor = adjacency[j];
+    \\    if (neurons[neighbor].is_forward_front == 1u) {
+    \\      activated = true;
+    \\      break;
+    \\    }
+    \\  }
+    \\
+    \\  if (activated && neurons[idx].is_forward_front == 0u) {
+    \\    neurons[idx].oppositional = gf3_add(neurons[idx].oppositional, 1);
+    \\    neurons[idx].recency = tick;
+    \\    neurons[idx].forward_subseq = tick;
+    \\    neurons[idx].is_forward_front = 1u;
+    \\
+    \\    // Crossing detection
+    \\    if (neurons[idx].is_backward_front == 1u) {
+    \\      neurons[idx].crossing_depth = neurons[idx].crossing_depth + 1;
+    \\      if (neurons[idx].oppositional == 0) {
+    \\        neurons[idx].resym_count = neurons[idx].resym_count + 1u;
+    \\      }
+    \\    }
+    \\  }
+    \\}
+    \\
+    \\@compute @workgroup_size(64)
+    \\fn propagate_backward(@builtin(global_invocation_id) gid: vec3<u32>) {
+    \\  let idx = gid.x;
+    \\  let n = params.x;
+    \\  let tick = params.y;
+    \\  if (idx >= n) { return; }
+    \\
+    \\  let start = adj_offsets[idx];
+    \\  let end = adj_offsets[idx + 1u];
+    \\  var activated = false;
+    \\
+    \\  for (var j = start; j < end; j = j + 1u) {
+    \\    let neighbor = adjacency[j];
+    \\    if (neurons[neighbor].is_backward_front == 1u) {
+    \\      activated = true;
+    \\      break;
+    \\    }
+    \\  }
+    \\
+    \\  if (activated && neurons[idx].is_backward_front == 0u) {
+    \\    neurons[idx].oppositional = gf3_add(neurons[idx].oppositional, -1);
+    \\    neurons[idx].recency = tick;
+    \\    neurons[idx].backward_subseq = tick;
+    \\    neurons[idx].is_backward_front = 1u;
+    \\
+    \\    if (neurons[idx].is_forward_front == 1u) {
+    \\      neurons[idx].crossing_depth = neurons[idx].crossing_depth + 1;
+    \\      if (neurons[idx].oppositional == 0) {
+    \\        neurons[idx].resym_count = neurons[idx].resym_count + 1u;
+    \\      }
+    \\    }
+    \\  }
+    \\}
+    \\
+    \\@compute @workgroup_size(64)
+    \\fn reduce_oppositional(@builtin(global_invocation_id) gid: vec3<u32>) {
+    \\  // Parallel reduction of oppositional sum for resymmetrization check
+    \\  // Each thread contributes its neuron's trit to a workgroup sum
+    \\  let idx = gid.x;
+    \\  let n = params.x;
+    \\  if (idx >= n) { return; }
+    \\  // Output: neurons[0].crossing_depth accumulates global oppositional sum
+    \\  // (In practice, use atomicAdd or multi-pass reduction)
+    \\}
     ;
 }
 
@@ -705,17 +705,23 @@ pub const Water = struct {
         var g: f32 = 0;
         var b: f32 = 0;
         if (h_prime < 1) {
-            r = c; g = x;
+            r = c;
+            g = x;
         } else if (h_prime < 2) {
-            r = x; g = c;
+            r = x;
+            g = c;
         } else if (h_prime < 3) {
-            g = c; b = x;
+            g = c;
+            b = x;
         } else if (h_prime < 4) {
-            g = x; b = c;
+            g = x;
+            b = c;
         } else if (h_prime < 5) {
-            r = x; b = c;
+            r = x;
+            b = c;
         } else {
-            r = c; b = x;
+            r = c;
+            b = x;
         }
         const m = l - c * 0.5;
         return .{
@@ -802,7 +808,7 @@ pub const PerpetualWitness = struct {
     }
 
     /// Run N epochs of perpetual witnessing
-    pub fn runPerpetual(self: *PerpetualWitness, n_epochs: u32, steps_per_epoch: u32) []EpochResult {
+    pub fn runPerpetual(_: *PerpetualWitness, n_epochs: u32, steps_per_epoch: u32) []EpochResult {
         // Can't allocate dynamically in this context, so caller should loop
         _ = n_epochs;
         _ = steps_per_epoch;

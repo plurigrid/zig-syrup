@@ -325,9 +325,7 @@ pub fn extractBands(samples: []const f32, sample_rate: f64, allocator: std.mem.A
 // ============================================================================
 
 test "extract bands from sine wave" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const sample_rate: f64 = 250.0;
     const n_samples: usize = @as(usize, @intFromFloat(sample_rate));
@@ -348,9 +346,7 @@ test "extract bands from sine wave" {
 }
 
 test "extract bands from zero signal" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const sample_rate: f64 = 250.0;
     const n_samples: usize = 250;
@@ -401,9 +397,7 @@ test "comptime hanning correctness" {
 }
 
 test "memoized vs runtime FFT agreement" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const n: usize = 256;
     const real_memo = try allocator.alloc(f32, n);
@@ -434,9 +428,7 @@ test "memoized vs runtime FFT agreement" {
 }
 
 test "fft benchmark: memoized vs runtime" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const n: usize = 256;
     const iterations: usize = 10_000;

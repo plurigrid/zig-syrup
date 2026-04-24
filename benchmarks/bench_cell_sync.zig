@@ -358,8 +358,12 @@ fn benchSyrupEncode(allocator: Allocator, w: WorkloadSize, diffs: []const CellDi
     var sync = try CellSync.init(allocator, 1, w.cols, w.rows);
     defer sync.deinit();
     const snapshot = cell_sync.FrameSnapshot{
-        .gen = 1, .cols = w.cols, .rows = w.rows,
-        .diffs = @constCast(diffs), .is_full = false, .source = 1,
+        .gen = 1,
+        .cols = w.cols,
+        .rows = w.rows,
+        .diffs = @constCast(diffs),
+        .is_full = false,
+        .source = 1,
     };
 
     const start = std.time.nanoTimestamp();
@@ -377,8 +381,12 @@ fn benchSyrupDecode(allocator: Allocator, w: WorkloadSize, diffs: []const CellDi
     var sync = try CellSync.init(allocator, 1, w.cols, w.rows);
     defer sync.deinit();
     const snapshot = cell_sync.FrameSnapshot{
-        .gen = 1, .cols = w.cols, .rows = w.rows,
-        .diffs = @constCast(diffs), .is_full = false, .source = 1,
+        .gen = 1,
+        .cols = w.cols,
+        .rows = w.rows,
+        .diffs = @constCast(diffs),
+        .is_full = false,
+        .source = 1,
     };
     var encode_arena = std.heap.ArenaAllocator.init(allocator);
     defer encode_arena.deinit();
@@ -399,8 +407,12 @@ fn benchApply(allocator: Allocator, w: WorkloadSize, diffs: []const CellDiff) !i
     var sync = try CellSync.init(allocator, 1, w.cols, w.rows);
     defer sync.deinit();
     const snapshot = cell_sync.FrameSnapshot{
-        .gen = 1, .cols = w.cols, .rows = w.rows,
-        .diffs = @constCast(diffs), .is_full = false, .source = 2,
+        .gen = 1,
+        .cols = w.cols,
+        .rows = w.rows,
+        .diffs = @constCast(diffs),
+        .is_full = false,
+        .source = 2,
     };
 
     const start = std.time.nanoTimestamp();
@@ -421,8 +433,12 @@ fn benchFastPath(allocator: Allocator, w: WorkloadSize, diffs: []const CellDiff)
     defer sync_dec.deinit();
 
     const snapshot = cell_sync.FrameSnapshot{
-        .gen = 1, .cols = w.cols, .rows = w.rows,
-        .diffs = @constCast(diffs), .is_full = false, .source = 1,
+        .gen = 1,
+        .cols = w.cols,
+        .rows = w.rows,
+        .diffs = @constCast(diffs),
+        .is_full = false,
+        .source = 1,
     };
     var encode_arena = std.heap.ArenaAllocator.init(allocator);
     defer encode_arena.deinit();
@@ -477,7 +493,9 @@ fn hline(writer: anytype, n: usize) !void {
 
 fn sparkline(writer: anytype, values: []const f64, color: RGB) !void {
     var max: f64 = 0;
-    for (values) |v| if (v > max) { max = v; };
+    for (values) |v| if (v > max) {
+        max = v;
+    };
     if (max == 0) max = 1;
     try color.fg(writer);
     for (values) |v| {
@@ -713,17 +731,23 @@ fn renderCompressionTable(writer: anytype, results: []const BenchResult) !void {
     for (results, 0..) |r, i| {
         const ratio = if (r.compressed_bytes > 0)
             @as(f64, @floatFromInt(r.raw_bytes)) / @as(f64, @floatFromInt(r.compressed_bytes))
-        else 0;
-        if (ratio > best_ratio) { best_ratio = ratio; best_idx = i; }
+        else
+            0;
+        if (ratio > best_ratio) {
+            best_ratio = ratio;
+            best_idx = i;
+        }
     }
 
     for (results, 0..) |r, i| {
         const ratio = if (r.compressed_bytes > 0)
             @as(f64, @floatFromInt(r.raw_bytes)) / @as(f64, @floatFromInt(r.compressed_bytes))
-        else 0;
+        else
+            0;
         const savings = if (r.raw_bytes > 0)
             (1.0 - @as(f64, @floatFromInt(r.compressed_bytes)) / @as(f64, @floatFromInt(r.raw_bytes))) * 100.0
-        else 0;
+        else
+            0;
 
         try COLOR_LABEL.fg(writer);
         try writer.print("  {s: <6}", .{r.workload.name});
@@ -879,7 +903,10 @@ fn renderPerCellTable(writer: anytype, results: []const BenchResult) !void {
     var total_count: usize = 0;
     for (results) |r| {
         const cells = r.num_diffs;
-        if (cells == 0) { try writer.print("{s: >8}", .{"-"}); continue; }
+        if (cells == 0) {
+            try writer.print("{s: >8}", .{"-"});
+            continue;
+        }
         const per_cell = @as(f64, @floatFromInt(r.totalNs())) / @as(f64, @floatFromInt(cells));
         if (per_cell >= 100) {
             try writer.print("{d: >7.0} ", .{per_cell});

@@ -26,6 +26,85 @@ const Allocator = std.mem.Allocator;
 const Order = std.math.Order;
 
 // ============================================================================
+// COMPAT: ArrayList writer for Zig 0.15/0.16
+// ============================================================================
+
+/// Writer adapter for ArrayListUnmanaged(u8) — works on both 0.15 and 0.16.
+fn ArrayListWriter(comptime L: type) type {
+    return struct {
+        list: *L,
+        alloc: Allocator,
+
+        const Self = @This();
+        pub const Error = Allocator.Error;
+
+        pub fn writeByte(self: *Self, byte: u8) Error!void {
+            try self.list.append(self.alloc, byte);
+        }
+
+        pub fn writeAll(self: *Self, data: []const u8) Error!void {
+            try self.list.appendSlice(self.alloc, data);
+        }
+
+        pub fn writeByteNTimes(self: *Self, byte: u8, n: usize) Error!void {
+            for (0..n) |_| try self.list.append(self.alloc, byte);
+        }
+
+        pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) Error!void {
+            var buf: [64]u8 = undefined;
+            const slice = std.fmt.bufPrint(&buf, fmt, args) catch unreachable;
+            try self.list.appendSlice(self.alloc, slice);
+        }
+
+        pub fn write(self: *Self, data: []const u8) Error!usize {
+            try self.list.appendSlice(self.alloc, data);
+            return data.len;
+        }
+    };
+}
+
+fn arrayListWriter(arr: anytype, alloc: Allocator) ArrayListWriter(@TypeOf(arr.*)) {
+    return .{ .list = arr, .alloc = alloc };
+}
+
+/// Writer adapter for fixed-size buffers (replaces std.io.fixedBufferStream)
+const FixedBufWriter = struct {
+    buf: []u8,
+    pos: *usize,
+
+    pub const Error = error{NoSpaceLeft};
+
+    pub fn writeByte(self: *FixedBufWriter, byte: u8) Error!void {
+        if (self.pos.* >= self.buf.len) return error.NoSpaceLeft;
+        self.buf[self.pos.*] = byte;
+        self.pos.* += 1;
+    }
+
+    pub fn writeAll(self: *FixedBufWriter, data: []const u8) Error!void {
+        if (self.pos.* + data.len > self.buf.len) return error.NoSpaceLeft;
+        @memcpy(self.buf[self.pos.*..][0..data.len], data);
+        self.pos.* += data.len;
+    }
+
+    pub fn writeByteNTimes(self: *FixedBufWriter, byte: u8, n: usize) Error!void {
+        if (self.pos.* + n > self.buf.len) return error.NoSpaceLeft;
+        @memset(self.buf[self.pos.*..][0..n], byte);
+        self.pos.* += n;
+    }
+
+    pub fn print(self: *FixedBufWriter, comptime fmt: []const u8, args: anytype) Error!void {
+        var tmp: [4096]u8 = undefined;
+        const written = std.fmt.bufPrint(&tmp, fmt, args) catch return error.NoSpaceLeft;
+        try self.writeAll(written);
+    }
+
+    pub fn write(self: *FixedBufWriter, data: []const u8) Error!usize {
+        try self.writeAll(data);
+        return data.len;
+    }
+};
+
+// ============================================================================
 // CORE TYPES
 // ============================================================================
 
@@ -46,8 +125,8 @@ pub const BigInt = struct {
 
     fn compareMagnitudes(a: []const u8, b: []const u8) Order {
         // Strip leading zeros using std.mem.trimLeft
-        const a_trimmed = std.mem.trimLeft(u8, a, &.{0});
-        const b_trimmed = std.mem.trimLeft(u8, b, &.{0});
+        const a_trimmed = std.mem.trimStart(u8, a, &.{0});
+        const b_trimmed = std.mem.trimStart(u8, b, &.{0});
         const len_cmp = std.math.order(a_trimmed.len, b_trimmed.len);
         return if (len_cmp != .eq) len_cmp else std.mem.order(u8, a_trimmed, b_trimmed);
     }
@@ -114,18 +193,18 @@ pub const Value = union(enum) {
     };
 
     /// Tagged value per OCapN Model spec - pair of tag (string) and value
-pub const Tagged = struct {
-    tag: []const u8,
-    payload: *const Value,
-};
+    pub const Tagged = struct {
+        tag: []const u8,
+        payload: *const Value,
+    };
 
     /// Error type for CapTP error propagation
     /// Mirrors desc:error: <desc:error message identifier data>
-pub const Error = struct {
-    message: []const u8,
-    identifier: []const u8,
-    data: *const Value,
-};
+    pub const Error = struct {
+        message: []const u8,
+        identifier: []const u8,
+        data: *const Value,
+    };
 
     // ========================================================================
     // CONSTRUCTORS - Fluent builder methods
@@ -308,7 +387,7 @@ pub const Error = struct {
         // For strings/symbols/bytes: compare by wire format (length then content)
         return switch (self) {
             .undefined, .null => {
-                // These types are singleton-like in record-like context, 
+                // These types are singleton-like in record-like context,
                 // but handled here if they appear directly
                 // undefined < null
                 if (self == .undefined and other == .null) return .lt;
@@ -348,15 +427,15 @@ pub const Error = struct {
     fn compareLengthPrefixed(a: []const u8, b: []const u8) Order {
         // We must compare the serialized length strings (e.g. "9" vs "10")
         // "9" > "10" lexicographically, so len=9 > len=10 in wire format.
-        
+
         var a_buf: [32]u8 = undefined;
         var b_buf: [32]u8 = undefined;
         const a_str = std.fmt.bufPrint(&a_buf, "{}", .{a.len}) catch unreachable;
         const b_str = std.fmt.bufPrint(&b_buf, "{}", .{b.len}) catch unreachable;
-        
+
         const len_cmp = std.mem.order(u8, a_str, b_str);
         if (len_cmp != .eq) return len_cmp;
-        
+
         // Same length string implies same length value. Compare content.
         return std.mem.order(u8, a, b);
     }
@@ -605,26 +684,27 @@ pub const Error = struct {
 
     /// Encode to a fixed buffer, returns slice of encoded bytes
     pub fn encodeBuf(self: Value, buf: []u8) ![]u8 {
-        var stream = std.io.fixedBufferStream(buf);
-        try self.encode(stream.writer());
-        return buf[0..stream.pos];
+        var pos: usize = 0;
+        var w = FixedBufWriter{ .buf = buf, .pos = &pos };
+        try self.encode(&w);
+        return buf[0..pos];
     }
 
     /// Encode to a fixed buffer, returning the number of bytes written.
-    /// Avoids the slice return when callers only need the length.
     pub fn encodeLen(self: Value, buf: []u8) !usize {
-        var fbs = std.io.fixedBufferStream(buf);
-        try self.encode(fbs.writer());
-        return fbs.pos;
+        var pos: usize = 0;
+        var w = FixedBufWriter{ .buf = buf, .pos = &pos };
+        try self.encode(&w);
+        return pos;
     }
 
     /// Encode to allocated buffer
     pub fn encodeAlloc(self: Value, allocator: Allocator) ![]u8 {
-        const ByteList = std.array_list.AlignedManaged(u8, null);
-        var list_buf = ByteList.init(allocator);
-        errdefer list_buf.deinit();
-        try self.encode(list_buf.writer());
-        return list_buf.toOwnedSlice();
+        var list_buf = std.ArrayListUnmanaged(u8).empty;
+        errdefer list_buf.deinit(allocator);
+        var w = arrayListWriter(&list_buf, allocator);
+        try self.encode(&w);
+        return list_buf.toOwnedSlice(allocator);
     }
 
     /// Get encoded size without actually encoding (for pre-allocation)
@@ -847,9 +927,10 @@ pub fn computeCidHex(value: Value, allocator: Allocator) ![]u8 {
 pub fn comptimeCid(comptime value: Value) [64]u8 {
     comptime {
         var buf: [4096]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&buf);
-        value.encode(stream.writer()) catch @compileError("Encoding failed");
-        const encoded = buf[0..stream.pos];
+        var pos: usize = 0;
+        var w = FixedBufWriter{ .buf = &buf, .pos = &pos };
+        value.encode(&w) catch @compileError("Encoding failed");
+        const encoded = buf[0..pos];
 
         var hash: [32]u8 = undefined;
         std.crypto.hash.Blake3.hash(encoded, &hash, .{});
@@ -1085,9 +1166,9 @@ pub const Parser = struct {
         terminator: u8,
         comptime check_order: bool,
     ) ParseError![]Value {
-        var items = std.ArrayListUnmanaged(Value){};
+        var items = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
         errdefer items.deinit(self.allocator);
-        
+
         var last_start: usize = 0;
         var last_end: usize = 0;
 
@@ -1125,9 +1206,9 @@ pub const Parser = struct {
     /// Parse dictionary: {<key><value>...}
     fn parseDictionary(self: *Parser) ParseError!Value {
         self.pos += 1;
-        var entries = std.ArrayListUnmanaged(Value.DictEntry){};
+        var entries = std.ArrayListUnmanaged(Value.DictEntry){ .items = &.{}, .capacity = 0 };
         errdefer entries.deinit(self.allocator);
-        
+
         var last_key_start: usize = 0;
         var last_key_end: usize = 0;
 
@@ -1227,16 +1308,18 @@ pub const Parser = struct {
     fn valueToBytes(self: *Parser, value: *const Value) ParseError![]const u8 {
         // Stack buffer for encoding - most keys are small
         var stack_buf: [256]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&stack_buf);
-        value.encode(stream.writer()) catch {
+        var pos: usize = 0;
+        var w = FixedBufWriter{ .buf = &stack_buf, .pos = &pos };
+        value.encode(&w) catch {
             // Fall back to allocating for large values
-            var list_buf = std.ArrayListUnmanaged(u8){};
-            value.encode(list_buf.writer(self.allocator)) catch return error.OutOfMemory;
+            var list_buf = std.ArrayListUnmanaged(u8){ .items = &.{}, .capacity = 0 };
+            var aw = arrayListWriter(&list_buf, self.allocator);
+            value.encode(&aw) catch return error.OutOfMemory;
             return list_buf.toOwnedSlice(self.allocator) catch return error.OutOfMemory;
         };
         // Copy to allocated memory since stack buffer won't live
-        const result = self.allocator.alloc(u8, stream.pos) catch return error.OutOfMemory;
-        @memcpy(result, stack_buf[0..stream.pos]);
+        const result = self.allocator.alloc(u8, pos) catch return error.OutOfMemory;
+        @memcpy(result, stack_buf[0..pos]);
         return result;
     }
 };
@@ -1255,7 +1338,7 @@ pub fn decodeZeroCopy(input: []const u8, allocator: Allocator) !Value {
 /// Decode multiple values from a stream
 pub fn decodeStream(input: []const u8, allocator: Allocator) ![]Value {
     var parser = Parser.init(input, allocator);
-    var values = std.ArrayListUnmanaged(Value){};
+    var values = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
     errdefer values.deinit(allocator);
 
     while (parser.hasMore()) {
@@ -1863,9 +1946,7 @@ test "encode set" {
 }
 
 test "decode boolean" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     {
         const val = try decode("t", allocator);
@@ -1881,9 +1962,7 @@ test "decode boolean" {
 }
 
 test "decode integer" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     {
         const val = try decode("0+", allocator);
@@ -1905,9 +1984,7 @@ test "decode integer" {
 }
 
 test "decode string" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const val = try decode("5\"hello", allocator);
     try std.testing.expect(val == .string);
@@ -1915,9 +1992,7 @@ test "decode string" {
 }
 
 test "decode symbol" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const val = try decode("3'foo", allocator);
     try std.testing.expect(val == .symbol);
@@ -1925,10 +2000,7 @@ test "decode symbol" {
 }
 
 test "decode list" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -1941,10 +2013,7 @@ test "decode list" {
 }
 
 test "decode dictionary" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -1954,10 +2023,7 @@ test "decode dictionary" {
 }
 
 test "decode record" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -1969,9 +2035,7 @@ test "decode record" {
 }
 
 test "decode tagged value" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -1983,9 +2047,7 @@ test "decode tagged value" {
 }
 
 test "decode error value" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -1998,9 +2060,7 @@ test "decode error value" {
 }
 
 test "decode undefined and null" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const undef_val = try decode("<9'undefined>", allocator);
     try std.testing.expect(undef_val == .undefined);
@@ -2010,9 +2070,7 @@ test "decode undefined and null" {
 }
 
 test "decode float32" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const encoded = [_]u8{ 'F', 0x3F, 0x80, 0x00, 0x00 };
     const val = try decode(&encoded, allocator);
@@ -2021,9 +2079,7 @@ test "decode float32" {
 }
 
 test "decode float64" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const encoded = [_]u8{ 'D', 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     const val = try decode(&encoded, allocator);
@@ -2032,10 +2088,7 @@ test "decode float64" {
 }
 
 test "decode set" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2045,10 +2098,7 @@ test "decode set" {
 }
 
 test "roundtrip: encode then decode" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2099,10 +2149,7 @@ test "value hash" {
 }
 
 test "canonical dictionary construction" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2122,10 +2169,7 @@ test "canonical dictionary construction" {
 }
 
 test "canonical set construction" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2160,10 +2204,7 @@ test "schema validation" {
 }
 
 test "stream decode" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2181,9 +2222,7 @@ test "stream decode" {
 // ============================================================================
 
 test "serialize primitive types" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2208,9 +2247,7 @@ test "serialize primitive types" {
 }
 
 test "encode and decode tagged/error/undefined/null" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2249,9 +2286,7 @@ test "encode and decode tagged/error/undefined/null" {
 }
 
 test "serialize struct to dictionary" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2273,9 +2308,7 @@ test "serialize struct to dictionary" {
 }
 
 test "serialize enum to symbol" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2287,9 +2320,7 @@ test "serialize enum to symbol" {
 }
 
 test "serialize slice to list" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2304,9 +2335,7 @@ test "serialize slice to list" {
 }
 
 test "serialize optional" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2321,9 +2350,7 @@ test "serialize optional" {
 }
 
 test "serialize record with syrup_label" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2347,9 +2374,7 @@ test "serialize record with syrup_label" {
 }
 
 test "deserialize primitive types" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2371,9 +2396,7 @@ test "deserialize primitive types" {
 }
 
 test "deserialize struct from dictionary" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2394,9 +2417,7 @@ test "deserialize struct from dictionary" {
 }
 
 test "deserialize enum from symbol" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2672,9 +2693,7 @@ test "arena size estimation" {
 }
 
 test "roundtrip struct serialize/deserialize" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2737,9 +2756,7 @@ test "computeCidWithBuf matches computeCid" {
 }
 
 test "insertion sort for small canonical dictionary" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -2761,9 +2778,7 @@ test "insertion sort for small canonical dictionary" {
 }
 
 test "insertion sort for small canonical set" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 

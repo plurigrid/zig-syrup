@@ -1,5 +1,5 @@
 //! Multiplayer World A/B Testing Framework for zig-syrup
-//! 
+//!
 //! This module provides comprehensive world A/B testing capabilities:
 //! - Immutable data structures (immer) for efficient state management
 //! - URI-based world references (a://, b://, c://)
@@ -9,7 +9,7 @@
 //! - Statistical A/B testing with significance testing
 //!
 //! ## Quick Start
-//! 
+//!
 //! ```zig
 //! const worlds = @import("worlds");
 //!
@@ -133,7 +133,7 @@ pub const Framework = struct {
     ) error{OutOfMemory}!void {
         // Create worlds for each variant
         const variants = [_]WorldVariant{ .baseline, .variant, .experimental };
-        
+
         for (variants, 0..) |variant, i| {
             const uri_str = try std.fmt.allocPrint(
                 self.allocator,
@@ -143,7 +143,7 @@ pub const Framework = struct {
             defer self.allocator.free(uri_str);
 
             const parsed_uri = try WorldURI.parse(self.allocator, uri_str);
-            
+
             const physics = switch (variant) {
                 .baseline => PhysicsParams.baseline(),
                 .variant => PhysicsParams.variantB(),
@@ -260,9 +260,9 @@ pub fn runMultiplayerTest(
 fn createTestWorld(allocator: std.mem.Allocator, variant: WorldVariant) !World {
     const uri_str = try std.fmt.allocPrint(allocator, "{s}://test", .{variant.toString()});
     defer allocator.free(uri_str);
-    
+
     var parsed = try WorldURI.parse(allocator, uri_str);
-    
+
     const physics = switch (variant) {
         .baseline => PhysicsParams.baseline(),
         .variant => PhysicsParams.variantB(),

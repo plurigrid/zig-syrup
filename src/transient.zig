@@ -611,45 +611,45 @@ fn renderRandomnessFooter(buf: *Buffer, x: u16, y: u16, width: u16, seed: Random
 pub fn gitTransient() Transient {
     return Transient.new("Git")
         .withGroups(&[_]Group{
-        .{
-            .title = "Fetch",
-            .suffixes = &[_]Suffix{
-                .{ .key = 'f', .description = "fetch", .trit = .ergodic, .action_id = 1 },
-                .{ .key = 'F', .description = "fetch all", .trit = .ergodic, .action_id = 2 },
+            .{
+                .title = "Fetch",
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'f', .description = "fetch", .trit = .ergodic, .action_id = 1 },
+                    .{ .key = 'F', .description = "fetch all", .trit = .ergodic, .action_id = 2 },
+                },
             },
-        },
-        .{
-            .title = "Push/Pull",
-            .infixes = &[_]Infix{
-                .{ .key = '-', .flag = "--force", .kind = .toggle, .description = "force push" },
-                .{ .key = '=', .flag = "--rebase", .kind = .toggle, .description = "rebase on pull" },
+            .{
+                .title = "Push/Pull",
+                .infixes = &[_]Infix{
+                    .{ .key = '-', .flag = "--force", .kind = .toggle, .description = "force push" },
+                    .{ .key = '=', .flag = "--rebase", .kind = .toggle, .description = "rebase on pull" },
+                },
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'p', .description = "push", .trit = .plus, .action_id = 10 },
+                    .{ .key = 'P', .description = "pull", .trit = .minus, .action_id = 11 },
+                    .{ .key = 'u', .description = "push upstream", .trit = .plus, .action_id = 12 },
+                },
             },
-            .suffixes = &[_]Suffix{
-                .{ .key = 'p', .description = "push", .trit = .plus, .action_id = 10 },
-                .{ .key = 'P', .description = "pull", .trit = .minus, .action_id = 11 },
-                .{ .key = 'u', .description = "push upstream", .trit = .plus, .action_id = 12 },
+            .{
+                .title = "Branch",
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'b', .description = "checkout", .trit = .ergodic, .action_id = 20 },
+                    .{ .key = 'B', .description = "new branch", .trit = .plus, .action_id = 21 },
+                    .{ .key = 'd', .description = "delete branch", .trit = .minus, .action_id = 22 },
+                },
             },
-        },
-        .{
-            .title = "Branch",
-            .suffixes = &[_]Suffix{
-                .{ .key = 'b', .description = "checkout", .trit = .ergodic, .action_id = 20 },
-                .{ .key = 'B', .description = "new branch", .trit = .plus, .action_id = 21 },
-                .{ .key = 'd', .description = "delete branch", .trit = .minus, .action_id = 22 },
+            .{
+                .title = "Commit",
+                .infixes = &[_]Infix{
+                    .{ .key = 'a', .flag = "--amend", .kind = .toggle, .description = "amend previous" },
+                },
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'c', .description = "commit", .trit = .plus, .action_id = 30 },
+                    .{ .key = 's', .description = "stage", .trit = .ergodic, .action_id = 31 },
+                    .{ .key = 'S', .description = "stage all", .trit = .ergodic, .action_id = 32 },
+                },
             },
-        },
-        .{
-            .title = "Commit",
-            .infixes = &[_]Infix{
-                .{ .key = 'a', .flag = "--amend", .kind = .toggle, .description = "amend previous" },
-            },
-            .suffixes = &[_]Suffix{
-                .{ .key = 'c', .description = "commit", .trit = .plus, .action_id = 30 },
-                .{ .key = 's', .description = "stage", .trit = .ergodic, .action_id = 31 },
-                .{ .key = 'S', .description = "stage all", .trit = .ergodic, .action_id = 32 },
-            },
-        },
-    })
+        })
         .withBorderType(.rounded);
 }
 
@@ -657,34 +657,34 @@ pub fn gitTransient() Transient {
 pub fn gf3Transient() Transient {
     return Transient.new("GF(3) Triadic Balance")
         .withGroups(&[_]Group{
-        .{
-            .title = "Generators (+1)",
-            .title_style = Style.fg(Color.blue).bold(),
-            .suffixes = &[_]Suffix{
-                .{ .key = 'g', .description = "generate color", .trit = .plus, .action_id = 100 },
-                .{ .key = 'G', .description = "generate theme", .trit = .plus, .action_id = 101 },
-                .{ .key = 't', .description = "generate trit batch", .trit = .plus, .action_id = 102 },
+            .{
+                .title = "Generators (+1)",
+                .title_style = Style.fg(Color.blue).bold(),
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'g', .description = "generate color", .trit = .plus, .action_id = 100 },
+                    .{ .key = 'G', .description = "generate theme", .trit = .plus, .action_id = 101 },
+                    .{ .key = 't', .description = "generate trit batch", .trit = .plus, .action_id = 102 },
+                },
             },
-        },
-        .{
-            .title = "Coordinators (0)",
-            .title_style = Style.fg(Color.green).bold(),
-            .suffixes = &[_]Suffix{
-                .{ .key = 'm', .description = "mix colors", .trit = .ergodic, .action_id = 110 },
-                .{ .key = 'b', .description = "balance trits", .trit = .ergodic, .action_id = 111 },
-                .{ .key = 'q', .description = "query conservation", .trit = .ergodic, .action_id = 112 },
+            .{
+                .title = "Coordinators (0)",
+                .title_style = Style.fg(Color.green).bold(),
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'm', .description = "mix colors", .trit = .ergodic, .action_id = 110 },
+                    .{ .key = 'b', .description = "balance trits", .trit = .ergodic, .action_id = 111 },
+                    .{ .key = 'q', .description = "query conservation", .trit = .ergodic, .action_id = 112 },
+                },
             },
-        },
-        .{
-            .title = "Validators (-1)",
-            .title_style = Style.fg(Color.red).bold(),
-            .suffixes = &[_]Suffix{
-                .{ .key = 'v', .description = "verify GF(3) sum", .trit = .minus, .action_id = 120 },
-                .{ .key = 'V', .description = "verify on-chain", .trit = .minus, .action_id = 121 },
-                .{ .key = 'c', .description = "check conservation", .trit = .minus, .action_id = 122 },
+            .{
+                .title = "Validators (-1)",
+                .title_style = Style.fg(Color.red).bold(),
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'v', .description = "verify GF(3) sum", .trit = .minus, .action_id = 120 },
+                    .{ .key = 'V', .description = "verify on-chain", .trit = .minus, .action_id = 121 },
+                    .{ .key = 'c', .description = "check conservation", .trit = .minus, .action_id = 122 },
+                },
             },
-        },
-    })
+        })
         .withBorderType(.double);
 }
 
@@ -692,42 +692,42 @@ pub fn gf3Transient() Transient {
 pub fn marketTransient() Transient {
     return Transient.new("Market: $REGRET / $GAY")
         .withGroups(&[_]Group{
-        .{
-            .title = "$REGRET",
-            .title_style = Style.fg(Color.red).bold(),
-            .infixes = &[_]Infix{
-                .{ .key = 's', .flag = "--slippage", .kind = .value, .num_value = 5, .description = "max slippage %" },
+            .{
+                .title = "$REGRET",
+                .title_style = Style.fg(Color.red).bold(),
+                .infixes = &[_]Infix{
+                    .{ .key = 's', .flag = "--slippage", .kind = .value, .num_value = 5, .description = "max slippage %" },
+                },
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'b', .description = "buy $REGRET", .trit = .plus, .action_id = 200 },
+                    .{ .key = 'x', .description = "sell $REGRET", .trit = .minus, .action_id = 201 },
+                    .{ .key = 'p', .description = "place bet", .trit = .plus, .action_id = 202 },
+                    .{ .key = 'r', .description = "resolve market", .trit = .minus, .action_id = 203 },
+                    .{ .key = 'w', .description = "claim winnings", .trit = .ergodic, .action_id = 204 },
+                },
             },
-            .suffixes = &[_]Suffix{
-                .{ .key = 'b', .description = "buy $REGRET", .trit = .plus, .action_id = 200 },
-                .{ .key = 'x', .description = "sell $REGRET", .trit = .minus, .action_id = 201 },
-                .{ .key = 'p', .description = "place bet", .trit = .plus, .action_id = 202 },
-                .{ .key = 'r', .description = "resolve market", .trit = .minus, .action_id = 203 },
-                .{ .key = 'w', .description = "claim winnings", .trit = .ergodic, .action_id = 204 },
+            .{
+                .title = "$GAY",
+                .title_style = Style.fg(Color.magenta).bold(),
+                .infixes = &[_]Infix{
+                    .{ .key = 't', .flag = "--trit", .kind = .trit_cycle, .description = "theme trit bias" },
+                },
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'T', .description = "register theme", .trit = .plus, .action_id = 210 },
+                    .{ .key = 'P', .description = "purchase theme", .trit = .ergodic, .action_id = 211 },
+                    .{ .key = 'L', .description = "list themes", .trit = .ergodic, .action_id = 212 },
+                    .{ .key = 'S', .description = "swap REGRET->GAY", .trit = .minus, .action_id = 213 },
+                },
             },
-        },
-        .{
-            .title = "$GAY",
-            .title_style = Style.fg(Color.magenta).bold(),
-            .infixes = &[_]Infix{
-                .{ .key = 't', .flag = "--trit", .kind = .trit_cycle, .description = "theme trit bias" },
+            .{
+                .title = "Liquidity",
+                .suffixes = &[_]Suffix{
+                    .{ .key = 'l', .description = "create LBP", .trit = .plus, .action_id = 220 },
+                    .{ .key = 'j', .description = "join LBP", .trit = .ergodic, .action_id = 221 },
+                    .{ .key = 'f', .description = "finalize LBP", .trit = .minus, .action_id = 222 },
+                },
             },
-            .suffixes = &[_]Suffix{
-                .{ .key = 'T', .description = "register theme", .trit = .plus, .action_id = 210 },
-                .{ .key = 'P', .description = "purchase theme", .trit = .ergodic, .action_id = 211 },
-                .{ .key = 'L', .description = "list themes", .trit = .ergodic, .action_id = 212 },
-                .{ .key = 'S', .description = "swap REGRET->GAY", .trit = .minus, .action_id = 213 },
-            },
-        },
-        .{
-            .title = "Liquidity",
-            .suffixes = &[_]Suffix{
-                .{ .key = 'l', .description = "create LBP", .trit = .plus, .action_id = 220 },
-                .{ .key = 'j', .description = "join LBP", .trit = .ergodic, .action_id = 221 },
-                .{ .key = 'f', .description = "finalize LBP", .trit = .minus, .action_id = 222 },
-            },
-        },
-    })
+        })
         .withBorderType(.rounded);
 }
 

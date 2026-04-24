@@ -4,7 +4,7 @@ const worlds = @import("worlds");
 const ZetaWorld = worlds.zeta.ZetaWorld;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -32,14 +32,14 @@ pub fn main() !void {
 
         // Render UI
         buffer.* = retty.Buffer.init(retty.Rect{ .width = width, .height = height });
-        
+
         const area = buffer.area;
         world.render(buffer, area);
 
         // Draw to backend
         backend.reset();
         if (tick == 0) backend.clear(); // Clear screen on first frame
-        backend.draw(buffer); 
+        backend.draw(buffer);
 
         // Output to terminal
         _ = try std.posix.write(std.posix.STDOUT_FILENO, backend.output());

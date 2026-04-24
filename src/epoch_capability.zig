@@ -1,12 +1,12 @@
 //! epoch_capability.zig — Epoch-graded capabilities for partition-aware OCapN
 //!
-//! Connects trit_tick.zig's 4-epoch time base to goblins.zig's CapTP system.
+//! Connects glimpse.zig's 4-epoch time base to goblins.zig's CapTP system.
 //! Capabilities degrade gracefully under network partition rather than
 //! claiming impossible global consistency (which violates CAP theorem).
 //!
 //! EPOCH LADDER (each epoch = complete system at different trust/cost):
 //!   E0 — Local vat: instant consistency, synchronous revocation
-//!   E1 — Cluster: bounded consistency (trit-tick epoch 1), 1-hop revocation
+//!   E1 — Cluster: bounded consistency (glimpse epoch 1), 1-hop revocation
 //!   E2 — Federated: eventual consistency (epoch 2), gossip revocation
 //!   E3 — Unbounded: cryptographic proof, proof-carrying revocation
 //!
@@ -20,7 +20,7 @@
 //!   E3 = proof-carrying (signed certificate, no time bound)
 
 const std = @import("std");
-const trit_tick = @import("trit_tick.zig");
+const glimpse = @import("glimpse.zig");
 
 // ============================================================================
 // EPOCH TAG
@@ -34,17 +34,17 @@ pub const Epoch = enum(u2) {
 };
 
 // ============================================================================
-// CONSISTENCY WINDOWS (in trit-ticks)
+// CONSISTENCY WINDOWS (in glimpses)
 // ============================================================================
 
 /// E0: local vat, always fresh (window = 0)
 pub const E0_WINDOW: u64 = 0;
 
-/// E1: cluster heartbeat, 1 second = 141,120,000 trit-ticks
-pub const E1_WINDOW: u64 = trit_tick.TICKS_PER_SECOND;
+/// E1: cluster heartbeat, 1 second = 141,120,000 glimpses
+pub const E1_WINDOW: u64 = glimpse.TICKS_PER_SECOND;
 
 /// E2: gossip round, 60 seconds
-pub const E2_WINDOW: u64 = trit_tick.TICKS_PER_SECOND * 60;
+pub const E2_WINDOW: u64 = glimpse.TICKS_PER_SECOND * 60;
 
 /// E3: no time bound (u64 max = "never expires by time alone")
 pub const E3_WINDOW: u64 = std.math.maxInt(u64);
@@ -73,9 +73,9 @@ pub const EpochCapRef = struct {
     epoch: Epoch,
     /// Epoch at which this capability was originally granted
     granted_epoch: Epoch,
-    /// Trit-tick timestamp of last successful verification
+    /// Glimpse timestamp of last successful verification
     last_verified: u64,
-    /// Trit-tick timestamp when this capability was created
+    /// Glimpse timestamp when this capability was created
     created_at: u64,
     /// GF(3) trit of the granting identity (for conservation checking)
     granter_trit: i8,
@@ -254,7 +254,7 @@ pub const RevocationCert = struct {
     slot: u16,
     /// Epoch at which revocation was issued
     epoch: Epoch,
-    /// Trit-tick timestamp of revocation
+    /// Glimpse timestamp of revocation
     timestamp: u64,
     /// BLAKE3 keyed hash of (slot ++ epoch ++ timestamp)
     commitment: [32]u8,
@@ -353,9 +353,9 @@ pub const PartitionDetector = struct {
 // ============================================================================
 
 /// Every message between vats carries epoch metadata.
-/// This is the trit-tick-stamped envelope that goblins.zig messages wrap in.
+/// This is the glimpse-stamped envelope that goblins.zig messages wrap in.
 pub const EpochEnvelope = struct {
-    /// Trit-tick timestamp (epoch 1 by default)
+    /// Glimpse timestamp (epoch 1 by default)
     timestamp: u64,
     /// Sender's current epoch
     sender_epoch: Epoch,
@@ -403,34 +403,34 @@ test "epoch windows are monotonically increasing" {
     try std.testing.expect(E2_WINDOW < E3_WINDOW);
 }
 
-test "E1 window = exactly 1 second in trit-ticks" {
-    try std.testing.expectEqual(trit_tick.TICKS_PER_SECOND, E1_WINDOW);
+test "E1 window = exactly 1 second in glimpses" {
+    try std.testing.expectEqual(glimpse.TICKS_PER_SECOND, E1_WINDOW);
 }
 
 test "E2 window = exactly 60 seconds" {
-    try std.testing.expectEqual(trit_tick.TICKS_PER_SECOND * 60, E2_WINDOW);
+    try std.testing.expectEqual(glimpse.TICKS_PER_SECOND * 60, E2_WINDOW);
 }
 
 test "capability: fresh capability is consistent" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .federated, now, 1);
     try std.testing.expect(cap.isConsistent(now));
     try std.testing.expect(cap.isConsistent(now + 1000));
 }
 
 test "capability: stale capability is inconsistent" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .cluster, now, 0);
     // 2 seconds later, E1 window (1s) exceeded
-    const later = now + trit_tick.TICKS_PER_SECOND * 2;
+    const later = now + glimpse.TICKS_PER_SECOND * 2;
     try std.testing.expect(!cap.isConsistent(later));
 }
 
 test "capability: degradation under partition" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .federated, now, -1);
     // 120 seconds later — exceeds E2 window (60s)
-    const later = now + trit_tick.TICKS_PER_SECOND * 120;
+    const later = now + glimpse.TICKS_PER_SECOND * 120;
     const demotions = cap.checkAndDegrade(later);
     // Should degrade from E2 → E1, and E1 is also stale (120s > 1s) → E1 → E0
     try std.testing.expectEqual(@as(u8, 2), demotions);
@@ -438,9 +438,9 @@ test "capability: degradation under partition" {
 }
 
 test "capability: E0 never degrades" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, true, .local, now, 0);
-    const far_future = now + trit_tick.TICKS_PER_SECOND * 999999;
+    const far_future = now + glimpse.TICKS_PER_SECOND * 999999;
     try std.testing.expect(cap.isConsistent(far_future));
     const demotions = cap.checkAndDegrade(far_future);
     try std.testing.expectEqual(@as(u8, 0), demotions);
@@ -448,14 +448,14 @@ test "capability: E0 never degrades" {
 }
 
 test "capability: E3 never expires by time" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .unbounded, now, 1);
-    const far_future = now + trit_tick.TICKS_PER_SECOND * 999999;
+    const far_future = now + glimpse.TICKS_PER_SECOND * 999999;
     try std.testing.expect(cap.isConsistent(far_future));
 }
 
 test "capability: revocation is immediate" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .unbounded, now, 1);
     try std.testing.expect(cap.isConsistent(now));
     cap.revoke();
@@ -463,19 +463,19 @@ test "capability: revocation is immediate" {
 }
 
 test "capability: verify resets freshness" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .cluster, now, 0);
-    const later = now + trit_tick.TICKS_PER_SECOND * 2;
+    const later = now + glimpse.TICKS_PER_SECOND * 2;
     try std.testing.expect(!cap.isConsistent(later));
     cap.verify(later);
     try std.testing.expect(cap.isConsistent(later));
 }
 
 test "capability: promote after re-verification" {
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     var cap = EpochCapRef.init(0, false, .federated, now, 1);
     // Degrade to E0
-    const stale = now + trit_tick.TICKS_PER_SECOND * 120;
+    const stale = now + glimpse.TICKS_PER_SECOND * 120;
     _ = cap.checkAndDegrade(stale);
     try std.testing.expectEqual(Epoch.local, cap.epoch);
     // Re-verify and promote step by step
@@ -490,7 +490,7 @@ test "capability: promote after re-verification" {
 
 test "table: epoch distribution tracks correctly" {
     var table = EpochCapTable{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     _ = table.add(0, false, .local, now, -1);
     _ = table.add(1, false, .cluster, now, 0);
     _ = table.add(2, false, .federated, now, 1);
@@ -505,12 +505,12 @@ test "table: epoch distribution tracks correctly" {
 
 test "table: checkAll degrades stale capabilities" {
     var table = EpochCapTable{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     _ = table.add(0, false, .local, now, 0);
     _ = table.add(1, false, .cluster, now, 0);
     _ = table.add(2, false, .federated, now, 1);
     // 120 seconds later
-    const later = now + trit_tick.TICKS_PER_SECOND * 120;
+    const later = now + glimpse.TICKS_PER_SECOND * 120;
     const demotions = table.checkAll(later);
     // E0 stays, E1 → E0 (1 demotion), E2 → E0 (2 demotions)
     try std.testing.expectEqual(@as(u32, 3), demotions);
@@ -522,11 +522,11 @@ test "table: checkAll degrades stale capabilities" {
 
 test "table: verifyAtEpoch refreshes matching caps" {
     var table = EpochCapTable{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     _ = table.add(0, false, .local, now, -1);
     _ = table.add(1, false, .cluster, now, 0);
     _ = table.add(2, false, .federated, now, 1);
-    const later = now + trit_tick.TICKS_PER_SECOND * 30;
+    const later = now + glimpse.TICKS_PER_SECOND * 30;
     const refreshed = table.verifyAtEpoch(.cluster, later);
     try std.testing.expectEqual(@as(u16, 2), refreshed); // E1 and E2
     // E1 cap should now be fresh
@@ -535,7 +535,7 @@ test "table: verifyAtEpoch refreshes matching caps" {
 
 test "table: revokeByGranter revokes matching caps" {
     var table = EpochCapTable{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     _ = table.add(0, false, .cluster, now, 1);
     _ = table.add(1, false, .cluster, now, -1);
     _ = table.add(2, false, .federated, now, 1);
@@ -548,7 +548,7 @@ test "table: revokeByGranter revokes matching caps" {
 
 test "table: GF(3) conservation" {
     var table = EpochCapTable{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     // Triad: -1 + 0 + 1 = 0 mod 3
     _ = table.add(0, false, .cluster, now, -1);
     _ = table.add(1, false, .cluster, now, 0);
@@ -562,37 +562,37 @@ test "table: GF(3) conservation" {
 
 test "partition detector: E0 never partitioned" {
     const pd = PartitionDetector{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 1000;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 1000;
     try std.testing.expect(!pd.isPartitioned(.local, now));
 }
 
 test "partition detector: missing heartbeat = partitioned" {
     var pd = PartitionDetector{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     pd.heartbeat(.cluster, now);
     // 0.5s later: still live
-    try std.testing.expect(!pd.isPartitioned(.cluster, now + trit_tick.TICKS_PER_SECOND / 2));
+    try std.testing.expect(!pd.isPartitioned(.cluster, now + glimpse.TICKS_PER_SECOND / 2));
     // 2s later: partitioned (E1 window = 1s)
-    try std.testing.expect(pd.isPartitioned(.cluster, now + trit_tick.TICKS_PER_SECOND * 2));
+    try std.testing.expect(pd.isPartitioned(.cluster, now + glimpse.TICKS_PER_SECOND * 2));
 }
 
 test "partition detector: highest live epoch" {
     var pd = PartitionDetector{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     pd.heartbeat(.cluster, now);
     pd.heartbeat(.federated, now);
     pd.heartbeat(.unbounded, now);
     // All live
     try std.testing.expectEqual(Epoch.unbounded, pd.highestLiveEpoch(now));
     // After 2s: E1 partitioned (>1s), hierarchy forces all above to .local
-    const t2 = now + trit_tick.TICKS_PER_SECOND * 2;
+    const t2 = now + glimpse.TICKS_PER_SECOND * 2;
     try std.testing.expectEqual(Epoch.local, pd.highestLiveEpoch(t2));
     // Refresh E1 only — E2/E3 still have heartbeats from t0 (within their windows)
     pd.heartbeat(.cluster, t2);
     // Hierarchical: E1 live, E2 still within 60s, E3 within maxInt → unbounded
     try std.testing.expectEqual(Epoch.unbounded, pd.highestLiveEpoch(t2));
     // After 120s (E2 window exceeded): E2 partitioned → E1 is highest
-    const t3 = now + trit_tick.TICKS_PER_SECOND * 120;
+    const t3 = now + glimpse.TICKS_PER_SECOND * 120;
     pd.heartbeat(.cluster, t3); // keep E1 alive
     try std.testing.expectEqual(Epoch.cluster, pd.highestLiveEpoch(t3));
 }
@@ -600,7 +600,7 @@ test "partition detector: highest live epoch" {
 test "partition detector: degrade sweep" {
     var pd = PartitionDetector{};
     var table = EpochCapTable{};
-    const now: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const now: u64 = glimpse.TICKS_PER_SECOND * 100;
     pd.heartbeat(.cluster, now);
     pd.heartbeat(.federated, now);
     _ = table.add(0, false, .local, now, 0);
@@ -608,7 +608,7 @@ test "partition detector: degrade sweep" {
     _ = table.add(2, false, .federated, now, -1);
     _ = table.add(3, false, .unbounded, now, 0);
     // After 2s: E1 partitioned, only E0 live
-    const t2 = now + trit_tick.TICKS_PER_SECOND * 2;
+    const t2 = now + glimpse.TICKS_PER_SECOND * 2;
     const demotions = pd.degradeSweep(&table, t2);
     // E1→E0 (1), E2→E0 (2), E3→E0 (3) = 6 demotions
     try std.testing.expectEqual(@as(u32, 6), demotions);
@@ -619,7 +619,7 @@ test "partition detector: degrade sweep" {
 test "revocation cert: create and verify" {
     var pubkey: [32]u8 = undefined;
     @memset(&pubkey, 0x42);
-    const cert = RevocationCert.create(7, .federated, trit_tick.TICKS_PER_SECOND * 100, pubkey);
+    const cert = RevocationCert.create(7, .federated, glimpse.TICKS_PER_SECOND * 100, pubkey);
     try std.testing.expect(cert.verifyCommitment());
     try std.testing.expectEqual(@as(u16, 7), cert.slot);
     try std.testing.expectEqual(Epoch.federated, cert.epoch);
@@ -628,14 +628,14 @@ test "revocation cert: create and verify" {
 test "revocation cert: tampered cert fails" {
     var pubkey: [32]u8 = undefined;
     @memset(&pubkey, 0x42);
-    var cert = RevocationCert.create(7, .federated, trit_tick.TICKS_PER_SECOND * 100, pubkey);
+    var cert = RevocationCert.create(7, .federated, glimpse.TICKS_PER_SECOND * 100, pubkey);
     cert.slot = 8; // tamper
     try std.testing.expect(!cert.verifyCommitment());
 }
 
 test "envelope: encode/decode round-trip" {
     var env = EpochEnvelope{
-        .timestamp = trit_tick.TICKS_PER_SECOND * 42,
+        .timestamp = glimpse.TICKS_PER_SECOND * 42,
         .sender_epoch = .federated,
         .sender_trit = -1,
         .is_heartbeat = true,
@@ -670,7 +670,7 @@ test "CAP theorem boundary: partition forces degradation" {
     // violates CAP. Under partition, capabilities MUST degrade.
     var pd = PartitionDetector{};
     var table = EpochCapTable{};
-    const t0: u64 = trit_tick.TICKS_PER_SECOND * 100;
+    const t0: u64 = glimpse.TICKS_PER_SECOND * 100;
 
     // Setup: federated capability granted at t0
     pd.heartbeat(.cluster, t0);
@@ -680,7 +680,7 @@ test "CAP theorem boundary: partition forces degradation" {
 
     // Network partition occurs — no more heartbeats
     // After 2 seconds: E1 heartbeat missed
-    const t1 = t0 + trit_tick.TICKS_PER_SECOND * 2;
+    const t1 = t0 + glimpse.TICKS_PER_SECOND * 2;
     try std.testing.expect(pd.isPartitioned(.cluster, t1));
     _ = pd.degradeSweep(&table, t1);
     // Capability degraded to E0 (only local is reliable)
@@ -690,7 +690,7 @@ test "CAP theorem boundary: partition forces degradation" {
     try std.testing.expect(table.caps[0].isConsistent(t1));
 
     // Partition heals — heartbeats resume
-    const t2 = t1 + trit_tick.TICKS_PER_SECOND;
+    const t2 = t1 + glimpse.TICKS_PER_SECOND;
     pd.heartbeat(.cluster, t2);
     pd.heartbeat(.federated, t2);
     // Re-verify and promote
@@ -703,7 +703,7 @@ test "CAP theorem boundary: partition forces degradation" {
 test "full lifecycle: grant → partition → degrade → heal → promote → revoke" {
     var pd = PartitionDetector{};
     var table = EpochCapTable{};
-    const t0: u64 = trit_tick.TICKS_PER_SECOND * 1000;
+    const t0: u64 = glimpse.TICKS_PER_SECOND * 1000;
 
     // 1. Grant capabilities (conserving triad: -1 + 0 + 1 = 0)
     pd.heartbeat(.cluster, t0);
@@ -715,7 +715,7 @@ test "full lifecycle: grant → partition → degrade → heal → promote → r
     try std.testing.expect(table.gf3Conserved());
 
     // 2. Partition: only E1 heartbeat continues (90s gap exceeds E2's 60s window)
-    const t1 = t0 + trit_tick.TICKS_PER_SECOND * 90;
+    const t1 = t0 + glimpse.TICKS_PER_SECOND * 90;
     pd.heartbeat(.cluster, t1);
     _ = pd.degradeSweep(&table, t1);
     // E3 → E1 (highest live = cluster), E2 → E1, E1 stays
@@ -726,7 +726,7 @@ test "full lifecycle: grant → partition → degrade → heal → promote → r
     try std.testing.expect(table.gf3Conserved());
 
     // 3. Full partition: no heartbeats
-    const t2 = t1 + trit_tick.TICKS_PER_SECOND * 5;
+    const t2 = t1 + glimpse.TICKS_PER_SECOND * 5;
     _ = pd.degradeSweep(&table, t2);
     const dist = table.epochDistribution();
     try std.testing.expectEqual(@as(u16, 3), dist[0]); // all E0

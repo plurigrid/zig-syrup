@@ -191,6 +191,200 @@ pub fn ticksForRate(comptime rate: u64) u64 {
 }
 
 // ============================================================================
+// MULTI-STREAM ALIGNMENT — emitter/sensor/cognitive frame rendezvous discovery
+// ============================================================================
+
+pub const Epoch = enum {
+    flick,
+    epoch1,
+    epoch2,
+    epoch3,
+    unbounded,
+};
+
+pub const ReferenceFrame = enum {
+    emitter,
+    sensor,
+    device_local,
+    wall_clock,
+    scheduler,
+    cognitive,
+};
+
+pub const CognitiveFrame = enum {
+    raw,
+    perceptual,
+    attentional,
+    integrative,
+    predictive,
+};
+
+pub const StreamClock = struct {
+    rate_hz: u64,
+    phase_ticks: i128 = 0,
+    epoch_offset_ticks: i128 = 0,
+    drift_ppm: i32 = 0,
+    frame: ReferenceFrame = .device_local,
+    cognitive_frame: CognitiveFrame = .raw,
+
+    pub fn originTicks(self: StreamClock) i128 {
+        return self.epoch_offset_ticks + self.phase_ticks;
+    }
+};
+
+pub const AlignmentError = error{
+    ZeroRate,
+};
+
+pub const Alignment = struct {
+    epoch: Epoch,
+    basis: ?Unbounded.PrimeBasis = null,
+
+    // Arithmetic invariants of the two rates themselves.
+    gcd_hz: u64,
+    lcm_hz: u128,
+    coprime: bool,
+    left_samples_per_rendezvous: u128,
+    right_samples_per_rendezvous: u128,
+
+    // Fixed-epoch tick details when the pair embeds into epoch 1/2/3.
+    left_ticks_per_sample: ?u128,
+    right_ticks_per_sample: ?u128,
+    rendezvous_ticks: ?u128,
+    origin_delta_ticks: ?i128,
+    exact_origin_alignment: ?bool,
+
+    // Frame metadata preserved rather than collapsed away.
+    left_frame: ReferenceFrame,
+    right_frame: ReferenceFrame,
+    left_cognitive_frame: CognitiveFrame,
+    right_cognitive_frame: CognitiveFrame,
+    drift_delta_ppm: i32,
+
+    pub fn discover(left: StreamClock, right: StreamClock) AlignmentError!Alignment {
+        if (left.rate_hz == 0 or right.rate_hz == 0) return error.ZeroRate;
+
+        const rates = [_]u64{ left.rate_hz, right.rate_hz };
+        const epoch = minimalEpochForRates(&rates);
+        const gcd_hz = gcdU64(left.rate_hz, right.rate_hz);
+        const lcm_hz = lcmU128(@as(u128, left.rate_hz), @as(u128, right.rate_hz));
+
+        var alignment = Alignment{
+            .epoch = epoch,
+            .basis = null,
+            .gcd_hz = gcd_hz,
+            .lcm_hz = lcm_hz,
+            .coprime = gcd_hz == 1,
+            .left_samples_per_rendezvous = @divExact(@as(u128, left.rate_hz), @as(u128, gcd_hz)),
+            .right_samples_per_rendezvous = @divExact(@as(u128, right.rate_hz), @as(u128, gcd_hz)),
+            .left_ticks_per_sample = null,
+            .right_ticks_per_sample = null,
+            .rendezvous_ticks = null,
+            .origin_delta_ticks = null,
+            .exact_origin_alignment = null,
+            .left_frame = left.frame,
+            .right_frame = right.frame,
+            .left_cognitive_frame = left.cognitive_frame,
+            .right_cognitive_frame = right.cognitive_frame,
+            .drift_delta_ppm = right.drift_ppm - left.drift_ppm,
+        };
+
+        switch (epoch) {
+            .epoch1, .epoch2, .epoch3, .flick => {
+                const left_tps = ticksPerSampleForEpoch(left.rate_hz, epoch).?;
+                const right_tps = ticksPerSampleForEpoch(right.rate_hz, epoch).?;
+                const rendezvous_ticks = lcmU128(left_tps, right_tps);
+                const phase_gcd = gcdU128(left_tps, right_tps);
+                const delta = right.originTicks() - left.originTicks();
+
+                alignment.left_ticks_per_sample = left_tps;
+                alignment.right_ticks_per_sample = right_tps;
+                alignment.rendezvous_ticks = rendezvous_ticks;
+                alignment.origin_delta_ticks = delta;
+                alignment.exact_origin_alignment = @mod(delta, @as(i128, @intCast(phase_gcd))) == 0;
+            },
+            .unbounded => {
+                var basis = Unbounded.PrimeBasis.initEpoch3();
+                for (rates) |rate| _ = basis.registerRate(rate);
+                alignment.basis = basis;
+            },
+        }
+
+        return alignment;
+    }
+};
+
+pub fn minimalEpochForRates(rates: []const u64) Epoch {
+    if (allDivideEpoch1Runtime(rates)) return .epoch1;
+    if (allDivideExpandedRuntime(rates)) return .epoch2;
+    if (allDivideExtremeRuntime(rates)) return .epoch3;
+    return .unbounded;
+}
+
+pub fn ticksPerSecondForEpoch(epoch: Epoch) ?u128 {
+    return switch (epoch) {
+        .flick => FLICKS_PER_SECOND,
+        .epoch1 => TICKS_PER_SECOND,
+        .epoch2 => Expanded.TICKS_PER_SECOND,
+        .epoch3 => Extreme.TICKS_PER_SECOND,
+        .unbounded => null,
+    };
+}
+
+pub fn ticksPerSampleForEpoch(rate_hz: u64, epoch: Epoch) ?u128 {
+    const tps = ticksPerSecondForEpoch(epoch) orelse return null;
+    if (rate_hz == 0 or tps % @as(u128, rate_hz) != 0) return null;
+    return tps / @as(u128, rate_hz);
+}
+
+fn allDivideEpoch1Runtime(rates: []const u64) bool {
+    for (rates) |rate| {
+        if (rate == 0 or TICKS_PER_SECOND % rate != 0) return false;
+    }
+    return true;
+}
+
+fn allDivideExpandedRuntime(rates: []const u64) bool {
+    for (rates) |rate| {
+        if (rate == 0 or Expanded.TICKS_PER_SECOND % @as(u128, rate) != 0) return false;
+    }
+    return true;
+}
+
+fn allDivideExtremeRuntime(rates: []const u64) bool {
+    for (rates) |rate| {
+        if (rate == 0 or Extreme.TICKS_PER_SECOND % @as(u128, rate) != 0) return false;
+    }
+    return true;
+}
+
+fn gcdU64(a: u64, b: u64) u64 {
+    var x = a;
+    var y = b;
+    while (y != 0) {
+        const r = x % y;
+        x = y;
+        y = r;
+    }
+    return x;
+}
+
+fn gcdU128(a: u128, b: u128) u128 {
+    var x = a;
+    var y = b;
+    while (y != 0) {
+        const r = x % y;
+        x = y;
+        y = r;
+    }
+    return x;
+}
+
+fn lcmU128(a: u128, b: u128) u128 {
+    return (a / gcdU128(a, b)) * b;
+}
+
+// ============================================================================
 // EPOCH 2 — EXPANDED (u128, 9 primes, 105 rates)
 // ============================================================================
 
@@ -269,7 +463,10 @@ pub const Extreme = struct {
             const secs: i128 = @divFloor(self.ticks, @as(i128, @intCast(Extreme.TICKS_PER_SECOND)));
             const m = @mod(secs, 3);
             return switch (@as(u2, @intCast(m))) {
-                0 => 0, 1 => 1, 2 => -1, else => unreachable,
+                0 => 0,
+                1 => 1,
+                2 => -1,
+                else => unreachable,
             };
         }
     };
@@ -470,6 +667,67 @@ test "comptime rate validation" {
     }
 }
 
+test "alignment: choose minimal epoch for common stream pairs" {
+    try std.testing.expectEqual(Epoch.epoch1, minimalEpochForRates(&.{ 250, 500 }));
+    try std.testing.expectEqual(Epoch.epoch2, minimalEpochForRates(&.{ 2048, 44_100 }));
+    try std.testing.expectEqual(Epoch.unbounded, minimalEpochForRates(&.{ 227, 30_000 }));
+}
+
+test "alignment: exact rendezvous in epoch 1" {
+    const left = StreamClock{
+        .rate_hz = 250,
+        .frame = .emitter,
+        .cognitive_frame = .predictive,
+    };
+    const right = StreamClock{
+        .rate_hz = 500,
+        .frame = .sensor,
+        .cognitive_frame = .raw,
+    };
+    const alignment = try Alignment.discover(left, right);
+
+    try std.testing.expectEqual(Epoch.epoch1, alignment.epoch);
+    try std.testing.expectEqual(@as(u64, 250), alignment.gcd_hz);
+    try std.testing.expectEqual(@as(u128, 500), alignment.lcm_hz);
+    try std.testing.expect(!alignment.coprime);
+    try std.testing.expectEqual(@as(u128, 1), alignment.left_samples_per_rendezvous);
+    try std.testing.expectEqual(@as(u128, 2), alignment.right_samples_per_rendezvous);
+    try std.testing.expectEqual(@as(u128, 564_480), alignment.left_ticks_per_sample.?);
+    try std.testing.expectEqual(@as(u128, 282_240), alignment.right_ticks_per_sample.?);
+    try std.testing.expectEqual(@as(u128, 564_480), alignment.rendezvous_ticks.?);
+    try std.testing.expect(alignment.exact_origin_alignment.?);
+}
+
+test "alignment: coprime pair discovers unbounded basis growth" {
+    const left = StreamClock{ .rate_hz = 227, .frame = .sensor };
+    const right = StreamClock{ .rate_hz = 200, .frame = .scheduler };
+    const alignment = try Alignment.discover(left, right);
+
+    try std.testing.expectEqual(Epoch.unbounded, alignment.epoch);
+    try std.testing.expect(alignment.coprime);
+    try std.testing.expectEqual(@as(u64, 1), alignment.gcd_hz);
+    try std.testing.expectEqual(@as(u128, 45_400), alignment.lcm_hz);
+    try std.testing.expectEqual(@as(u128, 227), alignment.left_samples_per_rendezvous);
+    try std.testing.expectEqual(@as(u128, 200), alignment.right_samples_per_rendezvous);
+    try std.testing.expectEqual(@as(?u128, null), alignment.left_ticks_per_sample);
+    try std.testing.expectEqual(@as(?u128, null), alignment.rendezvous_ticks);
+    try std.testing.expect(alignment.basis.?.contains(227));
+}
+
+test "alignment: phase incompatibility is detected" {
+    const left = StreamClock{ .rate_hz = 250 };
+    const right = StreamClock{
+        .rate_hz = 500,
+        .phase_ticks = 1,
+        .frame = .cognitive,
+        .cognitive_frame = .attentional,
+    };
+    const alignment = try Alignment.discover(left, right);
+
+    try std.testing.expectEqual(@as(?i128, 1), alignment.origin_delta_ticks);
+    try std.testing.expectEqual(false, alignment.exact_origin_alignment.?);
+}
+
 // ============================================================================
 // TESTS — EPOCH 2 (expanded)
 // ============================================================================
@@ -595,7 +853,7 @@ test "unbounded: register Fibonacci prime 1597" {
 
 test "unbounded: cascade multiple devices" {
     var basis = Unbounded.PrimeBasis.initEpoch3();
-    _ = basis.registerRate(257);  // +1 prime
+    _ = basis.registerRate(257); // +1 prime
     _ = basis.registerRate(1597); // +1 prime
     _ = basis.registerRate(44100); // +0 (already covered)
     _ = basis.registerRate(3329); // Padovan prime, +1

@@ -542,7 +542,7 @@ test "heuristic readout classifies beta-dominant as plus" {
 
     // Beta/gamma dominant
     const features = [FEATURE_DIM]f32{
-        0.1, 0.1, 0.2, 4.0, 2.0, // mean: beta=4.0, gamma=2.0
+        0.1,  0.1,  0.2,  4.0,  2.0, // mean: beta=4.0, gamma=2.0
         0.01, 0.01, 0.01, 0.01, 0.01,
     };
 
@@ -555,7 +555,7 @@ test "heuristic readout classifies delta-dominant as minus" {
 
     // Delta/theta dominant
     const features = [FEATURE_DIM]f32{
-        5.0, 3.0, 0.2, 0.1, 0.05, // mean: delta=5.0, theta=3.0
+        5.0,  3.0,  0.2,  0.1,  0.05, // mean: delta=5.0, theta=3.0
         0.01, 0.01, 0.01, 0.01, 0.01,
     };
 
@@ -571,10 +571,10 @@ test "ERC 8-channel process" {
     for (0..8) |i| {
         channels[i] = [_]f32{
             0.1 + @as(f32, @floatFromInt(i)) * 0.01, // delta (small)
-            0.2,  // theta
-            5.0,  // alpha (dominant)
-            0.3,  // beta
-            0.1,  // gamma
+            0.2, // theta
+            5.0, // alpha (dominant)
+            0.3, // beta
+            0.1, // gamma
         };
     }
 

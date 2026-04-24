@@ -85,7 +85,7 @@ fn renderColoredExpr(
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 

@@ -6,28 +6,27 @@
 /// - Enables bidirectional VT sequence streaming with minimal overhead
 ///
 /// Matches BCI color bridge pattern (cell_sync.zig) with structured types.
-
 const std = @import("std");
 
 /// Message type codes for Ghostty-Emacs protocol
 pub const MessageType = enum(u8) {
-    init = 0x00,              // Handshake: version, window size, capabilities
-    output = 0x01,            // VT sequence output to terminal
-    dirty_region = 0x02,      // Dirty rectangle: (x, y, width, height)
-    input = 0x03,             // Keyboard/mouse input events
-    ping = 0x04,              // Keepalive (no payload)
-    spatial = 0x05,           // Window position/size + focus state
+    init = 0x00, // Handshake: version, window size, capabilities
+    output = 0x01, // VT sequence output to terminal
+    dirty_region = 0x02, // Dirty rectangle: (x, y, width, height)
+    input = 0x03, // Keyboard/mouse input events
+    ping = 0x04, // Keepalive (no payload)
+    spatial = 0x05, // Window position/size + focus state
 };
 
 /// Terminal capabilities negotiated during INIT
 pub const Capabilities = packed struct(u32) {
-    supports_sixel: bool = false,           // Sixel image protocol
-    supports_kitty_graphics: bool = false,  // Kitty graphics protocol
-    supports_mouse_sgr: bool = false,       // SGR 1006 mouse tracking
-    supports_focus_events: bool = false,    // Focus in/out events
-    supports_16bit_colors: bool = false,    // 24-bit RGB colors
-    supports_italic: bool = false,          // Italic font style
-    supports_strikethrough: bool = false,   // Strikethrough text
+    supports_sixel: bool = false, // Sixel image protocol
+    supports_kitty_graphics: bool = false, // Kitty graphics protocol
+    supports_mouse_sgr: bool = false, // SGR 1006 mouse tracking
+    supports_focus_events: bool = false, // Focus in/out events
+    supports_16bit_colors: bool = false, // 24-bit RGB colors
+    supports_italic: bool = false, // Italic font style
+    supports_strikethrough: bool = false, // Strikethrough text
     _reserved: u25 = 0,
 };
 
@@ -68,7 +67,7 @@ pub const InitMessage = struct {
 
 /// OUTPUT frame: VT sequence output
 pub const OutputMessage = struct {
-    sequence: []const u8,  // UTF-8 encoded VT sequence or plain text
+    sequence: []const u8, // UTF-8 encoded VT sequence or plain text
 
     pub fn encode(self: OutputMessage, buf: []u8) !usize {
         if (buf.len < self.sequence.len) return error.BufferTooSmall;
@@ -130,8 +129,8 @@ pub const InputMessage = struct {
     };
 
     pub const KeyEvent = struct {
-        char_code: u32,         // Unicode codepoint
-        modifiers: u8,          // Shift(0x01) | Ctrl(0x02) | Alt(0x04) | Meta(0x08)
+        char_code: u32, // Unicode codepoint
+        modifiers: u8, // Shift(0x01) | Ctrl(0x02) | Alt(0x04) | Meta(0x08)
 
         pub fn encode(self: KeyEvent, buf: []u8) !usize {
             if (buf.len < 5) return error.BufferTooSmall;
@@ -225,8 +224,8 @@ pub const SpatialMessage = struct {
     window_width: u16,
     window_height: u16,
     is_focused: bool,
-    cell_width: u8,         // Monospace cell pixel width
-    cell_height: u8,        // Monospace cell pixel height
+    cell_width: u8, // Monospace cell pixel width
+    cell_height: u8, // Monospace cell pixel height
 
     pub fn encode(self: SpatialMessage, buf: []u8) !usize {
         if (buf.len < 12) return error.BufferTooSmall;

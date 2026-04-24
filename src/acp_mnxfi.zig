@@ -22,7 +22,7 @@ const Allocator = std.mem.Allocator;
 
 /// Real-time market state observation
 pub const MarketState = struct {
-    market_id: []const u8,        // GPU_Utilization, CustomizationCost, InferenceSpeed
+    market_id: []const u8, // GPU_Utilization, CustomizationCost, InferenceSpeed
     timestamp_ms: i64,
     bid_price: f64,
     ask_price: f64,
@@ -31,7 +31,7 @@ pub const MarketState = struct {
     bid_volume: f64,
     ask_volume: f64,
     total_volume: f64,
-    entropy: f64,                  // Shannon entropy of belief distribution
+    entropy: f64, // Shannon entropy of belief distribution
     open_interest: f64,
 
     pub fn toSyrup(self: MarketState, allocator: Allocator) !syrup.Value {
@@ -54,9 +54,9 @@ pub const MarketState = struct {
 /// Market state broadcast (pushed from market, pulled by agents)
 pub const MarketStateUpdate = struct {
     market_state: MarketState,
-    market_maker_inventory: f64,   // MM position delta
-    funding_rate: f64,             // Perpetual funding
-    volatility: f64,               // Annualized IV
+    market_maker_inventory: f64, // MM position delta
+    funding_rate: f64, // Perpetual funding
+    volatility: f64, // Annualized IV
 
     pub fn toSyrup(self: MarketStateUpdate, allocator: Allocator) !syrup.Value {
         const state_syrup = try self.market_state.toSyrup(allocator);
@@ -75,9 +75,9 @@ pub const MarketStateUpdate = struct {
 
 /// Position direction in GF(3) framework
 pub const PositionTrit = enum {
-    short,           // -1 (RED): SHORT BIAS belief
-    neutral,         // 0 (YELLOW): MARKET NEUTRAL arbitrage
-    long,            // +1 (GREEN): LONG BIAS belief
+    short, // -1 (RED): SHORT BIAS belief
+    neutral, // 0 (YELLOW): MARKET NEUTRAL arbitrage
+    long, // +1 (GREEN): LONG BIAS belief
 
     pub fn toSyrup(self: PositionTrit) syrup.Value {
         const name = switch (self) {
@@ -91,27 +91,30 @@ pub const PositionTrit = enum {
 
 /// Market order (limit order, stop loss, take profit)
 pub const Order = struct {
-    order_id: []const u8,          // UUID from agent
+    order_id: []const u8, // UUID from agent
     market_id: []const u8,
     side: enum { buy, sell },
     order_type: enum { market, limit, stop_limit },
     quantity: f64,
     limit_price: ?f64 = null,
     stop_price: ?f64 = null,
-    tif: enum { ioc, fok, gtc } = .gtc,  // Time in force
-    leverage: ?f64 = null,         // For perpetuals
+    tif: enum { ioc, fok, gtc } = .gtc, // Time in force
+    leverage: ?f64 = null, // For perpetuals
 
     pub fn toSyrup(self: Order, allocator: Allocator) !syrup.Value {
-        const side_str = switch (self.side) { .buy => "buy", .sell => "sell" };
+        const side_str = switch (self.side) {
+            .buy => "buy",
+            .sell => "sell",
+        };
         const type_str = switch (self.order_type) {
             .market => "market",
             .limit => "limit",
-            .stop_limit => "stopLimit"
+            .stop_limit => "stopLimit",
         };
         const tif_str = switch (self.tif) {
             .ioc => "ioc",
             .fok => "fok",
-            .gtc => "gtc"
+            .gtc => "gtc",
         };
 
         var entries = std.ArrayList(syrup.Value.DictEntry).init(allocator);
@@ -131,11 +134,11 @@ pub const Order = struct {
 
 /// Position opening request with GF(3) trifurcation strategy
 pub const PositionOpenRequest = struct {
-    session_id: []const u8,        // ACP session
+    session_id: []const u8, // ACP session
     market_id: []const u8,
-    position_trit: PositionTrit,   // Strategy: -1/0/+1
+    position_trit: PositionTrit, // Strategy: -1/0/+1
     size: f64,
-    orders: []const Order,         // Market + limit orders
+    orders: []const Order, // Market + limit orders
     rationale: ?[]const u8 = null, // Why this trit: empirical data/belief
 
     pub fn toSyrup(self: PositionOpenRequest, allocator: Allocator) !syrup.Value {
@@ -182,7 +185,7 @@ pub const PositionOpenResponse = struct {
     request_id: []const u8,
     fills: []const OrderFill,
     total_cost: f64,
-    position_id: []const u8,       // Assigned by market
+    position_id: []const u8, // Assigned by market
     status: enum { filled, partial, rejected },
     error_message: ?[]const u8 = null,
 
@@ -248,8 +251,8 @@ pub const PortfolioSnapshot = struct {
     available_margin: f64,
     margin_ratio: f64,
     total_unrealized_pnl: f64,
-    gf3_balance: i64,              // sum(trits) mod 3, should be 0
-    entropy: f64,                  // Portfolio entropy across positions
+    gf3_balance: i64, // sum(trits) mod 3, should be 0
+    entropy: f64, // Portfolio entropy across positions
 
     pub fn toSyrup(self: PortfolioSnapshot, allocator: Allocator) !syrup.Value {
         var positions_syrup = std.ArrayList(syrup.Value).init(allocator);
@@ -280,18 +283,13 @@ pub const PortfolioSnapshot = struct {
 pub const BrickDiagramMeta = struct {
     diagram_id: []const u8,
     composition: enum {
-        parallel,                  // ⊗: Independent markets
-        sequential,                // ;: Order flow cascade
-        composed,                  // ∘: Lens composition
+        parallel, // ⊗: Independent markets
+        sequential, // ;: Order flow cascade
+        composed, // ∘: Lens composition
     },
-    markets: []const []const u8,   // Market IDs in composition
-    players: []const enum {
-        market_maker,
-        long_trader,
-        short_trader,
-        arbitrageur
-    },
-    gf3_trits: []const i8,        // Trit for each player (-1, 0, +1)
+    markets: []const []const u8, // Market IDs in composition
+    players: []const enum { market_maker, long_trader, short_trader, arbitrageur },
+    gf3_trits: []const i8, // Trit for each player (-1, 0, +1)
 
     pub fn toSyrup(self: BrickDiagramMeta, allocator: Allocator) !syrup.Value {
         const comp_str = switch (self.composition) {
@@ -337,11 +335,11 @@ pub const BrickDiagramMeta = struct {
 // ============================================================================
 
 pub const SessionMode = enum {
-    market_maker,      // 0 (ERGODIC/YELLOW): Provide liquidity, neutral
-    long_bias,         // +1 (PLUS/GREEN): Accumulate bullish positions
-    short_bias,        // -1 (MINUS/RED): Accumulate bearish positions
-    arbitrageur,       // 0 (ERGODIC/YELLOW): Exploit spreads
-    bifurcation,       // Mixed: Trifurcated agent with multiple roles
+    market_maker, // 0 (ERGODIC/YELLOW): Provide liquidity, neutral
+    long_bias, // +1 (PLUS/GREEN): Accumulate bullish positions
+    short_bias, // -1 (MINUS/RED): Accumulate bearish positions
+    arbitrageur, // 0 (ERGODIC/YELLOW): Exploit spreads
+    bifurcation, // Mixed: Trifurcated agent with multiple roles
 
     pub fn toSyrup(self: SessionMode) syrup.Value {
         const name = switch (self) {
@@ -360,7 +358,7 @@ pub const SessionMode = enum {
             .long_bias => 1,
             .short_bias => -1,
             .arbitrageur => 0,
-            .bifurcation => 0,  // Mixed, depends on composition
+            .bifurcation => 0, // Mixed, depends on composition
         };
     }
 };
@@ -378,7 +376,7 @@ pub const ArkaiLiquidation = struct {
     positions_liquidated: []const Position,
     total_loss: f64,
     liquidation_fee: f64,
-    arkhai_resource_claim: ?[]const u8 = null,  // OCapN promise
+    arkhai_resource_claim: ?[]const u8 = null, // OCapN promise
 
     pub fn toSyrup(self: ArkaiLiquidation, allocator: Allocator) !syrup.Value {
         var positions_syrup = std.ArrayList(syrup.Value).init(allocator);
@@ -407,7 +405,7 @@ pub const ArkaiLiquidation = struct {
 // ============================================================================
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = if (@hasDecl(std.heap, "GeneralPurposeAllocator")) std.heap.GeneralPurposeAllocator(.{}){} else std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -460,7 +458,7 @@ pub fn main() !void {
         .available_margin = 7500.0,
         .margin_ratio = 0.75,
         .total_unrealized_pnl = 130.0,
-        .gf3_balance = 0,  // +1 (long) + (-1 (short) = 0 mod 3 ✓
+        .gf3_balance = 0, // +1 (long) + (-1 (short) = 0 mod 3 ✓
         .entropy = 0.667,
     };
 
