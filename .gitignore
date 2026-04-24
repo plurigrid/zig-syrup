@@ -59,3 +59,7 @@ test_output.txt
 # Python
 __pycache__/
 *.pyc
+
+# build output + scratchpad
+.topos/artifacts/
+.topos/scratch/
