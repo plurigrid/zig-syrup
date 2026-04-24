@@ -136,7 +136,7 @@ pub fn parseAddOnionResponse(allocator: Allocator, response: []const u8) !AddOni
 
     var it = std.mem.splitScalar(u8, response, '\n');
     while (it.next()) |raw| {
-        const line = std.mem.trimRight(u8, raw, "\r\n ");
+        const line = std.mem.trimEnd(u8, raw, "\r\n ");
         if (std.mem.startsWith(u8, line, "250-ServiceID=")) {
             service_id = try allocator.dupe(u8, line["250-ServiceID=".len..]);
         } else if (std.mem.startsWith(u8, line, "250-PrivateKey=")) {

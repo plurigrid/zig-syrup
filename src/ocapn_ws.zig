@@ -177,7 +177,7 @@ pub fn recvSyrupFrame(
     client_side: bool,
 ) ![]u8 {
     while (true) {
-        var f = try readFrame(allocator, stream);
+        const f = try readFrame(allocator, stream);
         switch (f.opcode) {
             WS_OPCODE_BINARY => return f.payload,
             WS_OPCODE_PING => {
@@ -448,7 +448,6 @@ test "WS handshake client + server end-to-end via MemStream pair" {
         }
     };
 
-    var client = Pair{ .read_buf = &s2c, .write_buf = &c2s };
     var server = Pair{ .read_buf = &c2s, .write_buf = &s2c };
 
     // Client writes its GET request into c2s (no server reply yet to read).

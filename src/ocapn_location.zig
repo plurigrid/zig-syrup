@@ -76,10 +76,10 @@ pub const Location = struct {
         try out.appendSlice("<10'ocapn-node");
 
         const sym = self.netlayer.symbolName();
-        try std.fmt.format(out.writer(), "{d}'", .{sym.len});
+        try out.writer().print("{d}'", .{sym.len});
         try out.appendSlice(sym);
 
-        try std.fmt.format(out.writer(), "{d}\"", .{self.designator.len});
+        try out.writer().print("{d}\"", .{self.designator.len});
         try out.appendSlice(self.designator);
 
         if (self.hints.len == 0) {
@@ -87,7 +87,7 @@ pub const Location = struct {
         } else {
             try out.append('[');
             for (self.hints) |h| {
-                try std.fmt.format(out.writer(), "{d}\"", .{h.len});
+                try out.writer().print("{d}\"", .{h.len});
                 try out.appendSlice(h);
             }
             try out.append(']');
@@ -317,7 +317,7 @@ test "location fromValue accepts Racket-shaped (string designator, false hints)"
     defer buf.deinit();
     try buf.appendSlice("<10'ocapn-node");
     try buf.appendSlice("5'onion");
-    try std.fmt.format(buf.writer(), "{d}\"", .{designator_str.len});
+    try buf.writer().print("{d}\"", .{designator_str.len});
     try buf.appendSlice(designator_str);
     try buf.append('f');
     try buf.append('>');
