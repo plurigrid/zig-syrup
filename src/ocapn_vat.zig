@@ -18,6 +18,13 @@ const compat = @import("compat");
 const Allocator = std.mem.Allocator;
 const ByteList = std.array_list.Managed(u8);
 
+// 0.16 compat: Managed ArrayList lost its .writer() method. This helper formats
+// to a stack buffer and appends, preserving the one-call ergonomics at call sites.
+fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [128]u8 = undefined;
+    try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
+}
+
 pub const SessionPhase = enum {
     fresh,
     handshake_sent,
@@ -142,10 +149,10 @@ pub const Vat = struct {
         try out.appendSlice("<15'op:deliver-only");
 
         // target: desc:import-object <pos>
-        try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
+        try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
 
         // method as symbol
-        try out.writer().print("{d}'", .{method.len});
+        try fmtAppend(&out, "{d}'", .{method.len});
         try out.appendSlice(method);
 
         // args as list — encode each Value
@@ -179,9 +186,9 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<10'op:deliver");
 
-        try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
+        try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
 
-        try out.writer().print("{d}'", .{method.len});
+        try fmtAppend(&out, "{d}'", .{method.len});
         try out.appendSlice(method);
 
         try out.append('[');
@@ -192,8 +199,8 @@ pub const Vat = struct {
         }
         try out.append(']');
 
-        try out.writer().print("<11'desc:answer{d}+>", .{answer_pos});
-        try out.writer().print("<18'desc:import-object{d}+>", .{answer_pos});
+        try fmtAppend(&out, "<11'desc:answer{d}+>", .{answer_pos});
+        try fmtAppend(&out, "<18'desc:import-object{d}+>", .{answer_pos});
 
         try out.append('>');
         try self.conn.sendBytes(out.items);
@@ -207,8 +214,8 @@ pub const Vat = struct {
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<13'op:gc-exports");
-        try out.writer().print("{d}+", .{position});
-        try out.writer().print("{d}+", .{delta});
+        try fmtAppend(&out, "{d}+", .{position});
+        try fmtAppend(&out, "{d}+", .{delta});
         try out.append('>');
         try self.conn.sendBytes(out.items);
     }
@@ -219,7 +226,7 @@ pub const Vat = struct {
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<13'op:gc-answers");
-        try out.writer().print("{d}+", .{position});
+        try fmtAppend(&out, "{d}+", .{position});
         try out.append('>');
         try self.conn.sendBytes(out.items);
     }
@@ -239,7 +246,7 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<10'op:fulfill");
         try out.appendSlice("<11'desc:answer");
-        try out.writer().print("{d}+", .{answer_pos});
+        try fmtAppend(&out, "{d}+", .{answer_pos});
         try out.append('>');
         try out.appendSlice(value_syrup);
         try out.append('>');
@@ -254,7 +261,7 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<8'op:break");
         try out.appendSlice("<11'desc:answer");
-        try out.writer().print("{d}+", .{answer_pos});
+        try fmtAppend(&out, "{d}+", .{answer_pos});
         try out.append('>');
         try out.appendSlice(reason_syrup);
         try out.append('>');
@@ -308,7 +315,7 @@ pub const Vat = struct {
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<8'op:abort");
-        try out.writer().print("{d}\"", .{reason.len});
+        try fmtAppend(&out, "{d}\"", .{reason.len});
         try out.appendSlice(reason);
         try out.append('>');
         try self.conn.sendBytes(out.items);
@@ -454,7 +461,7 @@ fn readInt(comptime T: type, v: syrup.Value) !T {
 test "two Vats: full handshake round-trip over localhost" {
     const allocator = std.testing.allocator;
 
-    const addr = try compat.Address.parseIp4("127.0.0.1", 0);
+    const addr = try std.net.Address.parseIp4("127.0.0.1", 0);
     var server = try addr.listen(.{ .reuse_address = true });
     defer server.deinit();
     const bound = server.listen_address;
@@ -527,8 +534,8 @@ fn encodeDeliverOnlyForTest(allocator: std.mem.Allocator, to_position: u32, meth
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<15'op:deliver-only");
-    try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
-    try out.writer().print("{d}'", .{method.len});
+    try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
+    try fmtAppend(&out, "{d}'", .{method.len});
     try out.appendSlice(method);
     try out.append('[');
     try out.append(']');
@@ -553,13 +560,13 @@ fn encodeDeliverForTest(allocator: std.mem.Allocator, to_position: u32, method: 
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<10'op:deliver");
-    try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
-    try out.writer().print("{d}'", .{method.len});
+    try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
+    try fmtAppend(&out, "{d}'", .{method.len});
     try out.appendSlice(method);
     try out.append('[');
     try out.append(']');
-    try out.writer().print("<11'desc:answer{d}+>", .{answer_pos});
-    try out.writer().print("<18'desc:import-object{d}+>", .{answer_pos});
+    try fmtAppend(&out, "<11'desc:answer{d}+>", .{answer_pos});
+    try fmtAppend(&out, "<18'desc:import-object{d}+>", .{answer_pos});
     try out.append('>');
     return out.toOwnedSlice();
 }
@@ -584,8 +591,8 @@ test "emitter round-trip: op:gc-exports parses as two-int record" {
     var out = ByteList.init(allocator);
     defer out.deinit();
     try out.appendSlice("<13'op:gc-exports");
-    try out.writer().print("{d}+", .{@as(u32, 1)});
-    try out.writer().print("{d}+", .{@as(u32, 2)});
+    try fmtAppend(&out, "{d}+", .{@as(u32, 1)});
+    try fmtAppend(&out, "{d}+", .{@as(u32, 2)});
     try out.append('>');
 
     var parser = syrup.Parser.init(out.items, allocator);
@@ -601,7 +608,7 @@ test "emitter round-trip: op:gc-answers parses" {
     var out = ByteList.init(allocator);
     defer out.deinit();
     try out.appendSlice("<13'op:gc-answers");
-    try out.writer().print("{d}+", .{@as(u32, 5)});
+    try fmtAppend(&out, "{d}+", .{@as(u32, 5)});
     try out.append('>');
 
     var parser = syrup.Parser.init(out.items, allocator);
@@ -618,10 +625,10 @@ test "emitter shape: op:fulfill with desc:answer + inline value parses" {
     defer out.deinit();
     try out.appendSlice("<10'op:fulfill");
     try out.appendSlice("<11'desc:answer");
-    try out.writer().print("{d}+", .{@as(u32, 42)});
+    try fmtAppend(&out, "{d}+", .{@as(u32, 42)});
     try out.append('>');
     // value = integer 7
-    try out.writer().print("{d}+", .{@as(u32, 7)});
+    try fmtAppend(&out, "{d}+", .{@as(u32, 7)});
     try out.append('>');
 
     var parser = syrup.Parser.init(out.items, allocator);
@@ -662,7 +669,7 @@ test "emitter shape: op:abort with reason string parses" {
     defer out.deinit();
     const reason = "peer-requested-shutdown";
     try out.appendSlice("<8'op:abort");
-    try out.writer().print("{d}\"", .{reason.len});
+    try fmtAppend(&out, "{d}\"", .{reason.len});
     try out.appendSlice(reason);
     try out.append('>');
 
@@ -681,7 +688,7 @@ test "emitter shape: op:break with desc:answer + reason parses" {
     defer out.deinit();
     try out.appendSlice("<8'op:break");
     try out.appendSlice("<11'desc:answer");
-    try out.writer().print("{d}+", .{@as(u32, 9)});
+    try fmtAppend(&out, "{d}+", .{@as(u32, 9)});
     try out.append('>');
     // reason = symbol 'oops
     try out.appendSlice("4'oops");

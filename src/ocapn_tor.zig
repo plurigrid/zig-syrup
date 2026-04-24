@@ -42,7 +42,7 @@ pub fn socks5ConnectRequestAlloc(
     port: u16,
 ) ![]u8 {
     if (host.len > 255) return error.HostnameTooLong;
-    var out = std.ArrayList(u8).init(allocator);
+    var out = std.array_list.Managed(u8).init(allocator);
     errdefer out.deinit();
     try out.appendSlice(&[_]u8{ 0x05, 0x01, 0x00, 0x03, @as(u8, @intCast(host.len)) });
     try out.appendSlice(host);

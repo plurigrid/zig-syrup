@@ -31,6 +31,12 @@ const Ed25519 = std.crypto.sign.Ed25519;
 const Allocator = std.mem.Allocator;
 const ByteList = std.array_list.Managed(u8);
 
+// 0.16 compat: Managed ArrayList lost its .writer() method.
+fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [128]u8 = undefined;
+    try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
+}
+
 pub const GIFT_ID_LEN: usize = 32;
 
 pub const HandoffGive = struct {
@@ -55,15 +61,15 @@ pub const HandoffGive = struct {
         try out.appendSlice(loc_bytes);
 
         // session
-        try out.writer().print("{d}:", .{self.session.len});
+        try fmtAppend(&out, "{d}:", .{self.session.len});
         try out.appendSlice(self.session);
 
         // gifter-side
-        try out.writer().print("{d}:", .{self.gifter_side.len});
+        try fmtAppend(&out, "{d}:", .{self.gifter_side.len});
         try out.appendSlice(self.gifter_side);
 
         // gift-id
-        try out.writer().print("{d}:", .{self.gift_id.len});
+        try fmtAppend(&out, "{d}:", .{self.gift_id.len});
         try out.appendSlice(&self.gift_id);
 
         try out.append('>');
@@ -82,13 +88,13 @@ pub const HandoffReceive = struct {
         defer out.deinit();
         try out.appendSlice("<20'desc:handoff-receive");
 
-        try out.writer().print("{d}:", .{self.receiving_session.len});
+        try fmtAppend(&out, "{d}:", .{self.receiving_session.len});
         try out.appendSlice(self.receiving_session);
 
-        try out.writer().print("{d}:", .{self.receiving_side.len});
+        try fmtAppend(&out, "{d}:", .{self.receiving_side.len});
         try out.appendSlice(self.receiving_side);
 
-        try out.writer().print("{d}+", .{self.handoff_count});
+        try fmtAppend(&out, "{d}+", .{self.handoff_count});
 
         try out.appendSlice(self.signed_give);
 
@@ -111,7 +117,7 @@ pub fn encodeSigEnvelope(
     // Signature as a record: <sig scheme bytes>
     try out.appendSlice("<3'sig");
     try out.appendSlice("7'ed25519");
-    try out.writer().print("{d}:", .{sig_bytes.len});
+    try fmtAppend(&out, "{d}:", .{sig_bytes.len});
     try out.appendSlice(&sig_bytes);
     try out.append('>');
 

@@ -25,6 +25,12 @@ const std = @import("std");
 const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 
+// 0.16 compat: Managed ArrayList lost its .writer() method.
+fn fmtAppend(list: *std.array_list.Managed(u8), comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [512]u8 = undefined;
+    try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
+}
+
 pub const WS_OPCODE_CONT: u4 = 0x0;
 pub const WS_OPCODE_TEXT: u4 = 0x1;
 pub const WS_OPCODE_BINARY: u4 = 0x2;
@@ -83,7 +89,7 @@ pub fn encodeFrame(
     payload: []const u8,
     masked: bool,
 ) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
+    var out = std.array_list.Managed(u8).init(allocator);
     errdefer out.deinit();
 
     // FIN=1, RSV=0, opcode.
@@ -251,7 +257,7 @@ pub fn clientHandshake(
     var key_buf: [24]u8 = undefined;
     const key = try freshClientKey(&key_buf);
 
-    var req = std.ArrayList(u8).init(allocator);
+    var req = std.array_list.Managed(u8).init(allocator);
     defer req.deinit();
     try req.writer().print(
         "GET {s} HTTP/1.1\r\n" ++
@@ -265,7 +271,7 @@ pub fn clientHandshake(
     try stream.writeAll(req.items);
 
     // Read response headers until CRLFCRLF. Strict bounds: 8 KiB.
-    var resp = std.ArrayList(u8).init(allocator);
+    var resp = std.array_list.Managed(u8).init(allocator);
     defer resp.deinit();
     while (true) {
         if (resp.items.len > 8192) return error.HeadersTooLarge;
@@ -286,7 +292,7 @@ pub fn clientHandshake(
 /// respond with 101. On failure the caller's stream is left in an undefined
 /// state; they should close it.
 pub fn serverHandshake(allocator: Allocator, stream: ByteStream) !void {
-    var req = std.ArrayList(u8).init(allocator);
+    var req = std.array_list.Managed(u8).init(allocator);
     defer req.deinit();
     while (true) {
         if (req.items.len > 8192) return error.HeadersTooLarge;
@@ -304,15 +310,12 @@ pub fn serverHandshake(allocator: Allocator, stream: ByteStream) !void {
     var accept_buf: [32]u8 = undefined;
     const accept = try computeAccept(key, &accept_buf);
 
-    var resp = std.ArrayList(u8).init(allocator);
+    var resp = std.array_list.Managed(u8).init(allocator);
     defer resp.deinit();
-    try resp.writer().print(
-        "HTTP/1.1 101 Switching Protocols\r\n" ++
-            "Upgrade: websocket\r\n" ++
-            "Connection: Upgrade\r\n" ++
-            "Sec-WebSocket-Accept: {s}\r\n\r\n",
-        .{accept},
-    );
+    try fmtAppend(&resp, "HTTP/1.1 101 Switching Protocols\r\n" ++
+        "Upgrade: websocket\r\n" ++
+        "Connection: Upgrade\r\n" ++
+        "Sec-WebSocket-Accept: {s}\r\n\r\n", .{accept});
     try stream.writeAll(resp.items);
 }
 
@@ -354,7 +357,7 @@ fn asciiEqIgnoreCase(a: []const u8, b: []const u8) bool {
 // ---- Tests ------------------------------------------------------------------
 
 const MemStream = struct {
-    buf: std.ArrayList(u8),
+    buf: std.array_list.Managed(u8),
     cursor: usize = 0,
 
     fn read(ctx: *anyopaque, out: []u8) anyerror!usize {
@@ -380,7 +383,7 @@ const MemStream = struct {
 
 test "WS binary frame round-trip (unmasked server frame)" {
     const allocator = std.testing.allocator;
-    var mem = MemStream{ .buf = std.ArrayList(u8).init(allocator) };
+    var mem = MemStream{ .buf = std.array_list.Managed(u8).init(allocator) };
     defer mem.buf.deinit();
 
     const payload = "<5'hello>";
@@ -394,7 +397,7 @@ test "WS binary frame round-trip (unmasked server frame)" {
 
 test "WS binary frame round-trip (masked client frame)" {
     const allocator = std.testing.allocator;
-    var mem = MemStream{ .buf = std.ArrayList(u8).init(allocator) };
+    var mem = MemStream{ .buf = std.array_list.Managed(u8).init(allocator) };
     defer mem.buf.deinit();
 
     const payload = "<12'op:deliver-only5'greet0+>";
@@ -419,15 +422,15 @@ test "WS handshake client + server end-to-end via MemStream pair" {
 
     // Two buffers: client_to_server and server_to_client. Each endpoint
     // reads from one and writes to the other.
-    var c2s = std.ArrayList(u8).init(allocator);
+    var c2s = std.array_list.Managed(u8).init(allocator);
     defer c2s.deinit();
-    var s2c = std.ArrayList(u8).init(allocator);
+    var s2c = std.array_list.Managed(u8).init(allocator);
     defer s2c.deinit();
 
     const Pair = struct {
-        read_buf: *std.ArrayList(u8),
+        read_buf: *std.array_list.Managed(u8),
         read_cursor: usize = 0,
-        write_buf: *std.ArrayList(u8),
+        write_buf: *std.array_list.Managed(u8),
 
         fn readFn(ctx: *anyopaque, out: []u8) anyerror!usize {
             const self: *@This() = @ptrCast(@alignCast(ctx));

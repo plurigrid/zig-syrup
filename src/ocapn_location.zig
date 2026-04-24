@@ -39,6 +39,12 @@ const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 const ByteList = std.array_list.Managed(u8);
 
+// 0.16 compat: Managed ArrayList lost its .writer() method.
+fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [128]u8 = undefined;
+    try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
+}
+
 pub const Netlayer = enum {
     tcp,
     onion,
@@ -76,10 +82,10 @@ pub const Location = struct {
         try out.appendSlice("<10'ocapn-node");
 
         const sym = self.netlayer.symbolName();
-        try out.writer().print("{d}'", .{sym.len});
+        try fmtAppend(&out, "{d}'", .{sym.len});
         try out.appendSlice(sym);
 
-        try out.writer().print("{d}\"", .{self.designator.len});
+        try fmtAppend(&out, "{d}\"", .{self.designator.len});
         try out.appendSlice(self.designator);
 
         if (self.hints.len == 0) {
@@ -87,7 +93,7 @@ pub const Location = struct {
         } else {
             try out.append('[');
             for (self.hints) |h| {
-                try out.writer().print("{d}\"", .{h.len});
+                try fmtAppend(&out, "{d}\"", .{h.len});
                 try out.appendSlice(h);
             }
             try out.append(']');
@@ -317,7 +323,7 @@ test "location fromValue accepts Racket-shaped (string designator, false hints)"
     defer buf.deinit();
     try buf.appendSlice("<10'ocapn-node");
     try buf.appendSlice("5'onion");
-    try buf.writer().print("{d}\"", .{designator_str.len});
+    try fmtAppend(&buf, "{d}\"", .{designator_str.len});
     try buf.appendSlice(designator_str);
     try buf.append('f');
     try buf.append('>');
