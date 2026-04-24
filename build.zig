@@ -1800,6 +1800,14 @@ pub fn build(b: *std.Build) void {
     const run_wgpu_compute_tests = b.addRunArtifact(wgpu_compute_tests);
 
     // Stranded-files compile check (not on default test_step until each verified)
+    // Hedges/Smithe Bayesian chain rule as backward fiber.
+    const backward_fiber_mod = b.addModule("backward_fiber", .{
+        .root_source_file = b.path("src/backward_fiber.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    _ = backward_fiber_mod;
+
     // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.
     const ocapn_location_mod = b.addModule("ocapn_location", .{
         .root_source_file = b.path("src/ocapn_location.zig"),
