@@ -204,8 +204,7 @@ pub fn build(b: *std.Build) void {
         .name = "syrup-verify",
         .root_module = main_mod,
     });
-    const exe_install_step = b.step("install-main", "install main syrup-verify exe (broken on zig 0.16)");
-    exe_install_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    b.installArtifact(exe);
 
     // CLI executable for JSON <-> Syrup conversion
     const cli_mod = b.createModule(.{
@@ -219,8 +218,7 @@ pub fn build(b: *std.Build) void {
         .name = "syrup",
         .root_module = cli_mod,
     });
-    const cli_install_step = b.step("install-cli", "install syrup cli exe (broken on zig 0.16)");
-    cli_install_step.dependOn(&b.addInstallArtifact(cli_exe, .{}).step);
+    b.installArtifact(cli_exe);
 
     const cli_wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
@@ -234,11 +232,13 @@ pub fn build(b: *std.Build) void {
     });
     cli_wasm_mod.addImport("syrup", syrup_mod);
 
+    cli_wasm_mod.link_libc = true;
     const cli_wasm = b.addExecutable(.{
         .name = "syrup-cli",
         .root_module = cli_wasm_mod,
     });
     const cli_wasm_install = b.addInstallArtifact(cli_wasm, .{});
+    b.getInstallStep().dependOn(&cli_wasm_install.step);
     const cli_wasm_step = b.step("cli-wasm", "Build standalone WASM CLI (wasi32)");
     cli_wasm_step.dependOn(&cli_wasm_install.step);
 
@@ -249,6 +249,7 @@ pub fn build(b: *std.Build) void {
     });
     cli_wasm_release_mod.addImport("syrup", syrup_mod);
 
+    cli_wasm_release_mod.link_libc = true;
     const cli_wasm_release = b.addExecutable(.{
         .name = "syrup-cli",
         .root_module = cli_wasm_release_mod,
@@ -266,6 +267,7 @@ pub fn build(b: *std.Build) void {
     });
     cli_wasm_small_mod.addImport("syrup", syrup_mod);
 
+    cli_wasm_small_mod.link_libc = true;
     const cli_wasm_small = b.addExecutable(.{
         .name = "syrup-cli",
         .root_module = cli_wasm_small_mod,
@@ -316,8 +318,7 @@ pub fn build(b: *std.Build) void {
         .name = "eeg",
         .root_module = eeg_mod,
     });
-    const eeg_install_step = b.step("install-eeg", "install eeg exe (broken on zig 0.16)");
-    eeg_install_step.dependOn(&b.addInstallArtifact(eeg_exe, .{}).step);
+    b.installArtifact(eeg_exe);
 
     // Run step
     const run_cmd = b.addRunArtifact(exe);
@@ -351,7 +352,6 @@ pub fn build(b: *std.Build) void {
         .root_module = xev_test_mod,
     });
     const run_xev_tests = b.addRunArtifact(xev_tests);
-    _ = run_xev_tests;
 
     // Create test module for geo.zig
     const geo_test_mod = b.createModule(.{
@@ -366,7 +366,6 @@ pub fn build(b: *std.Build) void {
         .root_module = geo_test_mod,
     });
     const run_geo_tests = b.addRunArtifact(geo_tests);
-    _ = run_geo_tests;
 
     // JSON-RPC Bridge module
     const bridge_mod = b.addModule("jsonrpc_bridge", .{
@@ -391,7 +390,6 @@ pub fn build(b: *std.Build) void {
         .root_module = bridge_test_mod,
     });
     const run_bridge_tests = b.addRunArtifact(bridge_tests);
-    _ = run_bridge_tests;
 
     // Create test module for acp.zig
     const acp_test_mod = b.createModule(.{
@@ -446,7 +444,6 @@ pub fn build(b: *std.Build) void {
         .root_module = liveness_test_mod,
     });
     const run_liveness_tests = b.addRunArtifact(liveness_tests);
-    _ = run_liveness_tests;
 
     // Parity Check Tool
     const parity_mod = b.createModule(.{
@@ -497,6 +494,7 @@ pub fn build(b: *std.Build) void {
         .name = "splitmix69",
         .root_module = splitmix69_mod,
     });
+    b.installArtifact(splitmix69_exe);
     const run_splitmix69 = b.addRunArtifact(splitmix69_exe);
     const splitmix69_step = b.step("splitmix69", "Run SplitMix69 SPI parallelism benchmark");
     splitmix69_step.dependOn(&run_splitmix69.step);
@@ -518,6 +516,7 @@ pub fn build(b: *std.Build) void {
         .name = "spi-parallel",
         .root_module = spi_parallel_mod,
     });
+    b.installArtifact(spi_parallel_exe);
     const run_spi_parallel = b.addRunArtifact(spi_parallel_exe);
     const spi_parallel_step = b.step("spi-parallel", "Run SPI parallel throughput benchmark (vs Gay.jl)");
     spi_parallel_step.dependOn(&run_spi_parallel.step);
@@ -532,6 +531,7 @@ pub fn build(b: *std.Build) void {
         .name = "spi-virtuoso",
         .root_module = virtuoso_mod,
     });
+    b.installArtifact(virtuoso_exe);
     const run_virtuoso = b.addRunArtifact(virtuoso_exe);
     const virtuoso_step = b.step("spi-virtuoso", "Run SPI virtuoso max-perf benchmark (race Julia)");
     virtuoso_step.dependOn(&run_virtuoso.step);
@@ -564,7 +564,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     bristol_mod.addImport("syrup", syrup_mod);
-
+    
     // Bristol module (for reusability)
     const bristol_lib = b.addModule("bristol", .{
         .root_source_file = b.path("src/bristol.zig"),
@@ -626,7 +626,6 @@ pub fn build(b: *std.Build) void {
         .root_module = snapshot_test_mod,
     });
     const run_snapshot_tests = b.addRunArtifact(snapshot_tests);
-    _ = run_snapshot_tests;
 
     // Rainbow module tests
     const rainbow_test_mod = b.createModule(.{
@@ -640,7 +639,6 @@ pub fn build(b: *std.Build) void {
     rainbow_test_mod.addImport("quantize", quantize_mod);
     const rainbow_tests = b.addTest(.{ .root_module = rainbow_test_mod });
     const run_rainbow_tests = b.addRunArtifact(rainbow_tests);
-    _ = run_rainbow_tests;
 
     // Damage module
     const damage_mod = b.addModule("damage", .{
@@ -663,7 +661,6 @@ pub fn build(b: *std.Build) void {
     damage_test_mod.addImport("syrup", syrup_mod);
     const damage_tests = b.addTest(.{ .root_module = damage_test_mod });
     const run_damage_tests = b.addRunArtifact(damage_tests);
-    _ = run_damage_tests;
 
     // Cell Dispatch module (transducer-based parallel cell rendering)
     const cell_dispatch_mod = b.addModule("cell_dispatch", .{
@@ -684,7 +681,6 @@ pub fn build(b: *std.Build) void {
     cell_dispatch_test_mod.addImport("damage", damage_mod);
     const cell_dispatch_tests = b.addTest(.{ .root_module = cell_dispatch_test_mod });
     const run_cell_dispatch_tests = b.addRunArtifact(cell_dispatch_tests);
-    _ = run_cell_dispatch_tests;
 
     // Homotopy module tests
     const homotopy_test_mod = b.createModule(.{
@@ -696,7 +692,6 @@ pub fn build(b: *std.Build) void {
     homotopy_test_mod.addImport("continuation", continuation_mod);
     const homotopy_tests = b.addTest(.{ .root_module = homotopy_test_mod });
     const run_homotopy_tests = b.addRunArtifact(homotopy_tests);
-    _ = run_homotopy_tests;
 
     // Time unit module tests (temporal ontology conversion lattice)
     const time_unit_test_mod = b.createModule(.{
@@ -708,7 +703,6 @@ pub fn build(b: *std.Build) void {
     time_unit_test_mod.addImport("continuation", continuation_mod);
     const time_unit_tests = b.addTest(.{ .root_module = time_unit_test_mod });
     const run_time_unit_tests = b.addRunArtifact(time_unit_tests);
-    _ = run_time_unit_tests;
 
     // Linalg module tests
     const linalg_test_mod = b.createModule(.{
@@ -720,7 +714,6 @@ pub fn build(b: *std.Build) void {
     linalg_test_mod.addImport("continuation", continuation_mod);
     const linalg_tests = b.addTest(.{ .root_module = linalg_test_mod });
     const run_linalg_tests = b.addRunArtifact(linalg_tests);
-    _ = run_linalg_tests;
 
     // Ripser module tests (persistent homology)
     const ripser_test_mod = b.createModule(.{
@@ -728,9 +721,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    ripser_test_mod.addImport("syrup", syrup_mod);
     const ripser_tests = b.addTest(.{ .root_module = ripser_test_mod });
     const run_ripser_tests = b.addRunArtifact(ripser_tests);
-    _ = run_ripser_tests;
 
     // SCS wrapper module tests (conic optimization)
     const scs_test_mod = b.createModule(.{
@@ -750,7 +743,6 @@ pub fn build(b: *std.Build) void {
     continuation_test_mod.addImport("syrup", syrup_mod);
     const continuation_tests = b.addTest(.{ .root_module = continuation_test_mod });
     const run_continuation_tests = b.addRunArtifact(continuation_tests);
-    _ = run_continuation_tests;
 
     // BCI Homotopy module tests
     const bci_test_mod = b.createModule(.{
@@ -763,7 +755,6 @@ pub fn build(b: *std.Build) void {
     bci_test_mod.addImport("homotopy", homotopy_mod);
     const bci_tests = b.addTest(.{ .root_module = bci_test_mod });
     const run_bci_tests = b.addRunArtifact(bci_tests);
-    _ = run_bci_tests;
 
     // Prigogine module (dissipative structures & non-equilibrium thermodynamics)
     _ = b.addModule("prigogine", .{
@@ -812,7 +803,6 @@ pub fn build(b: *std.Build) void {
     });
     const fem_tests = b.addTest(.{ .root_module = fem_test_mod });
     const run_fem_tests = b.addRunArtifact(fem_tests);
-    _ = run_fem_tests;
 
     // Color SIMD module (Vectorized color space conversions)
     _ = b.addModule("color_simd", .{
@@ -820,6 +810,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
 
     // Color SIMD module tests
     const color_simd_test_mod = b.createModule(.{
@@ -897,7 +888,6 @@ pub fn build(b: *std.Build) void {
     spectrum_test_mod.addImport("syrup", syrup_mod);
     const spectrum_tests = b.addTest(.{ .root_module = spectrum_test_mod });
     const run_spectrum_tests = b.addRunArtifact(spectrum_tests);
-    _ = run_spectrum_tests;
 
     // Cell Sync named module (distributed terminal cell synchronization)
     const cell_sync_mod = b.addModule("cell_sync", .{
@@ -918,7 +908,6 @@ pub fn build(b: *std.Build) void {
     cell_sync_test_mod.addImport("damage", damage_mod);
     const cell_sync_tests = b.addTest(.{ .root_module = cell_sync_test_mod });
     const run_cell_sync_tests = b.addRunArtifact(cell_sync_tests);
-    _ = run_cell_sync_tests;
 
     // QASM renderer module (quantum circuit ASCII art)
     const qasm_test_mod = b.createModule(.{
@@ -931,7 +920,6 @@ pub fn build(b: *std.Build) void {
     qasm_test_mod.addImport("damage", damage_mod);
     const qasm_tests = b.addTest(.{ .root_module = qasm_test_mod });
     const run_qasm_tests = b.addRunArtifact(qasm_tests);
-    _ = run_qasm_tests;
 
     // ========================================
     // Color Modules (for Colored Operads)
@@ -963,7 +951,6 @@ pub fn build(b: *std.Build) void {
     tileable_shader_test_mod.addImport("cell_dispatch", cell_dispatch_mod);
     const tileable_shader_tests = b.addTest(.{ .root_module = tileable_shader_test_mod });
     const run_tileable_shader_tests = b.addRunArtifact(tileable_shader_tests);
-    _ = run_tileable_shader_tests;
 
     // ========================================
     // Worlds Module (A/B Testing, Multiplayer, OpenBCI Integration)
@@ -1161,7 +1148,7 @@ pub fn build(b: *std.Build) void {
     });
     world_demo_mod.addImport("syrup", syrup_mod);
     world_demo_mod.addImport("worlds", worlds_mod);
-
+    
     const world_demo_exe = b.addExecutable(.{
         .name = "world-demo",
         .root_module = world_demo_mod,
@@ -1458,7 +1445,7 @@ pub fn build(b: *std.Build) void {
     bci_demo_mod.addImport("syrup", syrup_mod);
     bci_demo_mod.addImport("worlds", worlds_mod);
     bci_demo_mod.addImport("propagator", propagator_mod);
-
+    
     const bci_demo_exe = b.addExecutable(.{
         .name = "bci-demo",
         .root_module = bci_demo_mod,
@@ -1482,6 +1469,7 @@ pub fn build(b: *std.Build) void {
     spatial_propagator_mod.addImport("propagator", propagator_mod);
     spatial_propagator_mod.addImport("cell_dispatch", cell_dispatch_mod);
     spatial_propagator_mod.addImport("rainbow", rainbow_mod);
+    spatial_propagator_mod.addImport("compat", compat_mod);
 
     // Spatial Propagator tests
     const spatial_propagator_test_mod = b.createModule(.{
@@ -1493,9 +1481,9 @@ pub fn build(b: *std.Build) void {
     spatial_propagator_test_mod.addImport("propagator", propagator_mod);
     spatial_propagator_test_mod.addImport("cell_dispatch", cell_dispatch_mod);
     spatial_propagator_test_mod.addImport("rainbow", rainbow_mod);
+    spatial_propagator_test_mod.addImport("compat", compat_mod);
     const spatial_propagator_tests = b.addTest(.{ .root_module = spatial_propagator_test_mod });
     const run_spatial_propagator_tests = b.addRunArtifact(spatial_propagator_tests);
-    _ = run_spatial_propagator_tests;
 
     // Spatial Propagator shared library (C ABI for Swift bridge)
     // Quantization tests (terminal palette reduction)
@@ -1516,13 +1504,13 @@ pub fn build(b: *std.Build) void {
     spatial_lib_mod.addImport("propagator", propagator_mod);
     spatial_lib_mod.addImport("cell_dispatch", cell_dispatch_mod);
     spatial_lib_mod.addImport("rainbow", rainbow_mod);
+    spatial_lib_mod.addImport("compat", compat_mod);
     const spatial_lib = b.addLibrary(.{
         .linkage = .dynamic,
         .name = "spatial_propagator",
         .root_module = spatial_lib_mod,
     });
-    const spatial_install_step = b.step("install-spatial", "install spatial_lib (broken on zig 0.16)");
-    spatial_install_step.dependOn(&b.addInstallArtifact(spatial_lib, .{}).step);
+    b.installArtifact(spatial_lib);
 
     // GF(3) Goblins FFI — shared library for Guile Goblins integration
     const goblins_ffi_mod = b.createModule(.{
@@ -1535,8 +1523,7 @@ pub fn build(b: *std.Build) void {
         .name = "gf3_goblins",
         .root_module = goblins_ffi_mod,
     });
-    const goblins_ffi_step = b.step("goblins-ffi", "build goblins FFI lib (not in default install)");
-    goblins_ffi_step.dependOn(&b.addInstallArtifact(goblins_ffi_lib, .{}).step);
+    b.installArtifact(goblins_ffi_lib);
 
     // PufferLib FFI — shared library for Python RL integration
     // Exports: c_init, c_reset, c_step, vec_init, vec_step, vec_close
@@ -1561,18 +1548,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     cross_runtime_mod.addImport("syrup", syrup_mod);
-
+    
     const cross_runtime_exe = b.addExecutable(.{
         .name = "cross-runtime-exchange",
         .root_module = cross_runtime_mod,
     });
-    const cross_runtime_install_step = b.step("install-cross-runtime", "install cross-runtime exe (broken on zig 0.16)");
-    cross_runtime_install_step.dependOn(&b.addInstallArtifact(cross_runtime_exe, .{}).step);
-
+    b.installArtifact(cross_runtime_exe);
+    
     const cross_runtime_cmd = b.addRunArtifact(cross_runtime_exe);
     const cross_runtime_step = b.step("cross-runtime", "Run cross-runtime syrup exchange demo");
     cross_runtime_step.dependOn(&cross_runtime_cmd.step);
-
+    
     // Bandwidth Benchmark
     const bandwidth_mod = b.createModule(.{
         .root_source_file = b.path("benchmarks/bandwidth_benchmark.zig"),
@@ -1580,11 +1566,13 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
     bandwidth_mod.addImport("syrup", syrup_mod);
-
+    
     const bandwidth_exe = b.addExecutable(.{
         .name = "bandwidth-benchmark",
         .root_module = bandwidth_mod,
     });
+    b.installArtifact(bandwidth_exe);
+    
     const bandwidth_cmd = b.addRunArtifact(bandwidth_exe);
     const bandwidth_step = b.step("bandwidth", "Run bandwidth benchmark");
     bandwidth_step.dependOn(&bandwidth_cmd.step);
@@ -1621,6 +1609,7 @@ pub fn build(b: *std.Build) void {
 
     // A/B testing engine (ab_test.zig)
     // Removed duplicate block here
+
 
     // Worlds root module integration tests
     // const worlds_test_mod = b.createModule(.{
@@ -1699,7 +1688,6 @@ pub fn build(b: *std.Build) void {
     });
     const cyton_parser_tests = b.addTest(.{ .root_module = cyton_parser_test_mod });
     const run_cyton_parser_tests = b.addRunArtifact(cyton_parser_tests);
-    _ = run_cyton_parser_tests;
 
     // Tests for FFT Bands
     const fft_bands_test_mod = b.createModule(.{
@@ -1709,7 +1697,6 @@ pub fn build(b: *std.Build) void {
     });
     const fft_bands_tests = b.addTest(.{ .root_module = fft_bands_test_mod });
     const run_fft_bands_tests = b.addRunArtifact(fft_bands_tests);
-    _ = run_fft_bands_tests;
 
     // Tests for CSV SIMD
     const csv_simd_test_mod = b.createModule(.{
@@ -1728,7 +1715,6 @@ pub fn build(b: *std.Build) void {
     });
     const cova_space_tests = b.addTest(.{ .root_module = cova_space_test_mod });
     const run_cova_space_tests = b.addRunArtifact(cova_space_tests);
-    _ = run_cova_space_tests;
 
     // Tests for clifford (comptime geometric algebra)
     const clifford_test_mod = b.createModule(.{
@@ -1801,31 +1787,31 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_xev_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_geo_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_bridge_tests.step);
+    test_step.dependOn(&run_xev_tests.step);
+    test_step.dependOn(&run_geo_tests.step);
+    test_step.dependOn(&run_bridge_tests.step);
     test_step.dependOn(&run_acp_tests.step);
     test_step.dependOn(&run_acp_mnxfi_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_liveness_tests.step);
+    test_step.dependOn(&run_liveness_tests.step);
     test_step.dependOn(&run_czernowitz_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_snapshot_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_rainbow_tests.step); // src/rainbow.zig
-    // GATED zig-0.16: test_step.dependOn(&run_damage_tests.step); // src/damage.zig
-    // GATED zig-0.16: test_step.dependOn(&run_cell_dispatch_tests.step); // src/cell_dispatch.zig
-    // GATED zig-0.16: test_step.dependOn(&run_tileable_shader_tests.step); // src/tileable_shader.zig
-    // GATED zig-0.16: test_step.dependOn(&run_homotopy_tests.step); // src/homotopy.zig
-    // GATED zig-0.16: test_step.dependOn(&run_time_unit_tests.step); // src/time_unit.zig
-    // GATED zig-0.16: test_step.dependOn(&run_linalg_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_ripser_tests.step); // src/ripser.zig
+    test_step.dependOn(&run_snapshot_tests.step);
+    test_step.dependOn(&run_rainbow_tests.step);
+    test_step.dependOn(&run_damage_tests.step);
+    test_step.dependOn(&run_cell_dispatch_tests.step);
+    test_step.dependOn(&run_tileable_shader_tests.step);
+    test_step.dependOn(&run_homotopy_tests.step);
+    test_step.dependOn(&run_time_unit_tests.step);
+    test_step.dependOn(&run_linalg_tests.step);
+    test_step.dependOn(&run_ripser_tests.step);
     test_step.dependOn(&run_scs_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_continuation_tests.step); // src/continuation.zig
-    // GATED zig-0.16: test_step.dependOn(&run_bci_tests.step); // src/bci_homotopy.zig
-    // GATED zig-0.16: test_step.dependOn(&run_fem_tests.step); // src/fem.zig
+    test_step.dependOn(&run_continuation_tests.step);
+    test_step.dependOn(&run_bci_tests.step);
+    test_step.dependOn(&run_fem_tests.step);
     test_step.dependOn(&run_spectral_tensor_tests.step);
     test_step.dependOn(&run_prigogine_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_spectrum_tests.step); // src/spectrum.zig
-    // GATED zig-0.16: test_step.dependOn(&run_cell_sync_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_qasm_tests.step);
+    test_step.dependOn(&run_spectrum_tests.step);
+    test_step.dependOn(&run_cell_sync_tests.step);
+    test_step.dependOn(&run_qasm_tests.step);
     test_step.dependOn(&run_color_simd_tests.step);
     test_step.dependOn(&run_color_value_tests.step);
     test_step.dependOn(&run_rgb_region_color_tests.step);
@@ -1834,31 +1820,31 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_rhino_bci_tests.step);
     test_step.dependOn(&run_cyclotomic_tiling_tests.step);
     // Worlds module tests (new implementation)
-    // GATED zig-0.16: test_step.dependOn(&run_persistent_tests.step); // src/worlds/persistent.zig
-    // GATED zig-0.16: test_step.dependOn(&run_syrup_adapter_tests.step); // src/worlds/syrup_adapter.zig
-    // GATED zig-0.16: test_step.dependOn(&run_world_tests.step); // src/worlds/world.zig
-    // GATED zig-0.16: test_step.dependOn(&run_ab_test_tests.step); // src/worlds/ab_test.zig
-    // GATED zig-0.16: test_step.dependOn(&run_benchmark_adapter_tests.step); // src/worlds/benchmark_adapter.zig
-    // GATED zig-0.16: test_step.dependOn(&run_circuit_world_tests.step); // src/worlds/circuit_world.zig
-    // GATED zig-0.16: test_step.dependOn(&run_openbci_bridge_tests.step); // src/worlds/openbci_bridge.zig
+    test_step.dependOn(&run_persistent_tests.step);
+    test_step.dependOn(&run_syrup_adapter_tests.step);
+    test_step.dependOn(&run_world_tests.step);
+    test_step.dependOn(&run_ab_test_tests.step);
+    test_step.dependOn(&run_benchmark_adapter_tests.step);
+    test_step.dependOn(&run_circuit_world_tests.step);
+    test_step.dependOn(&run_openbci_bridge_tests.step);
     // test_step.dependOn(&run_worlds_integration_tests.step); // aspirational: API not yet implemented
-    // GATED zig-0.16: test_step.dependOn(&run_cyton_parser_tests.step); // src/cyton_parser.zig
-    // GATED zig-0.16: test_step.dependOn(&run_fft_bands_tests.step); // src/fft_bands.zig
+    test_step.dependOn(&run_cyton_parser_tests.step);
+    test_step.dependOn(&run_fft_bands_tests.step);
     test_step.dependOn(&run_csv_simd_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_cova_space_tests.step); // src/cova_space.zig
+    test_step.dependOn(&run_cova_space_tests.step);
     test_step.dependOn(&run_clifford_tests.step);
     test_step.dependOn(&run_clifford_analytic_tests.step);
     test_step.dependOn(&run_clifford_color_game_tests.step);
     test_step.dependOn(&run_clifford_parallel_tests.step);
     test_step.dependOn(&run_clifford_sweep_tests.step);
     test_step.dependOn(&run_wgpu_compute_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_spatial_propagator_tests.step); // src/spatial_propagator.zig
+    test_step.dependOn(&run_spatial_propagator_tests.step);
     test_step.dependOn(&run_quantize_tests.step);
     test_step.dependOn(&run_virion_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_geodesic_world_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_hylomorph_world_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_disco_world_tests.step);
-    // GATED zig-0.16: test_step.dependOn(&run_factor_graph_tests.step); // src/factor_graph.zig
+    test_step.dependOn(&run_geodesic_world_tests.step);
+    test_step.dependOn(&run_hylomorph_world_tests.step);
+    test_step.dependOn(&run_disco_world_tests.step);
+    test_step.dependOn(&run_factor_graph_tests.step);
     test_step.dependOn(&run_color_bandwidth_tests.step);
     test_step.dependOn(&run_gof_tests.step);
     test_step.dependOn(&run_tileable_gof_tests.step);
@@ -1908,8 +1894,7 @@ pub fn build(b: *std.Build) void {
         .name = "ghostty-web",
         .root_module = ghostty_web_server_mod,
     });
-    const ghostty_web_install_step = b.step("install-ghostty-web", "install ghostty-web exe (broken on zig 0.16)");
-    ghostty_web_install_step.dependOn(&b.addInstallArtifact(ghostty_web_exe, .{}).step);
+    b.installArtifact(ghostty_web_exe);
 
     // Ghostty IX (Interactive Execution) module
     const ghostty_ix_mod = b.addModule("ghostty_ix", .{
@@ -2038,16 +2023,241 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     tcp_transport_mod.addImport("message_frame", message_frame_mod);
+    tcp_transport_mod.addImport("compat", compat_mod);
     const tcp_transport_test_mod = b.createModule(.{
         .root_source_file = b.path("src/tcp_transport.zig"),
         .target = target,
         .optimize = optimize,
     });
     tcp_transport_test_mod.addImport("message_frame", message_frame_mod);
+    tcp_transport_test_mod.addImport("compat", compat_mod);
     const tcp_transport_tests = b.addTest(.{ .root_module = tcp_transport_test_mod });
     const run_tcp_transport_tests = b.addRunArtifact(tcp_transport_tests);
-    _ = run_tcp_transport_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_tcp_transport_tests.step); // src/tcp_transport.zig
+    test_step.dependOn(&run_tcp_transport_tests.step);
+
+    // OCapN Transport module + tests (streaming Syrup, no length prefix — matches Guile/Racket Goblins)
+    const ocapn_transport_mod = b.addModule("ocapn_transport", .{
+        .root_source_file = b.path("src/ocapn_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_transport_mod.addImport("syrup", syrup_mod);
+    ocapn_transport_mod.addImport("compat", compat_mod);
+    const ocapn_transport_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_transport.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_transport_test_mod.addImport("syrup", syrup_mod);
+    ocapn_transport_test_mod.addImport("compat", compat_mod);
+    const ocapn_transport_tests = b.addTest(.{ .root_module = ocapn_transport_test_mod });
+    const run_ocapn_transport_tests = b.addRunArtifact(ocapn_transport_tests);
+    test_step.dependOn(&run_ocapn_transport_tests.step);
+
+    // OCapN Location module + sturdy URI codec
+    const ocapn_location_mod = b.addModule("ocapn_location", .{
+        .root_source_file = b.path("src/ocapn_location.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_location_mod.addImport("syrup", syrup_mod);
+    const ocapn_location_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_location.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_location_test_mod.addImport("syrup", syrup_mod);
+    const ocapn_location_tests = b.addTest(.{ .root_module = ocapn_location_test_mod });
+    const run_ocapn_location_tests = b.addRunArtifact(ocapn_location_tests);
+    test_step.dependOn(&run_ocapn_location_tests.step);
+
+    // OCapN Handshake module — Ed25519 + spec-conformant op:start-session
+    const ocapn_handshake_mod = b.addModule("ocapn_handshake", .{
+        .root_source_file = b.path("src/ocapn_handshake.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_handshake_mod.addImport("syrup", syrup_mod);
+    ocapn_handshake_mod.addImport("ocapn_location", ocapn_location_mod);
+    const ocapn_handshake_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_handshake.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_handshake_test_mod.addImport("syrup", syrup_mod);
+    ocapn_handshake_test_mod.addImport("ocapn_location", ocapn_location_mod);
+    const ocapn_handshake_tests = b.addTest(.{ .root_module = ocapn_handshake_test_mod });
+    const run_ocapn_handshake_tests = b.addRunArtifact(ocapn_handshake_tests);
+    test_step.dependOn(&run_ocapn_handshake_tests.step);
+
+    // OCapN Bootstrap module — swiss-number registry + fetch-swiss handler
+    const ocapn_bootstrap_mod = b.addModule("ocapn_bootstrap", .{
+        .root_source_file = b.path("src/ocapn_bootstrap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_bootstrap_mod.addImport("syrup", syrup_mod);
+    const ocapn_bootstrap_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_bootstrap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_bootstrap_test_mod.addImport("syrup", syrup_mod);
+    const ocapn_bootstrap_tests = b.addTest(.{ .root_module = ocapn_bootstrap_test_mod });
+    const run_ocapn_bootstrap_tests = b.addRunArtifact(ocapn_bootstrap_tests);
+    test_step.dependOn(&run_ocapn_bootstrap_tests.step);
+
+    // OCapN Vat — composes transport + handshake + bootstrap for Guile/Racket Goblins peers
+    const ocapn_vat_mod = b.addModule("ocapn_vat", .{
+        .root_source_file = b.path("src/ocapn_vat.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Register session module here so vat can import it.
+    const ocapn_session_mod_early = b.addModule("ocapn_session", .{
+        .root_source_file = b.path("src/ocapn_session.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_vat_mod.addImport("syrup", syrup_mod);
+    ocapn_vat_mod.addImport("ocapn_transport", ocapn_transport_mod);
+    ocapn_vat_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    ocapn_vat_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_vat_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    ocapn_vat_mod.addImport("ocapn_session", ocapn_session_mod_early);
+    ocapn_vat_mod.addImport("compat", compat_mod);
+    const ocapn_vat_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_vat.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_vat_test_mod.addImport("syrup", syrup_mod);
+    ocapn_vat_test_mod.addImport("ocapn_transport", ocapn_transport_mod);
+    ocapn_vat_test_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    ocapn_vat_test_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_vat_test_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    ocapn_vat_test_mod.addImport("ocapn_session", ocapn_session_mod_early);
+    ocapn_vat_test_mod.addImport("compat", compat_mod);
+    const ocapn_vat_tests = b.addTest(.{ .root_module = ocapn_vat_test_mod });
+    const run_ocapn_vat_tests = b.addRunArtifact(ocapn_vat_tests);
+    test_step.dependOn(&run_ocapn_vat_tests.step);
+
+    // OCapN session tables — AnswerTable (promise pipelining) + ExportTable (GC).
+    // Module already registered as `ocapn_session_mod_early` above; just wire tests.
+    const ocapn_session_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_session.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ocapn_session_tests = b.addTest(.{ .root_module = ocapn_session_test_mod });
+    const run_ocapn_session_tests = b.addRunArtifact(ocapn_session_tests);
+    test_step.dependOn(&run_ocapn_session_tests.step);
+
+    // OCapN 3-vat handoff encoders + Ed25519 sig-envelope.
+    const ocapn_handoff_mod = b.addModule("ocapn_handoff", .{
+        .root_source_file = b.path("src/ocapn_handoff.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_handoff_mod.addImport("syrup", syrup_mod);
+    ocapn_handoff_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_handoff_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    const ocapn_handoff_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_handoff.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_handoff_test_mod.addImport("syrup", syrup_mod);
+    ocapn_handoff_test_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_handoff_test_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    const ocapn_handoff_tests = b.addTest(.{ .root_module = ocapn_handoff_test_mod });
+    const run_ocapn_handoff_tests = b.addRunArtifact(ocapn_handoff_tests);
+    test_step.dependOn(&run_ocapn_handoff_tests.step);
+
+    // OCapN WebSocket netlayer — binary-frame Syrup, no subprotocol.
+    const ocapn_ws_mod = b.addModule("ocapn_ws", .{
+        .root_source_file = b.path("src/ocapn_ws.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_ws_mod.addImport("syrup", syrup_mod);
+    const ocapn_ws_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_ws.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_ws_test_mod.addImport("syrup", syrup_mod);
+    const ocapn_ws_tests = b.addTest(.{ .root_module = ocapn_ws_test_mod });
+    const run_ocapn_ws_tests = b.addRunArtifact(ocapn_ws_tests);
+    test_step.dependOn(&run_ocapn_ws_tests.step);
+
+    // OCapN Tor onion netlayer — SOCKS5 CONNECT + control-port ADD_ONION.
+    _ = b.addModule("ocapn_tor", .{
+        .root_source_file = b.path("src/ocapn_tor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ocapn_tor_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ocapn_tor.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ocapn_tor_tests = b.addTest(.{ .root_module = ocapn_tor_test_mod });
+    const run_ocapn_tor_tests = b.addRunArtifact(ocapn_tor_tests);
+    test_step.dependOn(&run_ocapn_tor_tests.step);
+
+    // OCapN server demo executable — accepts a Guile/Racket Goblins peer
+    const ocapn_server_mod = b.createModule(.{
+        .root_source_file = b.path("examples/ocapn_server.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_server_mod.addImport("syrup", syrup_mod);
+    ocapn_server_mod.addImport("ocapn_transport", ocapn_transport_mod);
+    ocapn_server_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    ocapn_server_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_server_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    ocapn_server_mod.addImport("ocapn_vat", ocapn_vat_mod);
+    ocapn_server_mod.addImport("compat", compat_mod);
+    const ocapn_server_exe = b.addExecutable(.{
+        .name = "ocapn-server",
+        .root_module = ocapn_server_mod,
+    });
+    const ocapn_server_install = b.addInstallArtifact(ocapn_server_exe, .{});
+    const ocapn_server_step = b.step("ocapn-server", "Build OCapN interop demo server");
+    ocapn_server_step.dependOn(&ocapn_server_install.step);
+
+    // Path-invariance harness — emits/verifies the 70-color CGT corpus
+    // for cross-runtime Squares A (Guile) and B (Racket); local oracle
+    // is Square D inside src/gay/serialization.zig.
+    const poly_mod = b.addModule("poly", .{
+        .root_source_file = b.path("src/poly.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const path_inv_mod = b.createModule(.{
+        .root_source_file = b.path("examples/interop/path_invariance.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    path_inv_mod.addImport("syrup", syrup_mod);
+    path_inv_mod.addImport("compat", compat_mod);
+    const path_inv_gay_mod = b.addModule("gay-for-path-inv", .{
+        .root_source_file = b.path("src/gay/gay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    path_inv_gay_mod.addImport("syrup", syrup_mod);
+    path_inv_gay_mod.addImport("poly", poly_mod);
+    path_inv_mod.addImport("gay", path_inv_gay_mod);
+    const path_inv_exe = b.addExecutable(.{
+        .name = "path_invariance",
+        .root_module = path_inv_mod,
+    });
+    const path_inv_install = b.addInstallArtifact(path_inv_exe, .{});
+    const path_inv_step = b.step("path-invariance", "Build cross-runtime Syrup path-invariance harness");
+    path_inv_step.dependOn(&path_inv_install.step);
 
     // Wire goblins_ffi module dependencies (must come after all deps are defined)
     const passport_mod = b.addModule("passport", .{
@@ -2066,6 +2276,7 @@ pub fn build(b: *std.Build) void {
     goblins_ffi_mod.addImport("syrup", syrup_mod);
     goblins_ffi_mod.addImport("message_frame", message_frame_mod);
     goblins_ffi_mod.addImport("tcp_transport", tcp_transport_mod);
+    goblins_ffi_mod.addImport("compat", compat_mod);
 
     // Fountain module (Luby Transform rateless erasure codes)
     const fountain_mod = b.addModule("fountain", .{
@@ -2151,8 +2362,7 @@ pub fn build(b: *std.Build) void {
     fountain_propagator_test_mod.addImport("propagator", propagator_mod);
     const fountain_propagator_tests = b.addTest(.{ .root_module = fountain_propagator_test_mod });
     const run_fountain_propagator_tests = b.addRunArtifact(fountain_propagator_tests);
-    _ = run_fountain_propagator_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_fountain_propagator_tests.step);
+    test_step.dependOn(&run_fountain_propagator_tests.step);
 
     // UR Robot Adapter module (Bridge 9 Phase 3) + tests
     const ur_robot_adapter_mod = b.addModule("ur_robot_adapter", .{
@@ -2175,8 +2385,7 @@ pub fn build(b: *std.Build) void {
 
     const ur_robot_adapter_tests = b.addTest(.{ .root_module = ur_robot_adapter_test_mod });
     const run_ur_robot_adapter_tests = b.addRunArtifact(ur_robot_adapter_tests);
-    _ = run_ur_robot_adapter_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_ur_robot_adapter_tests.step);
+    test_step.dependOn(&run_ur_robot_adapter_tests.step);
 
     // Shader Viz Tool
     const shader_mod = b.createModule(.{
@@ -2267,8 +2476,7 @@ pub fn build(b: *std.Build) void {
     });
     const stellogen_tests = b.addTest(.{ .root_module = stellogen_test_mod });
     const run_stellogen_tests = b.addRunArtifact(stellogen_tests);
-    _ = run_stellogen_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_stellogen_tests.step);
+    test_step.dependOn(&run_stellogen_tests.step);
 
     // Stellogen AST tests
     const stellogen_ast_test_mod = b.createModule(.{
@@ -2288,8 +2496,7 @@ pub fn build(b: *std.Build) void {
     });
     const stellogen_unify_tests = b.addTest(.{ .root_module = stellogen_unify_test_mod });
     const run_stellogen_unify_tests = b.addRunArtifact(stellogen_unify_tests);
-    _ = run_stellogen_unify_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_stellogen_unify_tests.step); // src/stellogen/unify.zig
+    test_step.dependOn(&run_stellogen_unify_tests.step);
 
     // Stellogen Lexer tests
     const stellogen_lexer_test_mod = b.createModule(.{
@@ -2299,8 +2506,7 @@ pub fn build(b: *std.Build) void {
     });
     const stellogen_lexer_tests = b.addTest(.{ .root_module = stellogen_lexer_test_mod });
     const run_stellogen_lexer_tests = b.addRunArtifact(stellogen_lexer_tests);
-    _ = run_stellogen_lexer_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_stellogen_lexer_tests.step); // src/stellogen/lexer.zig
+    test_step.dependOn(&run_stellogen_lexer_tests.step);
 
     // Stellogen Parser tests
     const stellogen_parser_test_mod = b.createModule(.{
@@ -2310,8 +2516,7 @@ pub fn build(b: *std.Build) void {
     });
     const stellogen_parser_tests = b.addTest(.{ .root_module = stellogen_parser_test_mod });
     const run_stellogen_parser_tests = b.addRunArtifact(stellogen_parser_tests);
-    _ = run_stellogen_parser_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_stellogen_parser_tests.step);
+    test_step.dependOn(&run_stellogen_parser_tests.step);
 
     // Stellogen Executor tests
     const stellogen_executor_test_mod = b.createModule(.{
@@ -2321,8 +2526,7 @@ pub fn build(b: *std.Build) void {
     });
     const stellogen_executor_tests = b.addTest(.{ .root_module = stellogen_executor_test_mod });
     const run_stellogen_executor_tests = b.addRunArtifact(stellogen_executor_tests);
-    _ = run_stellogen_executor_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_stellogen_executor_tests.step); // src/stellogen/executor.zig
+    test_step.dependOn(&run_stellogen_executor_tests.step);
 
     // Stellogen Codegen tests
     const stellogen_codegen_test_mod = b.createModule(.{
@@ -2332,8 +2536,7 @@ pub fn build(b: *std.Build) void {
     });
     const stellogen_codegen_tests = b.addTest(.{ .root_module = stellogen_codegen_test_mod });
     const run_stellogen_codegen_tests = b.addRunArtifact(stellogen_codegen_tests);
-    _ = run_stellogen_codegen_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_stellogen_codegen_tests.step); // src/stellogen/codegen.zig
+    test_step.dependOn(&run_stellogen_codegen_tests.step);
 
     // Stellogen CLI compiler
     const stellogen_cli_mod = b.createModule(.{
@@ -2347,8 +2550,7 @@ pub fn build(b: *std.Build) void {
         .name = "stellogen",
         .root_module = stellogen_cli_mod,
     });
-    const stellogen_cli_install_step = b.step("install-stellogen-cli", "install stellogen-cli exe (broken on zig 0.16)");
-    stellogen_cli_install_step.dependOn(&b.addInstallArtifact(stellogen_cli_exe, .{}).step);
+    b.installArtifact(stellogen_cli_exe);
 
     const run_stellogen_cli = b.addRunArtifact(stellogen_cli_exe);
     if (b.args) |args| {
@@ -2370,8 +2572,7 @@ pub fn build(b: *std.Build) void {
     });
     stellogen_wasm.entry = .disabled; // Library, not executable
     stellogen_wasm.rdynamic = true; // Export symbols
-    const stellogen_wasm_install_step = b.step("install-stellogen-wasm", "install stellogen-wasm (may fail transitively)");
-    stellogen_wasm_install_step.dependOn(&b.addInstallArtifact(stellogen_wasm, .{}).step);
+    b.installArtifact(stellogen_wasm);
 
     // ========================================
     // Entangled Terminal (CNOT₃ quantum control circuit)
@@ -2461,8 +2662,7 @@ pub fn build(b: *std.Build) void {
     });
     const retrodiction_tests = b.addTest(.{ .root_module = retrodiction_test_mod });
     const run_retrodiction_tests = b.addRunArtifact(retrodiction_tests);
-    _ = run_retrodiction_tests;
-    // GATED zig-0.16: test_step.dependOn(&run_retrodiction_tests.step); // src/retrodiction.zig
+    test_step.dependOn(&run_retrodiction_tests.step);
 
     // Supermap module (Cyberphysical affordances × RF phase space × quantum supermaps)
     _ = b.addModule("supermap", .{
@@ -2537,7 +2737,7 @@ pub fn build(b: *std.Build) void {
     tapo_energy_test_mod.addImport("syrup", syrup_mod);
     const tapo_energy_tests = b.addTest(.{ .root_module = tapo_energy_test_mod });
     const run_tapo_energy_tests = b.addRunArtifact(tapo_energy_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_tapo_energy_tests.step); // src/tapo_energy.zig
+    test_step.dependOn(&run_tapo_energy_tests.step);
 
     const test_tapo_step = b.step("test-tapo", "Run Tapo P15 energy monitor tests");
     test_tapo_step.dependOn(&run_tapo_energy_tests.step);
@@ -2609,7 +2809,7 @@ pub fn build(b: *std.Build) void {
     });
     const lsl_inlet_tests = b.addTest(.{ .root_module = lsl_inlet_test_mod });
     const run_lsl_inlet_tests = b.addRunArtifact(lsl_inlet_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_lsl_inlet_tests.step); // src/lsl_inlet.zig
+    test_step.dependOn(&run_lsl_inlet_tests.step);
 
     const test_lsl_step = b.step("test-lsl", "Run LSL inlet tests (no liblsl needed)");
     test_lsl_step.dependOn(&run_lsl_inlet_tests.step);
@@ -2631,7 +2831,7 @@ pub fn build(b: *std.Build) void {
     });
     const dsi24_tests = b.addTest(.{ .root_module = dsi24_test_mod });
     const run_dsi24_tests = b.addRunArtifact(dsi24_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_dsi24_tests.step);
+    test_step.dependOn(&run_dsi24_tests.step);
     test_bci_step.dependOn(&run_dsi24_tests.step);
 
     // ========================================
@@ -2673,6 +2873,7 @@ pub fn build(b: *std.Build) void {
     const run_eyetracking_tests = b.addRunArtifact(eyetracking_tests);
     test_step.dependOn(&run_eyetracking_tests.step);
     test_bci_step.dependOn(&run_eyetracking_tests.step);
+
 
     // ========================================
     // Pose Bridge (Body Tracking via MediaPipe)
@@ -2774,7 +2975,7 @@ pub fn build(b: *std.Build) void {
     bci_integ_test_mod.addImport("glimpse", glimpse_mod_for_integ);
     const bci_integ_tests = b.addTest(.{ .root_module = bci_integ_test_mod });
     const run_bci_integ_tests = b.addRunArtifact(bci_integ_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_bci_integ_tests.step);
+    test_step.dependOn(&run_bci_integ_tests.step);
     test_bci_step.dependOn(&run_bci_integ_tests.step);
 
     // ========================================
@@ -2822,62 +3023,67 @@ pub fn build(b: *std.Build) void {
     test_retty_step.dependOn(&run_retty_tests.step);
 
     // Ghostty VT Tileable Display executable (native, links libghostty-vt)
-    const tileable_for_display = b.createModule(.{
-        .root_source_file = b.path("src/tileable_gof.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tileable_for_display.addImport("virion", virion_mod);
+    // Opt-in via -Dghostty-vt-lib=/path/to/ghostty/zig-out/lib — skipped otherwise
+    // because libghostty-vt is an external build output not vendored in this repo.
+    const ghostty_vt_lib = b.option([]const u8, "ghostty-vt-lib", "Path to libghostty-vt directory (enables ghostty-vt-tileable)");
+    if (ghostty_vt_lib) |lib_path| {
+        const tileable_for_display = b.createModule(.{
+            .root_source_file = b.path("src/tileable_gof.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        tileable_for_display.addImport("virion", virion_mod);
 
-    const ghostty_vt_tileable_mod = b.createModule(.{
-        .root_source_file = b.path("src/ghostty_vt_tileable.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    ghostty_vt_tileable_mod.addImport("compat", compat_mod);
-    ghostty_vt_tileable_mod.addImport("retty", retty_mod);
-    ghostty_vt_tileable_mod.addImport("terminal", terminal_mod);
-    ghostty_vt_tileable_mod.addImport("virion", virion_mod);
-    ghostty_vt_tileable_mod.addImport("tileable_gof", tileable_for_display);
+        const ghostty_vt_tileable_mod = b.createModule(.{
+            .root_source_file = b.path("src/ghostty_vt_tileable.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        ghostty_vt_tileable_mod.addImport("compat", compat_mod);
+        ghostty_vt_tileable_mod.addImport("retty", retty_mod);
+        ghostty_vt_tileable_mod.addImport("terminal", terminal_mod);
+        ghostty_vt_tileable_mod.addImport("virion", virion_mod);
+        ghostty_vt_tileable_mod.addImport("tileable_gof", tileable_for_display);
 
-    // Link libghostty-vt dylib (built from ghostty-org/ghostty zig-out)
-    ghostty_vt_tileable_mod.addLibraryPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
-    ghostty_vt_tileable_mod.addRPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
-    ghostty_vt_tileable_mod.linkSystemLibrary("ghostty-vt", .{});
+        ghostty_vt_tileable_mod.addLibraryPath(.{ .cwd_relative = lib_path });
+        ghostty_vt_tileable_mod.addRPath(.{ .cwd_relative = lib_path });
+        ghostty_vt_tileable_mod.linkSystemLibrary("ghostty-vt", .{});
 
-    const ghostty_vt_tileable_exe = b.addExecutable(.{
-        .name = "ghostty-vt-tileable",
-        .root_module = ghostty_vt_tileable_mod,
-    });
-    const run_ghostty_vt = b.addRunArtifact(ghostty_vt_tileable_exe);
-    const run_ghostty_vt_step = b.step("run-gof-display", "Run the gain-of-function tileable terminal display");
-    run_ghostty_vt_step.dependOn(&run_ghostty_vt.step);
+        const ghostty_vt_tileable_exe = b.addExecutable(.{
+            .name = "ghostty-vt-tileable",
+            .root_module = ghostty_vt_tileable_mod,
+        });
+        b.installArtifact(ghostty_vt_tileable_exe);
 
-    // Ghostty VT Tileable tests
-    const tileable_for_test = b.createModule(.{
-        .root_source_file = b.path("src/tileable_gof.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    tileable_for_test.addImport("virion", virion_mod);
+        const run_ghostty_vt = b.addRunArtifact(ghostty_vt_tileable_exe);
+        const run_ghostty_vt_step = b.step("run-gof-display", "Run the gain-of-function tileable terminal display");
+        run_ghostty_vt_step.dependOn(&run_ghostty_vt.step);
 
-    const ghostty_vt_tileable_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/ghostty_vt_tileable.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    ghostty_vt_tileable_test_mod.addImport("retty", retty_mod);
-    ghostty_vt_tileable_test_mod.addImport("terminal", terminal_mod);
-    ghostty_vt_tileable_test_mod.addImport("virion", virion_mod);
-    ghostty_vt_tileable_test_mod.addImport("tileable_gof", tileable_for_test);
-    ghostty_vt_tileable_test_mod.addLibraryPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
-    ghostty_vt_tileable_test_mod.addRPath(.{ .cwd_relative = "/Users/alice/oss/ghostty/zig-out/lib" });
-    ghostty_vt_tileable_test_mod.linkSystemLibrary("ghostty-vt", .{});
-    const ghostty_vt_tileable_tests = b.addTest(.{ .root_module = ghostty_vt_tileable_test_mod });
-    const run_ghostty_vt_tests = b.addRunArtifact(ghostty_vt_tileable_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_ghostty_vt_tests.step);
-    const test_ghostty_vt_step = b.step("test-ghostty-vt", "Run ghostty-vt-tileable tests");
-    test_ghostty_vt_step.dependOn(&run_ghostty_vt_tests.step);
+        const tileable_for_test = b.createModule(.{
+            .root_source_file = b.path("src/tileable_gof.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        tileable_for_test.addImport("virion", virion_mod);
+
+        const ghostty_vt_tileable_test_mod = b.createModule(.{
+            .root_source_file = b.path("src/ghostty_vt_tileable.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        ghostty_vt_tileable_test_mod.addImport("retty", retty_mod);
+        ghostty_vt_tileable_test_mod.addImport("terminal", terminal_mod);
+        ghostty_vt_tileable_test_mod.addImport("virion", virion_mod);
+        ghostty_vt_tileable_test_mod.addImport("tileable_gof", tileable_for_test);
+        ghostty_vt_tileable_test_mod.addLibraryPath(.{ .cwd_relative = lib_path });
+        ghostty_vt_tileable_test_mod.addRPath(.{ .cwd_relative = lib_path });
+        ghostty_vt_tileable_test_mod.linkSystemLibrary("ghostty-vt", .{});
+        const ghostty_vt_tileable_tests = b.addTest(.{ .root_module = ghostty_vt_tileable_test_mod });
+        const run_ghostty_vt_tests = b.addRunArtifact(ghostty_vt_tileable_tests);
+        test_step.dependOn(&run_ghostty_vt_tests.step);
+        const test_ghostty_vt_step = b.step("test-ghostty-vt", "Run ghostty-vt-tileable tests");
+        test_ghostty_vt_step.dependOn(&run_ghostty_vt_tests.step);
+    }
 
     // Transient module (Emacs transient.el popup menus as retty widgets)
     _ = b.addModule("transient", .{
@@ -2893,7 +3099,7 @@ pub fn build(b: *std.Build) void {
     transient_test_mod.addImport("retty", retty_mod);
     const transient_tests = b.addTest(.{ .root_module = transient_test_mod });
     const run_transient_tests = b.addRunArtifact(transient_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_transient_tests.step); // src/transient.zig
+    test_step.dependOn(&run_transient_tests.step);
 
     const test_transient_step = b.step("test-transient", "Run transient widget tests");
     test_transient_step.dependOn(&run_transient_tests.step);
@@ -2909,9 +3115,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    transient_diffusion_test_mod.addImport("retty", retty_mod);
     const transient_diffusion_tests = b.addTest(.{ .root_module = transient_diffusion_test_mod });
     const run_transient_diffusion_tests = b.addRunArtifact(transient_diffusion_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_transient_diffusion_tests.step);
+    test_step.dependOn(&run_transient_diffusion_tests.step);
 
     const test_transient_diffusion_step = b.step("test-transient-diffusion", "Run transient diffusion control tests");
     test_transient_diffusion_step.dependOn(&run_transient_diffusion_tests.step);
@@ -2954,6 +3161,9 @@ pub fn build(b: *std.Build) void {
         .target = wasm_target,
         .optimize = .ReleaseSmall,
     });
+    disco_world_wasm_mod.addAnonymousImport("disco_wire_world", .{
+        .root_source_file = b.path("examples/disco_wire.world"),
+    });
 
     const disco_world_wasm = b.addExecutable(.{
         .name = "disco-world",
@@ -2971,20 +3181,19 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/zoad.zig"),
         .target = target,
         .optimize = optimize,
-        .link_libc = true,
     });
     zoad_mod.addImport("retty", retty_mod);
     zoad_mod.addImport("acp", acp_mod);
     zoad_mod.addImport("syrup", syrup_mod);
     zoad_mod.addImport("terminal", terminal_mod);
-
+    
     const nc_backend_mod = b.createModule(.{
         .root_source_file = b.path("src/notcurses_backend.zig"),
         .target = target,
         .optimize = optimize,
     });
     nc_backend_mod.addImport("retty", retty_mod);
-
+    
     // Simple TCP module
     const simple_tcp_mod = b.createModule(.{
         .root_source_file = b.path("src/simple_tcp.zig"),
@@ -3006,16 +3215,15 @@ pub fn build(b: *std.Build) void {
     zoad_mod.addImport("tape_recorder", tape_mod);
     zoad_mod.addImport("damage", damage_mod);
 
+    zoad_mod.link_libc = true;
+    zoad_mod.linkSystemLibrary("notcurses", .{});
+    zoad_mod.linkSystemLibrary("notcurses-core", .{});
+
     const zoad_exe = b.addExecutable(.{
         .name = "zoad",
         .root_module = zoad_mod,
     });
-
-    // Attempt to link notcurses libraries
-    // These will fail gracefully if not found, but the build step can be skipped
-    zoad_mod.linkSystemLibrary("notcurses", .{});
-    zoad_mod.linkSystemLibrary("notcurses-core", .{});
-
+    
     // NOTE: zoad requires notcurses C library and headers
     // Build with: zig build zoad (requires notcurses library installed)
     // On macOS: brew install notcurses
@@ -3041,8 +3249,7 @@ pub fn build(b: *std.Build) void {
         .name = "zeta-cli",
         .root_module = zeta_cli_mod,
     });
-    const zeta_install_step = b.step("install-zeta", "install zeta-cli exe (broken on zig 0.16)");
-    zeta_install_step.dependOn(&b.addInstallArtifact(zeta_exe, .{}).step);
+    b.installArtifact(zeta_exe);
 
     const run_zeta = b.addRunArtifact(zeta_exe);
     const run_zeta_step = b.step("run-zeta", "Run Zeta World CLI");
@@ -3057,11 +3264,11 @@ pub fn build(b: *std.Build) void {
     zeta_test_mod.addImport("spectral_tensor", spectral_tensor_mod);
     zeta_test_mod.addImport("retty", retty_mod);
     zeta_test_mod.addImport("lux_color", lux_color_mod);
-
+    
     const zeta_tests = b.addTest(.{ .root_module = zeta_test_mod });
     const run_zeta_tests = b.addRunArtifact(zeta_tests);
     test_step.dependOn(&run_zeta_tests.step);
-
+    
     const test_zeta_step = b.step("test-zeta", "Run Zeta World tests");
     test_zeta_step.dependOn(&run_zeta_tests.step);
 
@@ -3100,8 +3307,7 @@ pub fn build(b: *std.Build) void {
         .name = "mcp-server",
         .root_module = mcp_server_mod,
     });
-    const mcp_server_install_step = b.step("install-mcp-server", "install mcp-server exe (broken on zig 0.16)");
-    mcp_server_install_step.dependOn(&b.addInstallArtifact(mcp_server_exe, .{}).step);
+    b.installArtifact(mcp_server_exe);
 
     const run_mcp_server = b.addRunArtifact(mcp_server_exe);
     const mcp_server_step = b.step("mcp-server", "Run the MCP stdio server");
@@ -3118,7 +3324,7 @@ pub fn build(b: *std.Build) void {
     mcp_server_test_mod.addImport("retrodiction", retrodiction_mod);
     const mcp_server_tests = b.addTest(.{ .root_module = mcp_server_test_mod });
     const run_mcp_server_tests = b.addRunArtifact(mcp_server_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_mcp_server_tests.step); // src/mcp_server.zig
+    test_step.dependOn(&run_mcp_server_tests.step);
 
     const test_mcp_server_step = b.step("test-mcp-server", "Run MCP server tests");
     test_mcp_server_step.dependOn(&run_mcp_server_tests.step);
@@ -3155,7 +3361,7 @@ pub fn build(b: *std.Build) void {
     self_walker_test_mod.addImport("geo", geo_mod);
     const self_walker_tests = b.addTest(.{ .root_module = self_walker_test_mod });
     const run_self_walker_tests = b.addRunArtifact(self_walker_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_self_walker_tests.step); // src/self_walker.zig
+    test_step.dependOn(&run_self_walker_tests.step);
 
     const test_self_walker_step = b.step("test-self-walker", "Run self-walker OLC×Syrup spatial traversal tests");
     test_self_walker_step.dependOn(&run_self_walker_tests.step);
@@ -3209,19 +3415,16 @@ pub fn build(b: *std.Build) void {
 
     // Tests
     const tileable_tests = b.addTest(.{ .root_module = tileable_mod });
-    _ = tileable_tests;
-    // GATED zig-0.16: test_step.dependOn(&b.addRunArtifact(tileable_tests).step);
+    test_step.dependOn(&b.addRunArtifact(tileable_tests).step);
 
     const colorable_tests = b.addTest(.{ .root_module = colorable_mod });
     test_step.dependOn(&b.addRunArtifact(colorable_tests).step);
 
     const sendable_tests = b.addTest(.{ .root_module = sendable_mod });
-    _ = sendable_tests;
-    // GATED zig-0.16: test_step.dependOn(&b.addRunArtifact(sendable_tests).step);
+    test_step.dependOn(&b.addRunArtifact(sendable_tests).step);
 
     const tileable_cc_tests = b.addTest(.{ .root_module = tileable_cc_mod });
-    _ = tileable_cc_tests;
-    // GATED zig-0.16: test_step.dependOn(&b.addRunArtifact(tileable_cc_tests).step);
+    test_step.dependOn(&b.addRunArtifact(tileable_cc_tests).step);
 
     const lenia_tests = b.addTest(.{ .root_module = lenia_mod });
     test_step.dependOn(&b.addRunArtifact(lenia_tests).step);
@@ -3254,8 +3457,7 @@ pub fn build(b: *std.Build) void {
         .name = "witness-worm",
         .root_module = witnessing_worm_cli_mod,
     });
-    const witness_worm_install_step = b.step("install-witness-worm", "install witness-worm exe (broken on zig 0.16)");
-    witness_worm_install_step.dependOn(&b.addInstallArtifact(witness_worm_exe, .{}).step);
+    b.installArtifact(witness_worm_exe);
     const run_witness_worm = b.addRunArtifact(witness_worm_exe);
     if (b.args) |a| run_witness_worm.addArgs(a);
     const witness_worm_step = b.step("witness-worm", "Run C. elegans witnessing protocol visualization");
@@ -3400,6 +3602,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     gay_module.addImport("syrup", syrup_mod);
+    gay_module.addImport("poly", poly_mod);
 
     const gay_test_mod = b.createModule(.{
         .root_source_file = b.path("src/gay/gay.zig"),
@@ -3407,10 +3610,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     gay_test_mod.addImport("syrup", syrup_mod);
+    gay_test_mod.addImport("poly", poly_mod);
     const gay_tests = b.addTest(.{ .root_module = gay_test_mod });
     const run_gay_tests = b.addRunArtifact(gay_tests);
-    // GATED zig-0.16: test_step.dependOn(&run_gay_tests.step);
+    test_step.dependOn(&run_gay_tests.step);
 
     const test_gay_step = b.step("test-gay", "Run all 28 gay submodule tests");
     test_gay_step.dependOn(&run_gay_tests.step);
+
 }
