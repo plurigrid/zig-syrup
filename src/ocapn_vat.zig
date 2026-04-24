@@ -142,10 +142,10 @@ pub const Vat = struct {
         try out.appendSlice("<15'op:deliver-only");
 
         // target: desc:import-object <pos>
-        try std.fmt.format(out.writer(), "<18'desc:import-object{d}+>", .{to_position});
+        try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
 
         // method as symbol
-        try std.fmt.format(out.writer(), "{d}'", .{method.len});
+        try out.writer().print("{d}'", .{method.len});
         try out.appendSlice(method);
 
         // args as list — encode each Value
@@ -179,9 +179,9 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<10'op:deliver");
 
-        try std.fmt.format(out.writer(), "<18'desc:import-object{d}+>", .{to_position});
+        try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
 
-        try std.fmt.format(out.writer(), "{d}'", .{method.len});
+        try out.writer().print("{d}'", .{method.len});
         try out.appendSlice(method);
 
         try out.append('[');
@@ -192,8 +192,8 @@ pub const Vat = struct {
         }
         try out.append(']');
 
-        try std.fmt.format(out.writer(), "<11'desc:answer{d}+>", .{answer_pos});
-        try std.fmt.format(out.writer(), "<18'desc:import-object{d}+>", .{answer_pos});
+        try out.writer().print("<11'desc:answer{d}+>", .{answer_pos});
+        try out.writer().print("<18'desc:import-object{d}+>", .{answer_pos});
 
         try out.append('>');
         try self.conn.sendBytes(out.items);
@@ -207,8 +207,8 @@ pub const Vat = struct {
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<13'op:gc-exports");
-        try std.fmt.format(out.writer(), "{d}+", .{position});
-        try std.fmt.format(out.writer(), "{d}+", .{delta});
+        try out.writer().print("{d}+", .{position});
+        try out.writer().print("{d}+", .{delta});
         try out.append('>');
         try self.conn.sendBytes(out.items);
     }
@@ -219,7 +219,7 @@ pub const Vat = struct {
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<13'op:gc-answers");
-        try std.fmt.format(out.writer(), "{d}+", .{position});
+        try out.writer().print("{d}+", .{position});
         try out.append('>');
         try self.conn.sendBytes(out.items);
     }
@@ -239,7 +239,7 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<10'op:fulfill");
         try out.appendSlice("<11'desc:answer");
-        try std.fmt.format(out.writer(), "{d}+", .{answer_pos});
+        try out.writer().print("{d}+", .{answer_pos});
         try out.append('>');
         try out.appendSlice(value_syrup);
         try out.append('>');
@@ -254,7 +254,7 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<8'op:break");
         try out.appendSlice("<11'desc:answer");
-        try std.fmt.format(out.writer(), "{d}+", .{answer_pos});
+        try out.writer().print("{d}+", .{answer_pos});
         try out.append('>');
         try out.appendSlice(reason_syrup);
         try out.append('>');
@@ -308,7 +308,7 @@ pub const Vat = struct {
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<8'op:abort");
-        try std.fmt.format(out.writer(), "{d}\"", .{reason.len});
+        try out.writer().print("{d}\"", .{reason.len});
         try out.appendSlice(reason);
         try out.append('>');
         try self.conn.sendBytes(out.items);
@@ -527,8 +527,8 @@ fn encodeDeliverOnlyForTest(allocator: std.mem.Allocator, to_position: u32, meth
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<15'op:deliver-only");
-    try std.fmt.format(out.writer(), "<18'desc:import-object{d}+>", .{to_position});
-    try std.fmt.format(out.writer(), "{d}'", .{method.len});
+    try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
+    try out.writer().print("{d}'", .{method.len});
     try out.appendSlice(method);
     try out.append('[');
     try out.append(']');
@@ -553,13 +553,13 @@ fn encodeDeliverForTest(allocator: std.mem.Allocator, to_position: u32, method: 
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<10'op:deliver");
-    try std.fmt.format(out.writer(), "<18'desc:import-object{d}+>", .{to_position});
-    try std.fmt.format(out.writer(), "{d}'", .{method.len});
+    try out.writer().print("<18'desc:import-object{d}+>", .{to_position});
+    try out.writer().print("{d}'", .{method.len});
     try out.appendSlice(method);
     try out.append('[');
     try out.append(']');
-    try std.fmt.format(out.writer(), "<11'desc:answer{d}+>", .{answer_pos});
-    try std.fmt.format(out.writer(), "<18'desc:import-object{d}+>", .{answer_pos});
+    try out.writer().print("<11'desc:answer{d}+>", .{answer_pos});
+    try out.writer().print("<18'desc:import-object{d}+>", .{answer_pos});
     try out.append('>');
     return out.toOwnedSlice();
 }
@@ -584,8 +584,8 @@ test "emitter round-trip: op:gc-exports parses as two-int record" {
     var out = ByteList.init(allocator);
     defer out.deinit();
     try out.appendSlice("<13'op:gc-exports");
-    try std.fmt.format(out.writer(), "{d}+", .{@as(u32, 1)});
-    try std.fmt.format(out.writer(), "{d}+", .{@as(u32, 2)});
+    try out.writer().print("{d}+", .{@as(u32, 1)});
+    try out.writer().print("{d}+", .{@as(u32, 2)});
     try out.append('>');
 
     var parser = syrup.Parser.init(out.items, allocator);
@@ -601,7 +601,7 @@ test "emitter round-trip: op:gc-answers parses" {
     var out = ByteList.init(allocator);
     defer out.deinit();
     try out.appendSlice("<13'op:gc-answers");
-    try std.fmt.format(out.writer(), "{d}+", .{@as(u32, 5)});
+    try out.writer().print("{d}+", .{@as(u32, 5)});
     try out.append('>');
 
     var parser = syrup.Parser.init(out.items, allocator);
@@ -618,10 +618,10 @@ test "emitter shape: op:fulfill with desc:answer + inline value parses" {
     defer out.deinit();
     try out.appendSlice("<10'op:fulfill");
     try out.appendSlice("<11'desc:answer");
-    try std.fmt.format(out.writer(), "{d}+", .{@as(u32, 42)});
+    try out.writer().print("{d}+", .{@as(u32, 42)});
     try out.append('>');
     // value = integer 7
-    try std.fmt.format(out.writer(), "{d}+", .{@as(u32, 7)});
+    try out.writer().print("{d}+", .{@as(u32, 7)});
     try out.append('>');
 
     var parser = syrup.Parser.init(out.items, allocator);
@@ -662,7 +662,7 @@ test "emitter shape: op:abort with reason string parses" {
     defer out.deinit();
     const reason = "peer-requested-shutdown";
     try out.appendSlice("<8'op:abort");
-    try std.fmt.format(out.writer(), "{d}\"", .{reason.len});
+    try out.writer().print("{d}\"", .{reason.len});
     try out.appendSlice(reason);
     try out.append('>');
 
@@ -681,7 +681,7 @@ test "emitter shape: op:break with desc:answer + reason parses" {
     defer out.deinit();
     try out.appendSlice("<8'op:break");
     try out.appendSlice("<11'desc:answer");
-    try std.fmt.format(out.writer(), "{d}+", .{@as(u32, 9)});
+    try out.writer().print("{d}+", .{@as(u32, 9)});
     try out.append('>');
     // reason = symbol 'oops
     try out.appendSlice("4'oops");

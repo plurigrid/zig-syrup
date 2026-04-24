@@ -55,15 +55,15 @@ pub const HandoffGive = struct {
         try out.appendSlice(loc_bytes);
 
         // session
-        try std.fmt.format(out.writer(), "{d}:", .{self.session.len});
+        try out.writer().print("{d}:", .{self.session.len});
         try out.appendSlice(self.session);
 
         // gifter-side
-        try std.fmt.format(out.writer(), "{d}:", .{self.gifter_side.len});
+        try out.writer().print("{d}:", .{self.gifter_side.len});
         try out.appendSlice(self.gifter_side);
 
         // gift-id
-        try std.fmt.format(out.writer(), "{d}:", .{self.gift_id.len});
+        try out.writer().print("{d}:", .{self.gift_id.len});
         try out.appendSlice(&self.gift_id);
 
         try out.append('>');
@@ -82,13 +82,13 @@ pub const HandoffReceive = struct {
         defer out.deinit();
         try out.appendSlice("<20'desc:handoff-receive");
 
-        try std.fmt.format(out.writer(), "{d}:", .{self.receiving_session.len});
+        try out.writer().print("{d}:", .{self.receiving_session.len});
         try out.appendSlice(self.receiving_session);
 
-        try std.fmt.format(out.writer(), "{d}:", .{self.receiving_side.len});
+        try out.writer().print("{d}:", .{self.receiving_side.len});
         try out.appendSlice(self.receiving_side);
 
-        try std.fmt.format(out.writer(), "{d}+", .{self.handoff_count});
+        try out.writer().print("{d}+", .{self.handoff_count});
 
         try out.appendSlice(self.signed_give);
 
@@ -111,7 +111,7 @@ pub fn encodeSigEnvelope(
     // Signature as a record: <sig scheme bytes>
     try out.appendSlice("<3'sig");
     try out.appendSlice("7'ed25519");
-    try std.fmt.format(out.writer(), "{d}:", .{sig_bytes.len});
+    try out.writer().print("{d}:", .{sig_bytes.len});
     try out.appendSlice(&sig_bytes);
     try out.append('>');
 

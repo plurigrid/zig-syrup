@@ -1799,6 +1799,17 @@ pub fn build(b: *std.Build) void {
     const wgpu_compute_tests = b.addTest(.{ .root_module = wgpu_compute_test_mod });
     const run_wgpu_compute_tests = b.addRunArtifact(wgpu_compute_tests);
 
+    // Stranded-files compile check (not on default test_step until each verified)
+    const stranded_check_mod = b.createModule(.{
+        .root_source_file = b.path("src/_stranded_integration_check.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const stranded_check_tests = b.addTest(.{ .root_module = stranded_check_mod });
+    const run_stranded_check = b.addRunArtifact(stranded_check_tests);
+    const stranded_step = b.step("test-stranded-integration", "Compile-check the 8 stranded-on-main files from the 2026-04-24 merge train");
+    stranded_step.dependOn(&run_stranded_check.step);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_xev_tests.step);
