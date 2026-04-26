@@ -1808,6 +1808,163 @@ pub fn build(b: *std.Build) void {
     });
     _ = backward_fiber_mod;
 
+    // Vat runtime — closes the OCapN audit gaps (mailbox, eventual send,
+    // faceted refs, rights amplification, quiescence, hierarchy, replay).
+    const cap_mod = b.addModule("cap", .{
+        .root_source_file = b.path("src/cap.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const vat_mod = b.addModule("vat", .{
+        .root_source_file = b.path("src/vat.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vat_mod.addImport("cap", cap_mod);
+    const vat_replay_mod = b.addModule("vat_replay", .{
+        .root_source_file = b.path("src/vat_replay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vat_replay_mod.addImport("vat", vat_mod);
+    vat_replay_mod.addImport("cap", cap_mod);
+
+    const cap_tests = b.addTest(.{ .root_module = cap_mod });
+    const run_cap_tests = b.addRunArtifact(cap_tests);
+    const vat_tests = b.addTest(.{ .root_module = vat_mod });
+    const run_vat_tests = b.addRunArtifact(vat_tests);
+    const vat_replay_tests = b.addTest(.{ .root_module = vat_replay_mod });
+    const run_vat_replay_tests = b.addRunArtifact(vat_replay_tests);
+
+    // Confinement / cryptographic / wire-bridge layer:
+    //   membrane, cross_vat_membrane     — identity hiding + bulk revocation
+    //   sealer, sealed_sturdy            — opaque envelopes + time-limited tokens
+    //   epoch_bridge                     — wire-side EpochCapRef → runtime Revoker
+    //   sandbox                          — OS-level deny-default (macOS / Linux)
+    //   cap_integration_test             — full-stack composition test
+    const membrane_mod = b.addModule("membrane", .{
+        .root_source_file = b.path("src/membrane.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    membrane_mod.addImport("cap", cap_mod);
+    membrane_mod.addImport("vat", vat_mod);
+
+    const cross_vat_membrane_mod = b.addModule("cross_vat_membrane", .{
+        .root_source_file = b.path("src/cross_vat_membrane.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cross_vat_membrane_mod.addImport("cap", cap_mod);
+    cross_vat_membrane_mod.addImport("vat", vat_mod);
+
+    const sealer_mod = b.addModule("sealer", .{
+        .root_source_file = b.path("src/sealer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const sealed_sturdy_mod = b.addModule("sealed_sturdy", .{
+        .root_source_file = b.path("src/sealed_sturdy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sealed_sturdy_mod.addImport("sealer", sealer_mod);
+
+    const sandbox_mod = b.addModule("sandbox", .{
+        .root_source_file = b.path("src/sandbox.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const device_key_mod = b.addModule("device_key", .{
+        .root_source_file = b.path("src/device_key.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    device_key_mod.addImport("cap", cap_mod);
+
+    const chronicle_mod = b.addModule("chronicle", .{
+        .root_source_file = b.path("src/chronicle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    chronicle_mod.addImport("cap", cap_mod);
+
+    // epoch_bridge needs epoch_capability which needs glimpse.
+    const glimpse_for_epoch_mod = b.createModule(.{
+        .root_source_file = b.path("src/glimpse.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const epoch_capability_mod = b.addModule("epoch_capability", .{
+        .root_source_file = b.path("src/epoch_capability.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    epoch_capability_mod.addImport("glimpse", glimpse_for_epoch_mod);
+
+    const epoch_bridge_mod = b.addModule("epoch_bridge", .{
+        .root_source_file = b.path("src/epoch_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    epoch_bridge_mod.addImport("cap", cap_mod);
+    epoch_bridge_mod.addImport("epoch_capability", epoch_capability_mod);
+
+    const cap_integration_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/cap_integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cap_integration_test_mod.addImport("cap", cap_mod);
+    cap_integration_test_mod.addImport("vat", vat_mod);
+    cap_integration_test_mod.addImport("vat_replay", vat_replay_mod);
+    cap_integration_test_mod.addImport("membrane", membrane_mod);
+    cap_integration_test_mod.addImport("cross_vat_membrane", cross_vat_membrane_mod);
+    cap_integration_test_mod.addImport("sealer", sealer_mod);
+    cap_integration_test_mod.addImport("sealed_sturdy", sealed_sturdy_mod);
+    cap_integration_test_mod.addImport("epoch_bridge", epoch_bridge_mod);
+    cap_integration_test_mod.addImport("epoch_capability", epoch_capability_mod);
+
+    const membrane_tests = b.addTest(.{ .root_module = membrane_mod });
+    const run_membrane_tests = b.addRunArtifact(membrane_tests);
+    const cross_vat_membrane_tests = b.addTest(.{ .root_module = cross_vat_membrane_mod });
+    const run_cross_vat_membrane_tests = b.addRunArtifact(cross_vat_membrane_tests);
+    const sealer_tests = b.addTest(.{ .root_module = sealer_mod });
+    const run_sealer_tests = b.addRunArtifact(sealer_tests);
+    const sealed_sturdy_tests = b.addTest(.{ .root_module = sealed_sturdy_mod });
+    const run_sealed_sturdy_tests = b.addRunArtifact(sealed_sturdy_tests);
+    const sandbox_tests = b.addTest(.{ .root_module = sandbox_mod });
+    const run_sandbox_tests = b.addRunArtifact(sandbox_tests);
+    const device_key_tests = b.addTest(.{ .root_module = device_key_mod });
+    const run_device_key_tests = b.addRunArtifact(device_key_tests);
+    const chronicle_tests = b.addTest(.{ .root_module = chronicle_mod });
+    const run_chronicle_tests = b.addRunArtifact(chronicle_tests);
+    const epoch_bridge_tests = b.addTest(.{ .root_module = epoch_bridge_mod });
+    const run_epoch_bridge_tests = b.addRunArtifact(epoch_bridge_tests);
+    const cap_integration_tests = b.addTest(.{ .root_module = cap_integration_test_mod });
+    const run_cap_integration_tests = b.addRunArtifact(cap_integration_tests);
+
+    const vat_step = b.step("test-vat", "Run vat runtime tests (cap + vat + vat_replay)");
+    vat_step.dependOn(&run_cap_tests.step);
+    vat_step.dependOn(&run_vat_tests.step);
+    vat_step.dependOn(&run_vat_replay_tests.step);
+
+    const cap_layer_step = b.step("test-cap-layer", "Run all capability-layer tests (runtime + bridges + integration)");
+    cap_layer_step.dependOn(&run_cap_tests.step);
+    cap_layer_step.dependOn(&run_vat_tests.step);
+    cap_layer_step.dependOn(&run_vat_replay_tests.step);
+    cap_layer_step.dependOn(&run_membrane_tests.step);
+    cap_layer_step.dependOn(&run_cross_vat_membrane_tests.step);
+    cap_layer_step.dependOn(&run_sealer_tests.step);
+    cap_layer_step.dependOn(&run_sealed_sturdy_tests.step);
+    cap_layer_step.dependOn(&run_sandbox_tests.step);
+    cap_layer_step.dependOn(&run_device_key_tests.step);
+    cap_layer_step.dependOn(&run_chronicle_tests.step);
+    cap_layer_step.dependOn(&run_epoch_bridge_tests.step);
+    cap_layer_step.dependOn(&run_cap_integration_tests.step);
+
     // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.
     const ocapn_location_mod = b.addModule("ocapn_location", .{
         .root_source_file = b.path("src/ocapn_location.zig"),
@@ -1869,6 +2026,18 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_stranded_tests.step); // run tests in the 8 novel files
+    test_step.dependOn(&run_cap_tests.step);
+    test_step.dependOn(&run_vat_tests.step);
+    test_step.dependOn(&run_vat_replay_tests.step);
+    test_step.dependOn(&run_membrane_tests.step);
+    test_step.dependOn(&run_cross_vat_membrane_tests.step);
+    test_step.dependOn(&run_sealer_tests.step);
+    test_step.dependOn(&run_sealed_sturdy_tests.step);
+    test_step.dependOn(&run_sandbox_tests.step);
+    test_step.dependOn(&run_device_key_tests.step);
+    test_step.dependOn(&run_chronicle_tests.step);
+    test_step.dependOn(&run_epoch_bridge_tests.step);
+    test_step.dependOn(&run_cap_integration_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_xev_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_geo_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_bridge_tests.step);
@@ -2106,6 +2275,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     tcp_transport_mod.addImport("message_frame", message_frame_mod);
+    tcp_transport_mod.addImport("compat", compat_mod);
     const tcp_transport_test_mod = b.createModule(.{
         .root_source_file = b.path("src/tcp_transport.zig"),
         .target = target,
@@ -2134,6 +2304,7 @@ pub fn build(b: *std.Build) void {
     goblins_ffi_mod.addImport("syrup", syrup_mod);
     goblins_ffi_mod.addImport("message_frame", message_frame_mod);
     goblins_ffi_mod.addImport("tcp_transport", tcp_transport_mod);
+    goblins_ffi_mod.addImport("compat", compat_mod);
 
     // Fountain module (Luby Transform rateless erasure codes)
     const fountain_mod = b.addModule("fountain", .{

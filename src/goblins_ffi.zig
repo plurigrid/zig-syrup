@@ -401,7 +401,116 @@ export fn gf3_captp_rpc(
 }
 
 // ============================================================================
-// 6. Cross-language verification
+// 6. Vat runtime — Lokke (Clojure-on-Guile) → Guile Goblins reachability
+// ============================================================================
+//
+// The same Vat handle is addressable from:
+//   - Lokke, via (lokke ffi)        : (define vat (gf3_vat_create 1069))
+//   - Guile Goblins, via FFI        : (gf3_vat_send vat target sel payload)
+//   - Hoot WASM imports             : (import "env" "gf3_vat_send" ...)
+//
+// Behaviors crossing the FFI are C-callback shaped: the foreign caller
+// supplies a `handle_cb` function pointer that the vat invokes per turn.
+
+const vat_mod = @import("vat.zig");
+const cap_mod = @import("cap.zig");
+
+const MAX_VATS = 8;
+var vat_pool: [MAX_VATS]?vat_mod.Vat = .{null} ** MAX_VATS;
+
+fn findVatSlot() ?usize {
+    for (0..MAX_VATS) |i| if (vat_pool[i] == null) return i;
+    return null;
+}
+
+/// Create a vat with id `seed`. Returns handle (0..7) or -1.
+export fn gf3_vat_create(seed: u32) i32 {
+    const slot = findVatSlot() orelse return -1;
+    vat_pool[slot] = vat_mod.Vat.init(std.heap.page_allocator, seed);
+    return @intCast(slot);
+}
+
+/// Foreign behavior: call out to C handler on each turn.
+const ForeignBehavior = struct {
+    handle_cb: *const fn (state: ?*anyopaque, payload: [*]const u8, len: usize) callconv(.c) i32,
+    state: ?*anyopaque,
+    pub fn handle(self: *ForeignBehavior, _: *vat_mod.Vat, m: vat_mod.Message) !vat_mod.Become {
+        const rc = self.handle_cb(self.state, m.payload.ptr, m.payload.len);
+        return if (rc == 0) .same else .terminate;
+    }
+};
+
+/// Spawn a foreign-callback actor. `handle_cb` is invoked per turn with the
+/// payload bytes; return 0 to keep alive, non-zero to terminate.
+/// Returns packed CapId (vat<<32 | actor) or 0 on error.
+export fn gf3_vat_spawn_foreign(
+    vat_handle: i32,
+    handle_cb: *const fn (state: ?*anyopaque, payload: [*]const u8, len: usize) callconv(.c) i32,
+    state: ?*anyopaque,
+) u64 {
+    if (vat_handle < 0 or vat_handle >= MAX_VATS) return 0;
+    const h: usize = @intCast(vat_handle);
+    var v = &(vat_pool[h] orelse return 0);
+    const c = v.spawn(ForeignBehavior, .{ .handle_cb = handle_cb, .state = state }) catch return 0;
+    return c.target;
+}
+
+/// Eventual send. `target` is the packed CapId from spawn; `facet_mask`
+/// permits foreign callers to narrow on the wire. Returns 0/-1.
+export fn gf3_vat_send(
+    vat_handle: i32,
+    target: u64,
+    facet_mask: u64,
+    selector: u8,
+    payload: [*]const u8,
+    payload_len: usize,
+) i32 {
+    if (vat_handle < 0 or vat_handle >= MAX_VATS or selector >= 64) return -1;
+    const h: usize = @intCast(vat_handle);
+    var v = &(vat_pool[h] orelse return -1);
+    const sender = cap_mod.Capability{ .target = 0, .facet = cap_mod.FACET_FULL };
+    const to = cap_mod.Capability{
+        .target = target,
+        .facet = facet_mask,
+        .sender = 0,
+    };
+    v.send(sender, to, @intCast(selector), payload[0..payload_len]) catch return -1;
+    return 0;
+}
+
+/// Rights amplification union — both must name the same target.
+/// Returns combined facet mask, or 0 on error.
+export fn gf3_vat_amplify(target_a: u64, mask_a: u64, target_b: u64, mask_b: u64) u64 {
+    if (target_a != target_b) return 0;
+    return mask_a | mask_b;
+}
+
+/// Facet narrow — intersect mask with `allowed`.
+export fn gf3_vat_facet_narrow(facet_mask: u64, allowed: u64) u64 {
+    return facet_mask & allowed;
+}
+
+/// Drain pending mailboxes up to `max_turns`. Returns turns run, or -1.
+export fn gf3_vat_quiesce(vat_handle: i32, max_turns: u32) i32 {
+    if (vat_handle < 0 or vat_handle >= MAX_VATS) return -1;
+    const h: usize = @intCast(vat_handle);
+    var v = &(vat_pool[h] orelse return -1);
+    const n = v.quiesce(@intCast(max_turns)) catch return -1;
+    return @intCast(n);
+}
+
+/// Close and free vat handle.
+export fn gf3_vat_close(vat_handle: i32) void {
+    if (vat_handle < 0 or vat_handle >= MAX_VATS) return;
+    const h: usize = @intCast(vat_handle);
+    if (vat_pool[h]) |*v| {
+        v.deinit();
+        vat_pool[h] = null;
+    }
+}
+
+// ============================================================================
+// 7. Cross-language verification
 // ============================================================================
 
 /// Verify that this Zig implementation matches the Guile gf3-goblins.scm.
