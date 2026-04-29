@@ -150,6 +150,112 @@ pub fn encodeChange(alloc: Allocator, rec: ChangeRecord) ![]u8 {
 }
 
 // ============================================================================
+// GF(3) trit reductions  (Phase-1 closeout)
+// ============================================================================
+
+/// Render a trit as a single human-readable glyph.
+pub fn tritSymbol(t: Trit) []const u8 {
+    return switch (t) {
+        .minus => "−",
+        .ergodic => "○",
+        .plus => "+",
+    };
+}
+
+/// GF(3) sum: fold Trit.add (which is sum mod 3 in {-1,0,+1}) over a slice.
+/// Empty slice = .ergodic (the identity).
+pub fn tritSum(trits: []const Trit) Trit {
+    var acc: Trit = .ergodic;
+    for (trits) |t| acc = acc.add(t);
+    return acc;
+}
+
+/// Conservation predicate: a trit set is conserved iff its GF(3) sum is 0.
+pub fn tritsConserved(trits: []const Trit) bool {
+    return tritSum(trits) == .ergodic;
+}
+
+// ============================================================================
+// KernelTriad and stack conservation  (Phase 6)
+// ============================================================================
+
+/// Counts of each trit class. Conservation here is sum-of-counts mod 3 == 0
+/// (matching kernel_triad.jl in Gay.jl); orthogonal to GF(3) sum-of-values.
+pub const KernelTriad = struct {
+    plus: u32,
+    ergodic: u32,
+    minus: u32,
+
+    pub fn fromTrits(trits: []const Trit) KernelTriad {
+        var kt: KernelTriad = .{ .plus = 0, .ergodic = 0, .minus = 0 };
+        for (trits) |t| switch (t) {
+            .plus => kt.plus += 1,
+            .ergodic => kt.ergodic += 1,
+            .minus => kt.minus += 1,
+        };
+        return kt;
+    }
+
+    /// Total count divisible by 3 — coarse balance, matches Gay.jl.
+    pub fn isConserved(kt: KernelTriad) bool {
+        return (kt.plus +% kt.ergodic +% kt.minus) % 3 == 0;
+    }
+
+    /// Net GF(3) balance: (plus − minus) reduced mod 3 back to a Trit.
+    pub fn balance(kt: KernelTriad) Trit {
+        const diff = @as(i64, kt.plus) - @as(i64, kt.minus);
+        const r = @mod(diff, 3); // in {0,1,2}
+        return switch (r) {
+            0 => .ergodic,
+            1 => .plus,
+            2 => .minus,
+            else => unreachable,
+        };
+    }
+};
+
+/// Stack conservation: parents + child trits must GF(3)-sum to zero.
+/// `seed` parameterises the plastic coloring (zubuyul = 1069).
+pub fn checkStackConservation(
+    parents: []const [32]u8,
+    child: [32]u8,
+    seed: u64,
+) bool {
+    var sum: Trit = colorFromChangeId(child, seed).trit;
+    for (parents) |p| sum = sum.add(colorFromChangeId(p, seed).trit);
+    return sum == .ergodic;
+}
+
+// ============================================================================
+// CI dispatch  (Phase 6)
+// ============================================================================
+
+/// Action for a change based on its trit + stack conservation.
+pub const CIAction = enum {
+    build, // +1: generative
+    run_tests, // 0: coordinating
+    validate, // -1: validating
+    review_required, // conservation violated
+};
+
+/// Pure dispatch from a (child, parents, seed). If parents are non-empty and
+/// the GF(3) stack does not conserve, fall back to `review_required`.
+pub fn dispatchCI(
+    child: [32]u8,
+    parents: []const [32]u8,
+    seed: u64,
+) CIAction {
+    if (parents.len > 0 and !checkStackConservation(parents, child, seed)) {
+        return .review_required;
+    }
+    return switch (colorFromChangeId(child, seed).trit) {
+        .plus => .build,
+        .ergodic => .run_tests,
+        .minus => .validate,
+    };
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -189,4 +295,137 @@ test "zero change_id gets a valid color" {
     @memset(&id, 0);
     const c = colorFromChangeId(id, 0);
     try std.testing.expect(c.hue >= 0.0 and c.hue < 360.0);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 closeout: tritSum / tritsConserved / tritSymbol
+// ---------------------------------------------------------------------------
+
+test "tritSum: empty is ergodic (identity)" {
+    try std.testing.expectEqual(Trit.ergodic, tritSum(&[_]Trit{}));
+}
+
+test "tritSum: +1 + -1 = 0" {
+    try std.testing.expectEqual(Trit.ergodic, tritSum(&[_]Trit{ .plus, .minus }));
+}
+
+test "tritSum: three +1 wraps to 0 in GF(3)" {
+    try std.testing.expectEqual(
+        Trit.ergodic,
+        tritSum(&[_]Trit{ .plus, .plus, .plus }),
+    );
+}
+
+test "tritsConserved: balanced triad" {
+    try std.testing.expect(tritsConserved(&[_]Trit{ .plus, .ergodic, .minus }));
+}
+
+test "tritsConserved: single plus is not conserved" {
+    try std.testing.expect(!tritsConserved(&[_]Trit{.plus}));
+}
+
+test "tritSymbol: glyphs" {
+    try std.testing.expectEqualStrings("+", tritSymbol(.plus));
+    try std.testing.expectEqualStrings("○", tritSymbol(.ergodic));
+    try std.testing.expectEqualStrings("−", tritSymbol(.minus));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: KernelTriad
+// ---------------------------------------------------------------------------
+
+test "KernelTriad.fromTrits counts each class" {
+    const kt = KernelTriad.fromTrits(&[_]Trit{ .plus, .plus, .ergodic, .minus });
+    try std.testing.expectEqual(@as(u32, 2), kt.plus);
+    try std.testing.expectEqual(@as(u32, 1), kt.ergodic);
+    try std.testing.expectEqual(@as(u32, 1), kt.minus);
+}
+
+test "KernelTriad.isConserved: total count mod 3" {
+    // 4 elements: 4 mod 3 == 1, not conserved
+    const kt = KernelTriad.fromTrits(&[_]Trit{ .plus, .plus, .ergodic, .minus });
+    try std.testing.expect(!kt.isConserved());
+    // 3 elements: conserved
+    const kt2 = KernelTriad.fromTrits(&[_]Trit{ .plus, .ergodic, .minus });
+    try std.testing.expect(kt2.isConserved());
+}
+
+test "KernelTriad.balance: net GF(3) over (plus − minus)" {
+    const kt = KernelTriad.fromTrits(&[_]Trit{ .plus, .plus, .minus });
+    // (2 − 1) mod 3 = 1 → plus
+    try std.testing.expectEqual(Trit.plus, kt.balance());
+    const kt2 = KernelTriad.fromTrits(&[_]Trit{ .plus, .minus });
+    try std.testing.expectEqual(Trit.ergodic, kt2.balance());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: stack conservation + CI dispatch
+// ---------------------------------------------------------------------------
+
+test "checkStackConservation: child alone is ergodic-only-when-color-is-ergodic" {
+    var c: [32]u8 = undefined;
+    @memset(&c, 0xAB);
+    // Find a seed that yields child trit == ergodic, then with no parents
+    // the stack sum equals the child trit, so conservation iff trit == ergodic.
+    var saw_ergodic = false;
+    var saw_other = false;
+    for (0..256) |s| {
+        const seed: u64 = s;
+        const ok = checkStackConservation(&[_][32]u8{}, c, seed);
+        const t = colorFromChangeId(c, seed).trit;
+        try std.testing.expectEqual(t == .ergodic, ok);
+        if (t == .ergodic) saw_ergodic = true else saw_other = true;
+    }
+    try std.testing.expect(saw_ergodic and saw_other);
+}
+
+test "checkStackConservation: synthetic balanced stack" {
+    // Construct three change_ids whose trits we discover, then assemble
+    // (parents, child) so that GF(3) sum is zero.
+    var ids: [3][32]u8 = undefined;
+    var trits: [3]Trit = undefined;
+    for (0..3) |i| {
+        @memset(&ids[i], @intCast(i + 1));
+        trits[i] = colorFromChangeId(ids[i], 1069).trit;
+    }
+    const sum_all = tritSum(&trits);
+    const expected = sum_all == .ergodic;
+    const got = checkStackConservation(ids[0..2], ids[2], 1069);
+    try std.testing.expectEqual(expected, got);
+}
+
+test "dispatchCI: parentless plus → build, ergodic → run_tests, minus → validate" {
+    var id: [32]u8 = undefined;
+    for (0..256) |s| {
+        @memset(&id, @intCast(s));
+        const seed: u64 = s;
+        const t = colorFromChangeId(id, seed).trit;
+        const action = dispatchCI(id, &[_][32]u8{}, seed);
+        const expected: CIAction = switch (t) {
+            .plus => .build,
+            .ergodic => .run_tests,
+            .minus => .validate,
+        };
+        try std.testing.expectEqual(expected, action);
+    }
+}
+
+test "dispatchCI: violated conservation → review_required" {
+    var p: [32]u8 = undefined;
+    var c: [32]u8 = undefined;
+    @memset(&p, 0x11);
+    @memset(&c, 0x22);
+    // Try seeds until we find one where sum is non-ergodic.
+    for (0..256) |s| {
+        const seed: u64 = s;
+        const sum = colorFromChangeId(p, seed).trit.add(colorFromChangeId(c, seed).trit);
+        if (sum != .ergodic) {
+            try std.testing.expectEqual(
+                CIAction.review_required,
+                dispatchCI(c, &[_][32]u8{p}, seed),
+            );
+            return;
+        }
+    }
+    return error.NoNonConservedSeedFound;
 }
