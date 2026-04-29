@@ -410,6 +410,11 @@ test "dispatchCI: parentless plus → build, ergodic → run_tests, minus → va
     }
 }
 
+// Pull in zigbjj_entropy tests so `zig build test-ziggit` covers Phase 4 too.
+test {
+    _ = @import("zigbjj_entropy.zig");
+}
+
 test "dispatchCI: violated conservation → review_required" {
     var p: [32]u8 = undefined;
     var c: [32]u8 = undefined;
