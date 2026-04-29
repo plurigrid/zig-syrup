@@ -1912,6 +1912,27 @@ pub fn build(b: *std.Build) void {
     epoch_bridge_mod.addImport("cap", cap_mod);
     epoch_bridge_mod.addImport("epoch_capability", epoch_capability_mod);
 
+    // ocapn_session module — declared here (used by both stranded check and
+    // promise_bridge below). Single declaration; the later stranded-check
+    // block references this binding instead of re-declaring.
+    const ocapn_session_mod = b.addModule("ocapn_session", .{
+        .root_source_file = b.path("src/ocapn_session.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Bridge between vat.Promise (runtime) and ocapn_session.AnswerTable
+    // (wire). Closes the runtime↔wire promise loop for CapTP op:deliver /
+    // op:answer flows.
+    const promise_bridge_mod = b.addModule("promise_bridge", .{
+        .root_source_file = b.path("src/promise_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    promise_bridge_mod.addImport("cap", cap_mod);
+    promise_bridge_mod.addImport("vat", vat_mod);
+    promise_bridge_mod.addImport("ocapn_session", ocapn_session_mod);
+
     const cap_integration_test_mod = b.createModule(.{
         .root_source_file = b.path("src/cap_integration_test.zig"),
         .target = target,
@@ -1943,6 +1964,8 @@ pub fn build(b: *std.Build) void {
     const run_chronicle_tests = b.addRunArtifact(chronicle_tests);
     const epoch_bridge_tests = b.addTest(.{ .root_module = epoch_bridge_mod });
     const run_epoch_bridge_tests = b.addRunArtifact(epoch_bridge_tests);
+    const promise_bridge_tests = b.addTest(.{ .root_module = promise_bridge_mod });
+    const run_promise_bridge_tests = b.addRunArtifact(promise_bridge_tests);
     const cap_integration_tests = b.addTest(.{ .root_module = cap_integration_test_mod });
     const run_cap_integration_tests = b.addRunArtifact(cap_integration_tests);
 
@@ -1963,6 +1986,7 @@ pub fn build(b: *std.Build) void {
     cap_layer_step.dependOn(&run_device_key_tests.step);
     cap_layer_step.dependOn(&run_chronicle_tests.step);
     cap_layer_step.dependOn(&run_epoch_bridge_tests.step);
+    cap_layer_step.dependOn(&run_promise_bridge_tests.step);
     cap_layer_step.dependOn(&run_cap_integration_tests.step);
 
     // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.
@@ -1991,11 +2015,55 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_bootstrap_mod.addImport("syrup", syrup_mod);
-    const ocapn_session_mod = b.addModule("ocapn_session", .{
-        .root_source_file = b.path("src/ocapn_session.zig"),
+    const wire_desc_mod = b.addModule("wire_desc", .{
+        .root_source_file = b.path("src/wire_desc.zig"),
         .target = target,
         .optimize = optimize,
     });
+    wire_desc_mod.addImport("syrup", syrup_mod);
+    const ocapn_handoff_mod = b.addModule("ocapn_handoff", .{
+        .root_source_file = b.path("src/ocapn_handoff.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_handoff_mod.addImport("syrup", syrup_mod);
+    ocapn_handoff_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_handoff_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    const ocapn_vat_mod = b.addModule("ocapn_vat", .{
+        .root_source_file = b.path("src/ocapn_vat.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ocapn_vat_mod.addImport("syrup", syrup_mod);
+    ocapn_vat_mod.addImport("compat", compat_mod);
+    ocapn_vat_mod.addImport("ocapn_location", ocapn_location_mod);
+    ocapn_vat_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
+    ocapn_vat_mod.addImport("ocapn_transport", ocapn_transport_mod);
+    ocapn_vat_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    ocapn_vat_mod.addImport("ocapn_session", ocapn_session_mod);
+    ocapn_vat_mod.addImport("wire_desc", wire_desc_mod);
+    ocapn_vat_mod.addImport("ocapn_handoff", ocapn_handoff_mod);
+
+    // OCapN Gap Implementation Benchmarks (ReleaseFast)
+    const bench_gaps_mod = b.createModule(.{
+        .root_source_file = b.path("benchmarks/bench_ocapn_gaps.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bench_gaps_mod.addImport("syrup", syrup_mod);
+    bench_gaps_mod.addImport("wire_desc", wire_desc_mod);
+    bench_gaps_mod.addImport("ocapn_session", ocapn_session_mod);
+    bench_gaps_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    const bench_gaps_exe = b.addExecutable(.{
+        .name = "bench-ocapn-gaps",
+        .root_module = bench_gaps_mod,
+    });
+    const run_bench_gaps = b.addRunArtifact(bench_gaps_exe);
+    const bench_gaps_step = b.step("bench-ocapn-gaps", "Run OCapN gap implementation benchmarks (ReleaseFast)");
+    bench_gaps_step.dependOn(&run_bench_gaps.step);
+
+    // ocapn_session_mod is declared earlier (with promise_bridge_mod) and
+    // reused here.
 
     const stranded_check_mod = b.createModule(.{
         .root_source_file = b.path("src/_stranded_integration_check.zig"),
@@ -2010,6 +2078,7 @@ pub fn build(b: *std.Build) void {
     stranded_check_mod.addImport("ocapn_transport", ocapn_transport_mod);
     stranded_check_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
     stranded_check_mod.addImport("ocapn_session", ocapn_session_mod);
+    stranded_check_mod.addImport("wire_desc", wire_desc_mod);
     // Compile-check object (always works — honors module target directly).
     const stranded_check_obj = b.addObject(.{ .name = "stranded_check", .root_module = stranded_check_mod });
     const stranded_step = b.step("test-stranded-integration", "Compile-check the 8 stranded-on-main files from the 2026-04-24 merge train");
@@ -2037,7 +2106,23 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_device_key_tests.step);
     test_step.dependOn(&run_chronicle_tests.step);
     test_step.dependOn(&run_epoch_bridge_tests.step);
+    test_step.dependOn(&run_promise_bridge_tests.step);
     test_step.dependOn(&run_cap_integration_tests.step);
+    const wire_desc_tests = b.addTest(.{ .root_module = wire_desc_mod });
+    const run_wire_desc_tests = b.addRunArtifact(wire_desc_tests);
+    test_step.dependOn(&run_wire_desc_tests.step);
+    const ocapn_bootstrap_tests = b.addTest(.{ .root_module = ocapn_bootstrap_mod });
+    const run_ocapn_bootstrap_tests = b.addRunArtifact(ocapn_bootstrap_tests);
+    test_step.dependOn(&run_ocapn_bootstrap_tests.step);
+    const ocapn_handoff_tests = b.addTest(.{ .root_module = ocapn_handoff_mod });
+    const run_ocapn_handoff_tests = b.addRunArtifact(ocapn_handoff_tests);
+    test_step.dependOn(&run_ocapn_handoff_tests.step);
+    const ocapn_session_tests = b.addTest(.{ .root_module = ocapn_session_mod });
+    const run_ocapn_session_tests = b.addRunArtifact(ocapn_session_tests);
+    test_step.dependOn(&run_ocapn_session_tests.step);
+    const ocapn_vat_tests = b.addTest(.{ .root_module = ocapn_vat_mod });
+    const run_ocapn_vat_tests = b.addRunArtifact(ocapn_vat_tests);
+    test_step.dependOn(&run_ocapn_vat_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_xev_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_geo_tests.step);
     // GATED zig-0.16: test_step.dependOn(&run_bridge_tests.step);
@@ -3640,4 +3725,15 @@ pub fn build(b: *std.Build) void {
 
     const test_gay_step = b.step("test-gay", "Run all 28 gay submodule tests");
     test_gay_step.dependOn(&run_gay_tests.step);
+
+    // Beeper Desktop API Client module
+    const beeper_client_mod = b.addModule("beeper_client", .{
+        .root_source_file = b.path("src/beeper_client.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const beeper_client_tests = b.addTest(.{ .root_module = beeper_client_mod });
+    const run_beeper_client_tests = b.addRunArtifact(beeper_client_tests);
+    const test_beeper_step = b.step("test-beeper", "Run Beeper client tests");
+    test_beeper_step.dependOn(&run_beeper_client_tests.step);
 }

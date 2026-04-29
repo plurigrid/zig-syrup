@@ -1,7 +1,7 @@
 //! OCapN location records and sturdy ref URIs.
 //!
 //! Location record on the wire:
-//!   <ocapn-node netlayer-sym designator-bytes hints-list>
+//!   <ocapn-peer netlayer-sym designator-string hints-struct>
 //!
 //! Sturdy ref URI:
 //!   ocapn://<designator-base32>.<netlayer>/<swiss-hex>
@@ -13,15 +13,15 @@
 //! Encodes/decodes as syrup.Value trees so the same primitives feed both
 //! op:start-session (location + signature) and handoff descriptors.
 //!
-//! Wire-format alignment (Racket Goblins is the live reference):
-//!   - Label: `ocapn-node` (matches Racket; draft spec Locators.md says
-//!     `ocapn-peer` — track if spec graduates).
+//! Wire-format alignment:
+//!   - Label: `ocapn-peer` per OCapN draft Locators.md. `fromValue` also
+//!     accepts `ocapn-node` for backward compat with Racket Goblins peers.
 //!   - Designator: emitted as Syrup string (Racket contract `string?`).
 //!     `fromValue` still accepts `.bytes` for back-compat with older Zig
 //!     traffic — read tolerant, write strict.
-//!   - Hints: emitted as Syrup `f` when empty (Racket contract `(or/c #f
-//!     string?)`); otherwise a list of strings. `fromValue` accepts list,
-//!     bool, or string forms.
+//!   - Hints: emitted as a Syrup struct (dictionary) per spec. Empty hints
+//!     become `{}`. `fromValue` accepts dict, list, bool, or string forms
+//!     for backward compat with Racket `(or/c #f string?)` convention.
 //!
 //! Designator semantics (Racket-aligned 2026-04-18):
 //!   `Location.designator` holds the **printable string form** — for tcp
@@ -72,14 +72,15 @@ pub const Location = struct {
     designator: []const u8, // bytestring — typically 32 bytes for Ed25519 node key
     hints: []const []const u8 = &.{}, // optional transport hints ("1.2.3.4:1234", etc.)
 
-    /// Encode as `<ocapn-node netlayer-sym designator-string hints>`.
+    /// Encode as `<ocapn-peer netlayer-sym designator-string hints-struct>`.
     /// Designator is emitted as a Syrup string (Racket contract `string?`).
-    /// Hints is emitted as `f` when empty (Racket idiom), otherwise a list
-    /// of strings. Returns a caller-owned byte buffer.
+    /// Hints is emitted as a Syrup struct (dictionary) per spec: `{}` when
+    /// empty, `{hint1 t hint2 t ...}` when present. Returns a caller-owned
+    /// byte buffer.
     pub fn encodeAlloc(self: Location, allocator: Allocator) ![]u8 {
         var out = ByteList.init(allocator);
         defer out.deinit();
-        try out.appendSlice("<10'ocapn-node");
+        try out.appendSlice("<10'ocapn-peer");
 
         const sym = self.netlayer.symbolName();
         try fmtAppend(&out, "{d}'", .{sym.len});
@@ -88,28 +89,29 @@ pub const Location = struct {
         try fmtAppend(&out, "{d}\"", .{self.designator.len});
         try out.appendSlice(self.designator);
 
-        if (self.hints.len == 0) {
-            try out.append('f');
-        } else {
-            try out.append('[');
-            for (self.hints) |h| {
-                try fmtAppend(&out, "{d}\"", .{h.len});
-                try out.appendSlice(h);
-            }
-            try out.append(']');
+        // Hints as Syrup struct (dictionary) per spec.
+        try out.append('{');
+        for (self.hints) |h| {
+            try fmtAppend(&out, "{d}\"", .{h.len});
+            try out.appendSlice(h);
+            try out.append('t'); // value = true
         }
+        try out.append('}');
 
         try out.append('>');
         return out.toOwnedSlice();
     }
 
     /// Parse a syrup.Value record into a Location.
+    /// Accepts both `ocapn-peer` (spec) and `ocapn-node` (Racket compat).
     /// The value's backing memory must outlive the returned Location.
     pub fn fromValue(v: syrup.Value) !Location {
         if (v != .record) return error.InvalidFormat;
         const r = v.record;
         if (r.label.* != .symbol) return error.InvalidFormat;
-        if (!std.mem.eql(u8, r.label.symbol, "ocapn-node")) return error.InvalidFormat;
+        const label = r.label.symbol;
+        if (!std.mem.eql(u8, label, "ocapn-peer") and
+            !std.mem.eql(u8, label, "ocapn-node")) return error.InvalidFormat;
         if (r.fields.len < 3) return error.InvalidFormat;
 
         if (r.fields[0] != .symbol) return error.InvalidFormat;
@@ -123,11 +125,11 @@ pub const Location = struct {
             else => return error.InvalidFormat,
         };
 
-        // Accept any of: list (zig-self), bool=false (racket empty),
-        // string (racket single-hint). Hints content isn't used yet; caller
-        // can re-destructure from r.fields[2] if needed.
+        // Accept dict (spec), list (old zig-self), bool=false (racket
+        // empty), string (racket single-hint). Hints content isn't used
+        // yet; caller can re-destructure from r.fields[2] if needed.
         switch (r.fields[2]) {
-            .list, .bool, .string => {},
+            .dictionary, .list, .bool, .string => {},
             else => return error.InvalidFormat,
         }
         return Location{
@@ -185,6 +187,47 @@ pub const SturdyRef = struct {
 
         return SturdyRef{
             .location = .{ .netlayer = nl, .designator = designator, .hints = &.{} },
+            .swiss = swiss,
+        };
+    }
+
+    /// Encode as wire record: `<ocapn-sturdyref <location> swiss-bytes>`.
+    pub fn encodeWireAlloc(self: SturdyRef, allocator: Allocator) ![]u8 {
+        var out = ByteList.init(allocator);
+        errdefer out.deinit();
+        try out.appendSlice("<15'ocapn-sturdyref");
+        const loc_bytes = try self.location.encodeAlloc(allocator);
+        defer allocator.free(loc_bytes);
+        try out.appendSlice(loc_bytes);
+        try fmtAppend(&out, "{d}:", .{self.swiss.len});
+        try out.appendSlice(&self.swiss);
+        try out.append('>');
+        return out.toOwnedSlice();
+    }
+
+    /// Parse a wire record `<ocapn-sturdyref <location> swiss-bytes>`.
+    /// Designator string is duped into allocator so the SturdyRef outlives
+    /// the input value.
+    pub fn fromValue(v: syrup.Value, allocator: Allocator) !SturdyRef {
+        if (v != .record) return error.InvalidFormat;
+        const r = v.record;
+        if (r.label.* != .symbol) return error.InvalidFormat;
+        if (!std.mem.eql(u8, r.label.symbol, "ocapn-sturdyref")) return error.InvalidFormat;
+        if (r.fields.len < 2) return error.InvalidFormat;
+
+        const loc = try Location.fromValue(r.fields[0]);
+        const designator = try allocator.dupe(u8, loc.designator);
+
+        const swiss_bytes = switch (r.fields[1]) {
+            .bytes => |b| b,
+            else => return error.InvalidFormat,
+        };
+        if (swiss_bytes.len != SWISS_LEN) return error.InvalidFormat;
+        var swiss: [SWISS_LEN]u8 = undefined;
+        @memcpy(&swiss, swiss_bytes);
+
+        return SturdyRef{
+            .location = .{ .netlayer = loc.netlayer, .designator = designator, .hints = &.{} },
             .swiss = swiss,
         };
     }
@@ -270,7 +313,7 @@ fn base32Digit(c: u8) ?u8 {
 
 // ---- Tests ------------------------------------------------------------------
 
-test "location encode round-trip via Parser (Racket shape: string designator, false hints)" {
+test "location encode round-trip via Parser (spec shape: ocapn-peer, dict hints)" {
     const allocator = std.testing.allocator;
     const loc = Location{
         .netlayer = .tcp,
@@ -284,18 +327,19 @@ test "location encode round-trip via Parser (Racket shape: string designator, fa
     defer v.deinitAll(allocator);
 
     try std.testing.expect(v == .record);
-    try std.testing.expectEqualStrings("ocapn-node", v.record.label.symbol);
+    try std.testing.expectEqualStrings("ocapn-peer", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 3), v.record.fields.len);
     try std.testing.expect(v.record.fields[1] == .string);
-    try std.testing.expect(v.record.fields[2] == .bool);
-    try std.testing.expectEqual(false, v.record.fields[2].bool);
+    // Empty hints = empty dict (spec-conformant).
+    try std.testing.expect(v.record.fields[2] == .dictionary);
+    try std.testing.expectEqual(@as(usize, 0), v.record.fields[2].dictionary.len);
 
     const round = try Location.fromValue(v);
     try std.testing.expectEqual(Netlayer.tcp, round.netlayer);
     try std.testing.expectEqualSlices(u8, loc.designator, round.designator);
 }
 
-test "location encode with non-empty hints emits list" {
+test "location encode with non-empty hints emits dict" {
     const allocator = std.testing.allocator;
     const loc = Location{
         .netlayer = .websocket,
@@ -309,15 +353,14 @@ test "location encode with non-empty hints emits list" {
     var v = try parser.parse();
     defer v.deinitAll(allocator);
 
-    try std.testing.expect(v.record.fields[2] == .list);
-    try std.testing.expectEqual(@as(usize, 2), v.record.fields[2].list.len);
+    try std.testing.expect(v.record.fields[2] == .dictionary);
+    try std.testing.expectEqual(@as(usize, 2), v.record.fields[2].dictionary.len);
 }
 
-test "location fromValue accepts Racket-shaped (string designator, false hints)" {
+test "location fromValue accepts Racket-shaped (ocapn-node compat, string designator, false hints)" {
     const allocator = std.testing.allocator;
-    // Hand-rolled Racket-style location:
+    // Hand-rolled Racket-style location (uses old ocapn-node label):
     //   <ocapn-node onion "abc..." #f>
-    // Designator as Syrup string, hints as Syrup false (`f`).
     const designator_str = "wy46gxdweyqn5m7ntzwlxinhdia2jjanlsh37gxklwhfec7yxqr4k3qd";
     var buf = ByteList.init(allocator);
     defer buf.deinit();
@@ -362,6 +405,34 @@ test "sturdy uri round-trip preserves base32 designator string" {
     defer parsed.deinit(allocator);
 
     try std.testing.expectEqual(Netlayer.tcp, parsed.location.netlayer);
+    try std.testing.expectEqualSlices(u8, designator_str, parsed.location.designator);
+    try std.testing.expectEqualSlices(u8, &swiss, &parsed.swiss);
+}
+
+test "sturdyref wire record round-trip (ocapn-sturdyref)" {
+    const allocator = std.testing.allocator;
+    const designator_str = "wy46gxdweyqn5m7ntzwlxinhdia2jjanlsh37gxklwhfec7yxqr4k3qd";
+    var swiss: [SWISS_LEN]u8 = undefined;
+    for (&swiss, 0..) |*s, i| s.* = @intCast((i * 11 + 5) & 0xFF);
+
+    const ref = SturdyRef{
+        .location = .{ .netlayer = .onion, .designator = designator_str },
+        .swiss = swiss,
+    };
+    const bytes = try ref.encodeWireAlloc(allocator);
+    defer allocator.free(bytes);
+
+    var parser = syrup.Parser.init(bytes, allocator);
+    var v = try parser.parse();
+    defer v.deinitAll(allocator);
+
+    try std.testing.expect(v == .record);
+    try std.testing.expectEqualStrings("ocapn-sturdyref", v.record.label.symbol);
+    try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);
+
+    const parsed = try SturdyRef.fromValue(v, allocator);
+    defer parsed.deinit(allocator);
+    try std.testing.expectEqual(Netlayer.onion, parsed.location.netlayer);
     try std.testing.expectEqualSlices(u8, designator_str, parsed.location.designator);
     try std.testing.expectEqualSlices(u8, &swiss, &parsed.swiss);
 }

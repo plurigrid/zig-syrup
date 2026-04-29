@@ -14,7 +14,7 @@ const handshake = @import("ocapn_handshake");
 const location_mod = @import("ocapn_location");
 const bootstrap = @import("ocapn_bootstrap");
 const session = @import("ocapn_session");
-const compat = @import("compat");
+const wire_desc = @import("wire_desc");
 const Allocator = std.mem.Allocator;
 const ByteList = std.array_list.Managed(u8);
 
@@ -45,6 +45,11 @@ pub const Vat = struct {
     // Peer state populated during handshake.
     peer_pubkey: ?[32]u8 = null,
     peer_location: ?location_mod.Location = null,
+    /// Derived session ID: SHA256^2("prot0" || sort(my_public_id, peer_public_id)).
+    /// Computed after handshake completes. Used for gift table keying.
+    session_id: ?[32]u8 = null,
+
+    gifts: bootstrap.GiftTable,
 
     pub fn init(
         allocator: Allocator,
@@ -60,6 +65,7 @@ pub const Vat = struct {
             .registry = bootstrap.SwissRegistry.init(),
             .answers = session.AnswerTable.init(),
             .exports = session.ExportTable.init(),
+            .gifts = bootstrap.GiftTable.init(),
         };
     }
 
@@ -67,6 +73,7 @@ pub const Vat = struct {
         self.answers.deinit(self.allocator);
         self.exports.deinit(self.allocator);
         self.registry.deinit(self.allocator);
+        self.gifts.deinit(self.allocator);
         self.conn.deinit();
     }
 
@@ -101,32 +108,33 @@ pub const Vat = struct {
         if (!std.mem.eql(u8, r.fields[0].string, handshake.CAPTP_VERSION))
             return error.UnsupportedCaptpVersion;
 
-        // session-pubkey
-        if (r.fields[1] != .bytes) return error.InvalidHandshake;
-        if (r.fields[1].bytes.len != 32) return error.InvalidHandshake;
-        var pk: [32]u8 = undefined;
-        @memcpy(&pk, r.fields[1].bytes);
+        // session-pubkey (gcrypt s-expression format)
+        const pk = handshake.decodeGcryptPubkey(r.fields[1]) catch return error.InvalidHandshake;
 
         // acceptable-location
         const peer_loc = try location_mod.Location.fromValue(r.fields[2]);
 
-        // signature envelope
+        // signature envelope: <desc:sig-envelope scheme sig-val-sexp>
         if (r.fields[3] != .record) return error.InvalidHandshake;
         const sig_r = r.fields[3].record;
         if (sig_r.label.* != .symbol) return error.InvalidHandshake;
-        if (!std.mem.eql(u8, sig_r.label.symbol, "sig-envelope")) return error.InvalidHandshake;
+        if (!std.mem.eql(u8, sig_r.label.symbol, "desc:sig-envelope")) return error.InvalidHandshake;
         if (sig_r.fields.len < 2) return error.InvalidHandshake;
-        if (sig_r.fields[1] != .bytes) return error.InvalidHandshake;
-        if (sig_r.fields[1].bytes.len != 64) return error.InvalidSignature;
-        var sig_bytes: [64]u8 = undefined;
-        @memcpy(&sig_bytes, sig_r.fields[1].bytes);
-        const sig = handshake.Signature{ .bytes = sig_bytes };
+        // fields[1] is the gcrypt sig-val s-expression (a Syrup list)
+        const sig_raw = handshake.decodeGcryptSignature(sig_r.fields[1]) catch return error.InvalidSignature;
+        const sig = handshake.Signature{ .bytes = sig_raw };
 
         const ok = try handshake.verifyLocation(pk, peer_loc, sig, self.allocator);
         if (!ok) return error.BadSignature;
 
         self.peer_pubkey = pk;
         self.peer_location = peer_loc;
+
+        // Derive session ID from both public identifiers.
+        const my_id = try handshake.derivePublicId(self.allocator, self.keypair.pub_key);
+        const peer_id = try handshake.derivePublicId(self.allocator, pk);
+        self.session_id = handshake.deriveSessionId(my_id, peer_id);
+
         self.phase = .established;
     }
 
@@ -135,8 +143,9 @@ pub const Vat = struct {
         return self.registry.register(self.allocator, swiss);
     }
 
-    /// Send `op:deliver-only <desc:import-object pos> <symbol method> <args-list>`.
-    /// Requires `.established` phase.
+    /// Send `op:deliver-only <desc:export pos> [method-sym args...]>`.
+    /// Spec: 2 fields (to-desc, args). Method is the first element of args
+    /// by convention. Requires `.established` phase.
     pub fn deliverOnly(
         self: *Vat,
         to_position: u32,
@@ -148,15 +157,13 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<15'op:deliver-only");
 
-        // target: desc:import-object <pos>
-        try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
+        // to-desc: desc:export
+        try fmtAppend(&out, "<11'desc:export{d}+>", .{to_position});
 
-        // method as symbol
+        // args: [method-symbol, ...extra-args]
+        try out.append('[');
         try fmtAppend(&out, "{d}'", .{method.len});
         try out.appendSlice(method);
-
-        // args as list — encode each Value
-        try out.append('[');
         for (args) |a| {
             const b = try a.encodeAlloc(self.allocator);
             defer self.allocator.free(b);
@@ -168,10 +175,11 @@ pub const Vat = struct {
         try self.conn.sendBytes(out.items);
     }
 
-    /// Send `op:deliver <target> <method> <args> <desc:answer pos> <desc:import-object resolver>`.
-    /// Allocates a fresh answer position + local Promise so the peer can send
-    /// `op:fulfill`/`op:break` back at us. Returns the answer position the
-    /// peer must echo. Requires `.established` phase.
+    /// Send `op:deliver <desc:export pos> [method-sym args...] answer-pos resolve-me-desc>`.
+    /// Spec: 4 fields (to-desc, args, answer-pos, resolve-me-desc). Method
+    /// is the first element of args by convention. Allocates a fresh answer
+    /// position + local Promise. Returns the answer position. Requires
+    /// `.established` phase.
     pub fn deliver(
         self: *Vat,
         to_position: u32,
@@ -186,12 +194,13 @@ pub const Vat = struct {
         defer out.deinit();
         try out.appendSlice("<10'op:deliver");
 
-        try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
+        // to-desc: desc:export
+        try fmtAppend(&out, "<11'desc:export{d}+>", .{to_position});
 
+        // args: [method-symbol, ...extra-args]
+        try out.append('[');
         try fmtAppend(&out, "{d}'", .{method.len});
         try out.appendSlice(method);
-
-        try out.append('[');
         for (args) |a| {
             const b = try a.encodeAlloc(self.allocator);
             defer self.allocator.free(b);
@@ -199,7 +208,10 @@ pub const Vat = struct {
         }
         try out.append(']');
 
-        try fmtAppend(&out, "<11'desc:answer{d}+>", .{answer_pos});
+        // answer-pos (integer or false)
+        try fmtAppend(&out, "{d}+", .{answer_pos});
+
+        // resolve-me-desc
         try fmtAppend(&out, "<18'desc:import-object{d}+>", .{answer_pos});
 
         try out.append('>');
@@ -207,26 +219,48 @@ pub const Vat = struct {
         return answer_pos;
     }
 
-    /// Send `op:gc-exports <position> <delta>` — informs the peer we dropped
-    /// `delta` wire references to their export `position`.
+    /// GC export entry for batch gc-exports messages.
+    pub const GcExportEntry = struct { position: u32, delta: u32 };
+
+    /// Send `op:gc-exports [positions] [wire-deltas]` — spec-conformant list
+    /// form. Informs the peer we dropped references to their exports.
     pub fn gcExports(self: *Vat, position: u32, delta: u32) !void {
+        return self.gcExportsBatch(&.{GcExportEntry{ .position = position, .delta = delta }});
+    }
+
+    /// Batch variant: send multiple gc-exports entries in one message.
+    pub fn gcExportsBatch(self: *Vat, entries: []const GcExportEntry) !void {
         if (self.phase != .established) return error.BadPhase;
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<13'op:gc-exports");
-        try fmtAppend(&out, "{d}+", .{position});
-        try fmtAppend(&out, "{d}+", .{delta});
+        // positions list
+        try out.append('[');
+        for (entries) |e| try fmtAppend(&out, "{d}+", .{e.position});
+        try out.append(']');
+        // wire-deltas list
+        try out.append('[');
+        for (entries) |e| try fmtAppend(&out, "{d}+", .{e.delta});
+        try out.append(']');
         try out.append('>');
         try self.conn.sendBytes(out.items);
     }
 
-    /// Send `op:gc-answers <position>` — peer no longer needs this answer.
+    /// Send `op:gc-answers [answer-positions]` — spec-conformant list form.
+    /// Peer no longer needs these answers.
     pub fn gcAnswers(self: *Vat, position: u32) !void {
+        return self.gcAnswersBatch(&.{position});
+    }
+
+    /// Batch variant: release multiple answer positions in one message.
+    pub fn gcAnswersBatch(self: *Vat, positions: []const u32) !void {
         if (self.phase != .established) return error.BadPhase;
         var out = ByteList.init(self.allocator);
         defer out.deinit();
         try out.appendSlice("<13'op:gc-answers");
-        try fmtAppend(&out, "{d}+", .{position});
+        try out.append('[');
+        for (positions) |p| try fmtAppend(&out, "{d}+", .{p});
+        try out.append(']');
         try out.append('>');
         try self.conn.sendBytes(out.items);
     }
@@ -277,23 +311,108 @@ pub const Vat = struct {
         try self.sendFulfill(answer_pos, payload);
     }
 
+    /// Handle an incoming op:listen. Registers the listener on the promise;
+    /// if already resolved/broken, sends immediate notification. Returns true
+    /// if notification was sent immediately, false if deferred.
+    pub fn handleListen(self: *Vat, op: IncomingOp.listen) !bool {
+        if (self.phase != .established) return error.BadPhase;
+        const answer_pos = op.to_desc.position();
+        const p = self.answers.byAnswerPos(answer_pos) orelse return error.UnknownAnswerPos;
+
+        const resolver_ref = session.ResolverRef{
+            .position = op.listen_desc.position(),
+            .is_promise = op.listen_desc.isPromise(),
+        };
+
+        const immediate = try p.addListener(self.allocator, resolver_ref, op.wants_partial);
+        if (immediate) |listener| {
+            if (p.state == .resolved) {
+                try self.sendNotifyFulfill(listener.resolver, p.resolved_bytes.items);
+            } else if (p.state == .broken) {
+                try self.sendNotifyBreak(listener.resolver, p.resolved_bytes.items);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /// Notify all eligible listeners after a promise resolution. Batches
+    /// all notifications into a single write to reduce syscall overhead.
+    pub fn notifyListeners(self: *Vat, answer_pos: u32) !void {
+        const p = self.answers.byAnswerPos(answer_pos) orelse return;
+        const listeners = try p.drainListeners(self.allocator);
+        defer self.allocator.free(listeners);
+        if (listeners.len == 0) return;
+
+        // Batch: collect all notification bytes into one buffer, send once.
+        var batch = ByteList.init(self.allocator);
+        defer batch.deinit();
+        for (listeners) |listener| {
+            if (p.state == .resolved) {
+                try appendNotifyFulfill(&batch, listener.resolver, p.resolved_bytes.items);
+            } else if (p.state == .broken) {
+                try appendNotifyBreak(&batch, listener.resolver, p.resolved_bytes.items);
+            }
+        }
+        if (batch.items.len > 0) {
+            try self.conn.sendBytes(batch.items);
+        }
+    }
+
+    /// Encode a resolver descriptor inline into a ByteList. Avoids a
+    /// separate heap allocation per notification.
+    fn appendResolverDesc(out: *ByteList, resolver: session.ResolverRef) !void {
+        if (resolver.is_promise) {
+            try out.appendSlice("<19'desc:import-promise");
+        } else {
+            try out.appendSlice("<18'desc:import-object");
+        }
+        try fmtAppend(out, "{d}+>", .{resolver.position});
+    }
+
+    fn appendNotifyFulfill(out: *ByteList, resolver: session.ResolverRef, value_bytes: []const u8) !void {
+        try out.appendSlice("<15'op:deliver-only");
+        try appendResolverDesc(out, resolver);
+        try out.appendSlice("7'fulfill[");
+        try out.appendSlice(value_bytes);
+        try out.appendSlice("]>");
+    }
+
+    fn appendNotifyBreak(out: *ByteList, resolver: session.ResolverRef, reason_bytes: []const u8) !void {
+        try out.appendSlice("<15'op:deliver-only");
+        try appendResolverDesc(out, resolver);
+        try out.appendSlice("5'break[");
+        try out.appendSlice(reason_bytes);
+        try out.appendSlice("]>");
+    }
+
+    fn sendNotifyFulfill(self: *Vat, resolver: session.ResolverRef, value_bytes: []const u8) !void {
+        var out = ByteList.init(self.allocator);
+        defer out.deinit();
+        try appendNotifyFulfill(&out, resolver, value_bytes);
+        try self.conn.sendBytes(out.items);
+    }
+
+    fn sendNotifyBreak(self: *Vat, resolver: session.ResolverRef, reason_bytes: []const u8) !void {
+        var out = ByteList.init(self.allocator);
+        defer out.deinit();
+        try appendNotifyBreak(&out, resolver, reason_bytes);
+        try self.conn.sendBytes(out.items);
+    }
+
     /// Server-side helper for a bootstrap `fetch(swiss)` deliver. Looks the
     /// swiss up in `self.registry` and either:
     ///   - fulfills `op.answer_pos` with `<desc:import-object pos>`, or
     ///   - breaks it with the symbol reason `'unknown-swiss`.
-    /// Returns true if fulfilled, false if broken. Caller passes the deliver
-    /// op (not deliver-only) — fetch always wants a reply.
+    /// Returns true if fulfilled, false if broken.
     pub fn serveBootstrapFetch(
         self: *Vat,
-        op: anytype, // IncomingOp.deliver payload (struct with .args, .answer_pos, .method, .target)
+        op: anytype,
     ) !bool {
-        if (op.target != bootstrap.BOOTSTRAP_POS) return error.NotBootstrapTarget;
+        if (op.target.position() != bootstrap.BOOTSTRAP_POS) return error.NotBootstrapTarget;
         if (!std.mem.eql(u8, op.method, "fetch")) return error.NotFetchMethod;
         if (op.args.len < 1) return error.MissingSwissArg;
         const swiss = bootstrap.readFetchSwiss(op.args[0]) catch {
-            // Reason record: <desc:error 'invalid-swiss>
-            //   "desc:error"   = 10 chars
-            //   "invalid-swiss" = 13 chars
             try self.sendBreak(op.answer_pos, "<10'desc:error13'invalid-swiss>");
             return false;
         };
@@ -302,9 +421,95 @@ pub const Vat = struct {
             self.exports.incref(pos);
             return true;
         }
-        // Reason symbol: 'unknown-swiss (13 chars)
         try self.sendBreak(op.answer_pos, "13'unknown-swiss");
         return false;
+    }
+
+    /// Server-side bootstrap dispatch: route to fetch, deposit-gift, or
+    /// withdraw-gift based on the method symbol. Replaces the old
+    /// fetch-only pattern.
+    pub fn serveBootstrap(
+        self: *Vat,
+        op: anytype,
+        peer_session_id: [32]u8,
+    ) !bool {
+        if (op.target.position() != bootstrap.BOOTSTRAP_POS) return error.NotBootstrapTarget;
+        const method = bootstrap.BootstrapMethod.fromSymbol(op.method) orelse {
+            try self.sendBreak(op.answer_pos, "14'unknown-method");
+            return false;
+        };
+        switch (method) {
+            .fetch => return self.serveBootstrapFetch(op),
+            .deposit_gift => {
+                // args: [gift-id-bytes, gift-desc]
+                if (op.args.len < 2) {
+                    try self.sendBreak(op.answer_pos, "<10'desc:error12'missing-args>");
+                    return false;
+                }
+                if (op.args[0] != .bytes or op.args[0].bytes.len != bootstrap.GIFT_ID_LEN) {
+                    try self.sendBreak(op.answer_pos, "<10'desc:error14'invalid-gift-id>");
+                    return false;
+                }
+                var gift_id: [bootstrap.GIFT_ID_LEN]u8 = undefined;
+                @memcpy(&gift_id, op.args[0].bytes);
+                const key = bootstrap.GiftKey{ .session_id = peer_session_id, .gift_id = gift_id };
+                // Encode the gift descriptor to owned bytes.
+                const desc_bytes = try op.args[1].encodeAlloc(self.allocator);
+                defer self.allocator.free(desc_bytes);
+                const result = try self.gifts.deposit(self.allocator, key, desc_bytes);
+                switch (result) {
+                    .delivered => {
+                        // Withdrawal was waiting — fulfill it now.
+                        if (self.gifts.getWithdrawAnswerPos(key)) |w_pos| {
+                            try self.sendFulfill(w_pos, desc_bytes);
+                        }
+                        // Acknowledge the deposit.
+                        try self.sendFulfill(op.answer_pos, "1't");
+                        self.gifts.release(self.allocator, key);
+                    },
+                    .held => try self.sendFulfill(op.answer_pos, "1't"),
+                    .duplicate => {
+                        try self.sendBreak(op.answer_pos, "14'duplicate-gift");
+                        return false;
+                    },
+                }
+                return true;
+            },
+            .withdraw_gift => {
+                // args: [desc:handoff-receive]
+                if (op.args.len < 1) {
+                    try self.sendBreak(op.answer_pos, "<10'desc:error12'missing-args>");
+                    return false;
+                }
+                // Extract gift-id from the handoff-receive's inner handoff-give.
+                // For now: accept a raw gift-id bytestring as arg[0] for
+                // bootstrapping the flow. Full desc:handoff-receive verification
+                // is in ocapn_handoff.zig and will be wired when the signature
+                // verification path is integrated.
+                if (op.args[0] != .bytes or op.args[0].bytes.len != bootstrap.GIFT_ID_LEN) {
+                    try self.sendBreak(op.answer_pos, "<10'desc:error14'invalid-gift-id>");
+                    return false;
+                }
+                var gift_id: [bootstrap.GIFT_ID_LEN]u8 = undefined;
+                @memcpy(&gift_id, op.args[0].bytes);
+                const key = bootstrap.GiftKey{ .session_id = peer_session_id, .gift_id = gift_id };
+                const result = try self.gifts.withdraw(self.allocator, key, op.answer_pos);
+                switch (result) {
+                    .delivered => {
+                        if (self.gifts.getDeliveredGift(key)) |gift_bytes| {
+                            try self.sendFulfill(op.answer_pos, gift_bytes);
+                        }
+                        self.gifts.release(self.allocator, key);
+                    },
+                    .held => {}, // Waiting for deposit; will fulfill on arrival.
+                    .duplicate => {
+                        try self.sendBreak(op.answer_pos, "19'duplicate-withdrawal");
+                        return false;
+                    },
+                }
+                return true;
+            },
+        }
     }
 
     /// Send `op:abort <reason-string>` — terminate the session. Per Racket
@@ -328,18 +533,27 @@ pub const Vat = struct {
     }
 
     pub const IncomingOp = union(enum) {
-        deliver_only: struct { target: u32, method: []const u8, args: []const syrup.Value },
+        deliver_only: struct {
+            target: wire_desc.TargetDesc,
+            method: []const u8,
+            args: []const syrup.Value,
+        },
         deliver: struct {
-            target: u32,
+            target: wire_desc.TargetDesc,
             method: []const u8,
             args: []const syrup.Value,
             answer_pos: u32,
-            resolver_pos: u32,
+            resolver: wire_desc.ResolverDesc,
+        },
+        listen: struct {
+            to_desc: wire_desc.ListenTargetDesc,
+            listen_desc: wire_desc.ResolverDesc,
+            wants_partial: bool,
         },
         fulfill: struct { answer_pos: u32, value: syrup.Value },
         @"break": struct { answer_pos: u32, reason: syrup.Value },
-        gc_exports: struct { position: u32, delta: u32 },
-        gc_answers: struct { position: u32 },
+        gc_exports: struct { positions: []const u32, deltas: []const u32 },
+        gc_answers: struct { positions: []const u32 },
         abort: struct { reason: []const u8 },
         unknown: syrup.Value,
     };
@@ -357,44 +571,84 @@ pub const Vat = struct {
         if (r.label.* != .symbol) return .{ .op = .{ .unknown = v }, .value = v };
         const tag = r.label.symbol;
 
-        if (std.mem.eql(u8, tag, "op:deliver-only") and r.fields.len >= 3) {
-            const target = try readImportObjectPos(r.fields[0]);
-            if (r.fields[1] != .symbol) return error.InvalidMessage;
-            if (r.fields[2] != .list) return error.InvalidMessage;
+        if (std.mem.eql(u8, tag, "op:deliver-only") and r.fields.len >= 2) {
+            // Spec: 2 fields — to-desc, args. Method is args[0] by convention.
+            const wd = wire_desc.WireDesc.fromValue(r.fields[0]) catch return error.InvalidMessage;
+            const target = wire_desc.TargetDesc.fromWireDesc(wd) catch return error.InvalidMessage;
+            if (r.fields[1] != .list) return error.InvalidMessage;
+            const args_list = r.fields[1].list;
+            if (args_list.len < 1 or args_list[0] != .symbol) return error.InvalidMessage;
             return .{ .op = .{ .deliver_only = .{
                 .target = target,
-                .method = r.fields[1].symbol,
-                .args = r.fields[2].list,
+                .method = args_list[0].symbol,
+                .args = if (args_list.len > 1) args_list[1..] else &.{},
             } }, .value = v };
         }
-        if (std.mem.eql(u8, tag, "op:deliver") and r.fields.len >= 5) {
-            const target = try readImportObjectPos(r.fields[0]);
-            if (r.fields[1] != .symbol) return error.InvalidMessage;
-            if (r.fields[2] != .list) return error.InvalidMessage;
-            const answer_pos = try readAnswerPos(r.fields[3]);
-            const resolver_pos = try readImportObjectPos(r.fields[4]);
+        if (std.mem.eql(u8, tag, "op:deliver") and r.fields.len >= 4) {
+            // Spec: 4 fields — to-desc, args, answer-pos, resolve-me-desc.
+            const wd_target = wire_desc.WireDesc.fromValue(r.fields[0]) catch return error.InvalidMessage;
+            const target = wire_desc.TargetDesc.fromWireDesc(wd_target) catch return error.InvalidMessage;
+            if (r.fields[1] != .list) return error.InvalidMessage;
+            const args_list = r.fields[1].list;
+            if (args_list.len < 1 or args_list[0] != .symbol) return error.InvalidMessage;
+            // answer-pos: integer or false.
+            const answer_pos = blk: {
+                if (r.fields[2] == .bool and !r.fields[2].bool) break :blk @as(u32, 0);
+                break :blk readInt(u32, r.fields[2]) catch return error.InvalidMessage;
+            };
+            // resolve-me-desc: desc:import-object OR desc:import-promise OR false.
+            const resolver = blk: {
+                if (r.fields[3] == .bool and !r.fields[3].bool) {
+                    break :blk wire_desc.ResolverDesc{ .import_object = 0 };
+                }
+                const wd_res = wire_desc.WireDesc.fromValue(r.fields[3]) catch return error.InvalidMessage;
+                break :blk wire_desc.ResolverDesc.fromWireDesc(wd_res) catch return error.InvalidMessage;
+            };
             return .{ .op = .{ .deliver = .{
                 .target = target,
-                .method = r.fields[1].symbol,
-                .args = r.fields[2].list,
+                .method = args_list[0].symbol,
+                .args = if (args_list.len > 1) args_list[1..] else &.{},
                 .answer_pos = answer_pos,
-                .resolver_pos = resolver_pos,
+                .resolver = resolver,
+            } }, .value = v };
+        }
+        // Gap 1: op:listen — promise observation.
+        if (std.mem.eql(u8, tag, "op:listen") and r.fields.len >= 3) {
+            const wd_to = wire_desc.WireDesc.fromValue(r.fields[0]) catch return error.InvalidMessage;
+            const to_desc = wire_desc.ListenTargetDesc.fromWireDesc(wd_to) catch return error.InvalidMessage;
+            const wd_listen = wire_desc.WireDesc.fromValue(r.fields[1]) catch return error.InvalidMessage;
+            const listen_desc = wire_desc.ResolverDesc.fromWireDesc(wd_listen) catch return error.InvalidMessage;
+            const wants_partial: bool = if (r.fields[2] == .bool) r.fields[2].bool else false;
+            return .{ .op = .{ .listen = .{
+                .to_desc = to_desc,
+                .listen_desc = listen_desc,
+                .wants_partial = wants_partial,
             } }, .value = v };
         }
         if (std.mem.eql(u8, tag, "op:fulfill") and r.fields.len >= 2) {
-            const answer_pos = try readAnswerPos(r.fields[0]);
-            // Serialize the payload back to canonical bytes and store in
-            // the promise — matches session.AnswerTable.resolvePromise.
+            const wd = wire_desc.WireDesc.fromValue(r.fields[0]) catch return error.InvalidMessage;
+            if (wd != .answer) return error.InvalidMessage;
+            const answer_pos = wd.position();
             const payload_bytes = try r.fields[1].encodeAlloc(self.allocator);
             defer self.allocator.free(payload_bytes);
-            try self.answers.resolvePromise(self.allocator, answer_pos, payload_bytes);
+            // Detect promise-to-promise forwarding for wants-partial.
+            const is_promise = blk: {
+                if (r.fields[1] == .record) {
+                    const inner = wire_desc.WireDesc.fromValue(r.fields[1]) catch break :blk false;
+                    break :blk inner.isPromise();
+                }
+                break :blk false;
+            };
+            try self.answers.resolvePromiseEx(self.allocator, answer_pos, payload_bytes, is_promise);
             return .{ .op = .{ .fulfill = .{
                 .answer_pos = answer_pos,
                 .value = r.fields[1],
             } }, .value = v };
         }
         if (std.mem.eql(u8, tag, "op:break") and r.fields.len >= 2) {
-            const answer_pos = try readAnswerPos(r.fields[0]);
+            const wd = wire_desc.WireDesc.fromValue(r.fields[0]) catch return error.InvalidMessage;
+            if (wd != .answer) return error.InvalidMessage;
+            const answer_pos = wd.position();
             try self.answers.breakPromise(answer_pos);
             return .{ .op = .{ .@"break" = .{
                 .answer_pos = answer_pos,
@@ -402,24 +656,28 @@ pub const Vat = struct {
             } }, .value = v };
         }
         if (std.mem.eql(u8, tag, "op:gc-exports") and r.fields.len >= 2) {
-            const position = try readInt(u32, r.fields[0]);
-            const delta = try readInt(u32, r.fields[1]);
-            const orphaned = self.exports.decref(position, delta);
-            if (orphaned) self.exports.release(position);
-            return .{ .op = .{ .gc_exports = .{ .position = position, .delta = delta } }, .value = v };
+            // Spec: fields are [positions-list] [wire-deltas-list].
+            const positions = try readIntList(u32, r.fields[0], self.allocator);
+            const deltas = try readIntList(u32, r.fields[1], self.allocator);
+            const n = @min(positions.len, deltas.len);
+            for (0..n) |idx| {
+                const orphaned = self.exports.decref(positions[idx], deltas[idx]);
+                if (orphaned) self.exports.release(positions[idx]);
+            }
+            return .{ .op = .{ .gc_exports = .{ .positions = positions, .deltas = deltas } }, .value = v };
         }
         if (std.mem.eql(u8, tag, "op:gc-answers") and r.fields.len >= 1) {
-            const position = try readInt(u32, r.fields[0]);
-            // Best-effort drop; an unknown pos may legitimately mean we
-            // already released locally and the peer's gc raced us.
-            self.answers.releasePromise(self.allocator, position) catch |e| switch (e) {
-                error.UnknownAnswerPos => {},
-                else => return e,
-            };
-            return .{ .op = .{ .gc_answers = .{ .position = position } }, .value = v };
+            // Spec: field is [answer-positions-list].
+            const positions = try readIntList(u32, r.fields[0], self.allocator);
+            for (positions) |pos| {
+                self.answers.releasePromise(self.allocator, pos) catch |e| switch (e) {
+                    error.UnknownAnswerPos => {},
+                    else => return e,
+                };
+            }
+            return .{ .op = .{ .gc_answers = .{ .positions = positions } }, .value = v };
         }
         if (std.mem.eql(u8, tag, "op:abort") and r.fields.len >= 1) {
-            // reason is a Syrup string; accept symbol too for leniency.
             const reason = switch (r.fields[0]) {
                 .string => |s| s,
                 .symbol => |s| s,
@@ -456,6 +714,27 @@ fn readInt(comptime T: type, v: syrup.Value) !T {
     };
 }
 
+/// Read a Syrup list of integers into a caller-owned slice. Also accepts
+/// a bare integer (wraps as single-element slice) for backward compat with
+/// the pre-list-form protocol.
+fn readIntList(comptime T: type, v: syrup.Value, allocator: Allocator) ![]const T {
+    switch (v) {
+        .list => |items| {
+            const out = try allocator.alloc(T, items.len);
+            for (items, 0..) |item, i| {
+                out[i] = try readInt(T, item);
+            }
+            return out;
+        },
+        .integer => {
+            const out = try allocator.alloc(T, 1);
+            out[0] = try readInt(T, v);
+            return out;
+        },
+        else => return error.InvalidMessage,
+    }
+}
+
 // ---- Tests ------------------------------------------------------------------
 
 test "two Vats: full handshake round-trip over localhost" {
@@ -473,10 +752,10 @@ test "two Vats: full handshake round-trip over localhost" {
     const loc_a = location_mod.Location{ .netlayer = .tcp, .designator = b32_a.items };
 
     const ctx = struct {
-        bound: compat.Address,
+        bound: std.net.Address,
         err: ?anyerror = null,
         pub fn run(ptr: *@This()) void {
-            const stream = compat.tcpConnectToAddress(ptr.bound) catch |e| {
+            const stream = std.net.tcpConnectToAddress(ptr.bound) catch |e| {
                 ptr.err = e;
                 return;
             };
@@ -531,19 +810,20 @@ test "two Vats: full handshake round-trip over localhost" {
 // typo can sit undetected (as several did before 2026-04-18).
 
 fn encodeDeliverOnlyForTest(allocator: std.mem.Allocator, to_position: u32, method: []const u8) ![]u8 {
+    // Spec: <op:deliver-only <desc:export pos> [method-sym]>
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<15'op:deliver-only");
-    try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
+    try fmtAppend(&out, "<11'desc:export{d}+>", .{to_position});
+    try out.append('[');
     try fmtAppend(&out, "{d}'", .{method.len});
     try out.appendSlice(method);
-    try out.append('[');
     try out.append(']');
     try out.append('>');
     return out.toOwnedSlice();
 }
 
-test "emitter round-trip: op:deliver-only parses as op:deliver-only record" {
+test "emitter round-trip: op:deliver-only parses as 2-field record" {
     const allocator = std.testing.allocator;
     const bytes = try encodeDeliverOnlyForTest(allocator, 3, "hello");
     defer allocator.free(bytes);
@@ -553,25 +833,30 @@ test "emitter round-trip: op:deliver-only parses as op:deliver-only record" {
     try std.testing.expect(v == .record);
     try std.testing.expect(v.record.label.* == .symbol);
     try std.testing.expectEqualStrings("op:deliver-only", v.record.label.symbol);
-    try std.testing.expectEqual(@as(usize, 3), v.record.fields.len);
+    try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);
+    // Field 1 is a list with method symbol as first element.
+    try std.testing.expect(v.record.fields[1] == .list);
+    try std.testing.expect(v.record.fields[1].list[0] == .symbol);
+    try std.testing.expectEqualStrings("hello", v.record.fields[1].list[0].symbol);
 }
 
 fn encodeDeliverForTest(allocator: std.mem.Allocator, to_position: u32, method: []const u8, answer_pos: u32) ![]u8 {
+    // Spec: <op:deliver <desc:export pos> [method-sym] answer-pos <desc:import-object pos>>
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<10'op:deliver");
-    try fmtAppend(&out, "<18'desc:import-object{d}+>", .{to_position});
+    try fmtAppend(&out, "<11'desc:export{d}+>", .{to_position});
+    try out.append('[');
     try fmtAppend(&out, "{d}'", .{method.len});
     try out.appendSlice(method);
-    try out.append('[');
     try out.append(']');
-    try fmtAppend(&out, "<11'desc:answer{d}+>", .{answer_pos});
+    try fmtAppend(&out, "{d}+", .{answer_pos});
     try fmtAppend(&out, "<18'desc:import-object{d}+>", .{answer_pos});
     try out.append('>');
     return out.toOwnedSlice();
 }
 
-test "emitter round-trip: op:deliver parses with 5 fields" {
+test "emitter round-trip: op:deliver parses with 4 fields (spec-conformant)" {
     const allocator = std.testing.allocator;
     const bytes = try encodeDeliverForTest(allocator, 7, "fetch", 4);
     defer allocator.free(bytes);
@@ -580,20 +865,23 @@ test "emitter round-trip: op:deliver parses with 5 fields" {
     defer v.deinitAll(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:deliver", v.record.label.symbol);
-    try std.testing.expectEqual(@as(usize, 5), v.record.fields.len);
-    // Field 3 is desc:answer.
+    try std.testing.expectEqual(@as(usize, 4), v.record.fields.len);
+    // Field 1 is args list with method as first element.
+    try std.testing.expect(v.record.fields[1] == .list);
+    try std.testing.expectEqualStrings("fetch", v.record.fields[1].list[0].symbol);
+    // Field 2 is answer-pos integer.
+    try std.testing.expect(v.record.fields[2] == .integer);
+    // Field 3 is resolve-me-desc.
     try std.testing.expect(v.record.fields[3] == .record);
-    try std.testing.expectEqualStrings("desc:answer", v.record.fields[3].record.label.symbol);
+    try std.testing.expectEqualStrings("desc:import-object", v.record.fields[3].record.label.symbol);
 }
 
-test "emitter round-trip: op:gc-exports parses as two-int record" {
+test "emitter round-trip: op:gc-exports list form parses" {
     const allocator = std.testing.allocator;
     var out = ByteList.init(allocator);
     defer out.deinit();
-    try out.appendSlice("<13'op:gc-exports");
-    try fmtAppend(&out, "{d}+", .{@as(u32, 1)});
-    try fmtAppend(&out, "{d}+", .{@as(u32, 2)});
-    try out.append('>');
+    // List form: <op:gc-exports [positions] [deltas]>
+    try out.appendSlice("<13'op:gc-exports[1+3+][2+4+]>");
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
@@ -601,21 +889,28 @@ test "emitter round-trip: op:gc-exports parses as two-int record" {
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:gc-exports", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);
+    // Both fields should be lists.
+    try std.testing.expect(v.record.fields[0] == .list);
+    try std.testing.expect(v.record.fields[1] == .list);
+    try std.testing.expectEqual(@as(usize, 2), v.record.fields[0].list.len);
+    try std.testing.expectEqual(@as(usize, 2), v.record.fields[1].list.len);
 }
 
-test "emitter round-trip: op:gc-answers parses" {
+test "emitter round-trip: op:gc-answers list form parses" {
     const allocator = std.testing.allocator;
     var out = ByteList.init(allocator);
     defer out.deinit();
-    try out.appendSlice("<13'op:gc-answers");
-    try fmtAppend(&out, "{d}+", .{@as(u32, 5)});
-    try out.append('>');
+    // List form: <op:gc-answers [positions]>
+    try out.appendSlice("<13'op:gc-answers[5+9+]>");
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
     defer v.deinitAll(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:gc-answers", v.record.label.symbol);
+    try std.testing.expectEqual(@as(usize, 1), v.record.fields.len);
+    try std.testing.expect(v.record.fields[0] == .list);
+    try std.testing.expectEqual(@as(usize, 2), v.record.fields[0].list.len);
 }
 
 test "emitter shape: op:fulfill with desc:answer + inline value parses" {
