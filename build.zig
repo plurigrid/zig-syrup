@@ -2185,6 +2185,19 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_gof_tests.step);
     test_step.dependOn(&run_tileable_gof_tests.step);
 
+    // Ziggit module (P2P jj change propagation via plastic-constant coloring)
+    const ziggit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/ziggit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ziggit_tests = b.addTest(.{ .root_module = ziggit_test_mod });
+    const run_ziggit_tests = b.addRunArtifact(ziggit_tests);
+    test_step.dependOn(&run_ziggit_tests.step);
+
+    const test_ziggit_step = b.step("test-ziggit", "Run ziggit P2P change propagation tests");
+    test_ziggit_step.dependOn(&run_ziggit_tests.step);
+
     // Message Framing module + tests
     const message_frame_mod = b.addModule("message_frame", .{
         .root_source_file = b.path("src/message_frame.zig"),
