@@ -410,13 +410,14 @@ test "dispatchCI: parentless plus → build, ergodic → run_tests, minus → va
     }
 }
 
-// Pull in zigbjj_{entropy, criticality, jj, narrative} tests so
-// `zig build test-ziggit` covers Phases 3, 4, 5, 7.
+// Pull in zigbjj_{entropy, criticality, jj, narrative, parity} tests so
+// `zig build test-ziggit` covers Phases 3, 4, 5, 7 + the parity harness.
 test {
     _ = @import("zigbjj_entropy.zig");
     _ = @import("zigbjj_criticality.zig");
     _ = @import("zigbjj_jj.zig");
     _ = @import("zigbjj_narrative.zig");
+    _ = @import("zigbjj_parity.zig");
 }
 
 test "dispatchCI: violated conservation → review_required" {
