@@ -209,7 +209,7 @@ test "WireDesc: parse desc:import-object" {
     const bytes = "<18'desc:import-object42+>";
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const desc = try WireDesc.fromValue(v);
     try std.testing.expectEqual(WireDesc{ .import_object = 42 }, desc);
     try std.testing.expect(!desc.isPromise());
@@ -220,7 +220,7 @@ test "WireDesc: parse desc:import-promise" {
     const bytes = "<19'desc:import-promise7+>";
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const desc = try WireDesc.fromValue(v);
     try std.testing.expectEqual(WireDesc{ .import_promise = 7 }, desc);
     try std.testing.expect(desc.isPromise());
@@ -231,7 +231,7 @@ test "WireDesc: parse desc:answer" {
     const bytes = "<11'desc:answer3+>";
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const desc = try WireDesc.fromValue(v);
     try std.testing.expectEqual(WireDesc{ .answer = 3 }, desc);
     try std.testing.expect(desc.isPromise());
@@ -242,7 +242,7 @@ test "WireDesc: parse desc:export" {
     const bytes = "<11'desc:export5+>";
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const desc = try WireDesc.fromValue(v);
     try std.testing.expectEqual(WireDesc{ .@"export" = 5 }, desc);
     try std.testing.expect(!desc.isPromise());
@@ -277,7 +277,7 @@ test "WireDesc: encodeAlloc round-trips" {
     defer allocator.free(bytes);
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const parsed = try WireDesc.fromValue(v);
     try std.testing.expectEqual(original, parsed);
 }

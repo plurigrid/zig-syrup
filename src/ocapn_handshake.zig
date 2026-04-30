@@ -294,7 +294,7 @@ test "encodeStartSession parses as record with gcrypt pubkey" {
 
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:start-session", v.record.label.symbol);
     try std.testing.expect(v.record.fields.len == 4);
@@ -312,7 +312,7 @@ test "gcrypt pubkey encode/decode round-trip" {
 
     var parser = syrup.Parser.init(sexp_bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const decoded = try decodeGcryptPubkey(v);
     try std.testing.expectEqualSlices(u8, &pk, &decoded);
 }
@@ -327,7 +327,7 @@ test "gcrypt signature encode/decode round-trip" {
 
     var parser = syrup.Parser.init(sexp_bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     const decoded = try decodeGcryptSignature(v);
     try std.testing.expectEqualSlices(u8, &sig, &decoded);
 }

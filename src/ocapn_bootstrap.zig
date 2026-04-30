@@ -314,7 +314,7 @@ test "encodeImportObjectAlloc produces parseable desc:import-object" {
 
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("desc:import-object", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 1), v.record.fields.len);

@@ -220,7 +220,7 @@ test "handoff-give encodes and parses as record" {
 
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("desc:handoff-give", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 5), v.record.fields.len);
@@ -244,7 +244,7 @@ test "sign + verify handoff-give end-to-end" {
 
     var parser = syrup.Parser.init(envelope_bytes, allocator);
     var env_val = try parser.parse();
-    defer env_val.deinitAll(allocator);
+    defer env_val.deinitContainers(allocator);
 
     const ok = try verifyGive(env_val, kp.pub_key, allocator);
     try std.testing.expect(ok);
@@ -295,7 +295,7 @@ test "Square C — corpus of 70 handoff-give envelopes all sign/verify" {
 
         var parser = syrup.Parser.init(envelope_bytes, allocator);
         var env_val = try parser.parse();
-        defer env_val.deinitAll(allocator);
+        defer env_val.deinitContainers(allocator);
 
         const ok = try verifyGive(env_val, kp.pub_key, allocator);
         std.testing.expect(ok) catch |e| {

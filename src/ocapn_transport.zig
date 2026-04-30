@@ -75,7 +75,8 @@ pub const OcapnConnection = struct {
     }
 
     /// Receive the next complete Syrup value. Reads more bytes as needed.
-    /// Caller owns the returned Value and must call `.deinit(allocator)`.
+    /// Caller owns the returned Value containers and must call `.deinitContainers(allocator)`.
+    /// Leaf string/symbol/bytes data borrows from the connection buffer — do NOT use deinitAll.
     pub fn recvValue(self: *OcapnConnection) !syrup.Value {
         if (!self.connected) return error.NotConnected;
 
@@ -177,7 +178,7 @@ test "streaming: single value round-trip" {
     defer conn.deinit();
 
     var v = try conn.recvValue();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expectEqual(@as(i64, 42), v.integer);
 
     sender.join();
@@ -206,15 +207,15 @@ test "streaming: back-to-back values, no framing" {
     defer conn.deinit();
 
     var v1 = try conn.recvValue();
-    defer v1.deinitAll(allocator);
+    defer v1.deinitContainers(allocator);
     try std.testing.expectEqual(@as(i64, 1), v1.integer);
 
     var v2 = try conn.recvValue();
-    defer v2.deinitAll(allocator);
+    defer v2.deinitContainers(allocator);
     try std.testing.expectEqual(@as(i64, 2), v2.integer);
 
     var v3 = try conn.recvValue();
-    defer v3.deinitAll(allocator);
+    defer v3.deinitContainers(allocator);
     try std.testing.expectEqualStrings("abc", v3.record.label.symbol);
 
     sender.join();
@@ -245,7 +246,7 @@ test "streaming: split value across reads" {
     defer conn.deinit();
 
     var v = try conn.recvValue();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expectEqualStrings("hello", v.record.label.symbol);
 
     sender.join();

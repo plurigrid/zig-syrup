@@ -96,7 +96,7 @@ pub const Vat = struct {
     /// Transitions handshake_sent → established.
     pub fn receiveHandshake(self: *Vat) !void {
         var v = try self.conn.recvValue();
-        defer v.deinitAll(self.allocator);
+        defer v.deinitContainers(self.allocator);
         if (v != .record) return error.InvalidHandshake;
         const r = v.record;
         if (r.label.* != .symbol) return error.InvalidHandshake;
@@ -559,13 +559,13 @@ pub const Vat = struct {
     };
 
     /// Block for one incoming op and classify it. The returned IncomingOp
-    /// borrows from the underlying `syrup.Value` — caller must `deinitAll`
+    /// borrows from the underlying `syrup.Value` — caller must `deinitContainers`
     /// the wrapping value after handling. For `fulfill` the promise has
     /// already been moved into the `AnswerTable` by `handleFulfill`, so the
     /// caller only needs to free the outer Value.
     pub fn recvAndDispatch(self: *Vat) !struct { op: IncomingOp, value: syrup.Value } {
         var v = try self.conn.recvValue();
-        errdefer v.deinitAll(self.allocator);
+        errdefer v.deinitContainers(self.allocator);
         if (v != .record) return .{ .op = .{ .unknown = v }, .value = v };
         const r = v.record;
         if (r.label.* != .symbol) return .{ .op = .{ .unknown = v }, .value = v };
@@ -829,7 +829,7 @@ test "emitter round-trip: op:deliver-only parses as 2-field record" {
     defer allocator.free(bytes);
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expect(v.record.label.* == .symbol);
     try std.testing.expectEqualStrings("op:deliver-only", v.record.label.symbol);
@@ -862,7 +862,7 @@ test "emitter round-trip: op:deliver parses with 4 fields (spec-conformant)" {
     defer allocator.free(bytes);
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:deliver", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 4), v.record.fields.len);
@@ -885,7 +885,7 @@ test "emitter round-trip: op:gc-exports list form parses" {
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:gc-exports", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);
@@ -905,7 +905,7 @@ test "emitter round-trip: op:gc-answers list form parses" {
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:gc-answers", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 1), v.record.fields.len);
@@ -928,7 +928,7 @@ test "emitter shape: op:fulfill with desc:answer + inline value parses" {
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:fulfill", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);
@@ -942,7 +942,7 @@ test "serveBootstrapFetch reason payloads parse as Syrup" {
     {
         var parser = syrup.Parser.init("<10'desc:error13'invalid-swiss>", allocator);
         var v = try parser.parse();
-        defer v.deinitAll(allocator);
+        defer v.deinitContainers(allocator);
         try std.testing.expect(v == .record);
         try std.testing.expectEqualStrings("desc:error", v.record.label.symbol);
         try std.testing.expectEqual(@as(usize, 1), v.record.fields.len);
@@ -952,7 +952,7 @@ test "serveBootstrapFetch reason payloads parse as Syrup" {
     {
         var parser = syrup.Parser.init("13'unknown-swiss", allocator);
         var v = try parser.parse();
-        defer v.deinitAll(allocator);
+        defer v.deinitContainers(allocator);
         try std.testing.expect(v == .symbol);
         try std.testing.expectEqualStrings("unknown-swiss", v.symbol);
     }
@@ -970,7 +970,7 @@ test "emitter shape: op:abort with reason string parses" {
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:abort", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 1), v.record.fields.len);
@@ -991,7 +991,7 @@ test "emitter shape: op:break with desc:answer + reason parses" {
 
     var parser = syrup.Parser.init(out.items, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("op:break", v.record.label.symbol);
     try std.testing.expectEqual(@as(usize, 2), v.record.fields.len);

@@ -1262,14 +1262,36 @@ pub const Parser = struct {
                 return Value.fromTagged(tag_val.string, &payload_alloc[0]);
             }
 
-            if (std.mem.eql(u8, name, "desc:error")) {
-                const message_val = try self.parse();
-                if (message_val != .string) return error.InvalidFormat;
-                const identifier_val = try self.parse();
-                if (identifier_val != .bytes) return error.InvalidFormat;
-                const data_val = try self.parse();
-                if (data_val != .dictionary) return error.InvalidFormat;
-                if (self.pos >= self.input.len or self.input[self.pos] != '>') return error.InvalidFormat;
+            if (std.mem.eql(u8, name, "desc:error")) desc_error: {
+                const saved_pos = self.pos;
+                const message_val = self.parse() catch {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                };
+                if (message_val != .string) {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                }
+                const identifier_val = self.parse() catch {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                };
+                if (identifier_val != .bytes) {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                }
+                const data_val = self.parse() catch {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                };
+                if (data_val != .dictionary) {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                }
+                if (self.pos >= self.input.len or self.input[self.pos] != '>') {
+                    self.pos = saved_pos;
+                    break :desc_error;
+                }
                 self.pos += 1;
 
                 const data_alloc = try self.allocator.alloc(Value, 1);

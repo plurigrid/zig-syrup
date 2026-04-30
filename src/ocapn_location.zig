@@ -324,7 +324,7 @@ test "location encode round-trip via Parser (spec shape: ocapn-peer, dict hints)
 
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
 
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("ocapn-peer", v.record.label.symbol);
@@ -351,7 +351,7 @@ test "location encode with non-empty hints emits dict" {
 
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
 
     try std.testing.expect(v.record.fields[2] == .dictionary);
     try std.testing.expectEqual(@as(usize, 2), v.record.fields[2].dictionary.len);
@@ -373,7 +373,7 @@ test "location fromValue accepts Racket-shaped (ocapn-node compat, string design
 
     var parser = syrup.Parser.init(buf.items, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
 
     const round = try Location.fromValue(v);
     try std.testing.expectEqual(Netlayer.onion, round.netlayer);
@@ -424,7 +424,7 @@ test "sturdyref wire record round-trip (ocapn-sturdyref)" {
 
     var parser = syrup.Parser.init(bytes, allocator);
     var v = try parser.parse();
-    defer v.deinitAll(allocator);
+    defer v.deinitContainers(allocator);
 
     try std.testing.expect(v == .record);
     try std.testing.expectEqualStrings("ocapn-sturdyref", v.record.label.symbol);
