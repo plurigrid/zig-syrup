@@ -44,6 +44,14 @@ pub const AGMReplayer = agm_ewig.AGMReplayer;
 pub const agm_isabelle = @import("agm_isabelle.zig");
 pub const AGMCheckResult = agm_isabelle.CheckResult;
 
+// Emergent Specification Discovery (curiosity-driven RL + AGM + Nash certs)
+pub const emerge = @import("emerge.zig");
+pub const ExplorationEngine = emerge.ExplorationEngine;
+pub const CuriosityModule = emerge.CuriosityModule;
+pub const EmergentSpec = emerge.EmergentSpec;
+pub const CompilerBackend = emerge.CompilerBackend;
+pub const NashCert = emerge.NashCert;
+
 // PufferLib FFI (zero-copy C ABI bridge)
 pub const puffer = @import("puffer_ffi.zig");
 pub const PufferEnv = puffer.Env;

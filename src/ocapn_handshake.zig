@@ -116,8 +116,11 @@ pub fn decodeGcryptSignature(v: syrup.Value) ![64]u8 {
 pub fn derivePublicId(allocator: Allocator, pub_key: [32]u8) ![32]u8 {
     const sexp_bytes = try encodeGcryptPubkey(allocator, pub_key);
     defer allocator.free(sexp_bytes);
-    const h1 = Sha256.hash(sexp_bytes, .{});
-    return Sha256.hash(&h1, .{});
+    var h1: [32]u8 = undefined;
+    Sha256.hash(sexp_bytes, &h1, .{});
+    var h2: [32]u8 = undefined;
+    Sha256.hash(&h1, &h2, .{});
+    return h2;
 }
 
 /// Derive the Session ID from two Public Identifiers.
@@ -133,7 +136,9 @@ pub fn deriveSessionId(id_a: [32]u8, id_b: [32]u8) [32]u8 {
     hasher.update(&first);
     hasher.update(&second);
     const h1 = hasher.finalResult();
-    return Sha256.hash(&h1, .{});
+    var h2: [32]u8 = undefined;
+    Sha256.hash(&h1, &h2, .{});
+    return h2;
 }
 
 pub const Signature = struct {

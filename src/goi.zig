@@ -468,7 +468,7 @@ pub const ProofNet = struct {
         node.visited = true;
         token.bounces += 1;
 
-        // Color mixing: token picks up node color via XOR
+        // Color coherence: token and node cohere via XOR
         token.color ^= node.color;
 
         switch (node.kind) {

@@ -2,8 +2,8 @@
 //!
 //! Closes the read→write loop between zig-syrup's disconnected color systems.
 //! Maps triadic classifications (balanced ternary triples from prigogine,
-//! spectral_tensor, continuation, czernowitz) to perceptually meaningful
-//! colors in HCL/RGB space.
+//! spectral_tensor, continuation, czernowitz) to color in HCL/RGB space.
+//! Color is color — unqualified. Objects cohere through color, not the reverse.
 //!
 //! The core mapping:
 //!   3 trits ∈ {-1, 0, +1}³ → 27 states → points in HCL color space
@@ -16,7 +16,7 @@
 //!
 //! Balance constraint: regime + pattern + temporal ≡ 0 (mod 3) means only
 //! 9 of 27 states are reachable — these 9 form a coset in (ℤ/3ℤ)³,
-//! and the plastic angle ensures maximal perceptual separation among them.
+//! and the plastic angle ensures maximal separation among them.
 //!
 //! References:
 //! - rainbow.zig: HCL↔RGB conversion, plastic/golden spirals
@@ -233,7 +233,7 @@ pub const TriadicColor = struct {
     }
 
     /// Construct from FEM spectral wavelength (380-780nm visible range)
-    /// Maps physical wavelength to perceptual trit triple:
+    /// Maps physical wavelength to trit triple:
     ///   t1 (hue region): violet/blue(-1), green(0), orange/red(+1)
     ///   t2 (saturation): monochromatic lines are vivid(+1)
     ///   t3 (brightness): follows luminous efficiency V(λ)

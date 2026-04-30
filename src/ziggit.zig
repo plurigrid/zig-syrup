@@ -256,6 +256,72 @@ pub fn dispatchCI(
 }
 
 // ============================================================================
+// Coherence Class taxonomy (from inflation arithmetic synthesis)
+// ============================================================================
+
+/// The four coherence classes under Omega_3 subobject classifier.
+/// Derived from exhaustive analysis of 21 substitution systems:
+///   A = universally coherent (Thue-Morse, look-and-say)
+///   B = periodically coherent (Fibonacci, metallic ratios)
+///   C = sparsely coherent (tribonacci, Penrose, tag-systems)
+///   D = never coherent (Chacon, Cantor, fractal-TM)
+pub const CoherenceClass = enum {
+    universal, // A: trit-sum = 0 at all depths > 0
+    periodic, // B: regular period p divides coherent depths
+    sparse, // C: isolated coherent depths, no short period
+    never, // D: permanent trit-drift, no coherence after depth 0
+
+    /// Map coherence class to CI strategy.
+    pub fn ciStrategy(self: CoherenceClass) CIAction {
+        return switch (self) {
+            .universal => .build, // always safe
+            .periodic => .run_tests, // trust at period boundaries
+            .sparse => .validate, // need explicit checks
+            .never => .review_required, // structural obstruction
+        };
+    }
+};
+
+/// Classify a coherence trace (trit-sums at each depth, starting from depth 0).
+/// Expects at least 2 entries. Depth 0 is ignored (seed, trivially coherent).
+pub fn classifyCoherence(trit_sums: []const Trit) CoherenceClass {
+    if (trit_sums.len < 2) return .sparse;
+
+    const body = trit_sums[1..]; // skip depth 0
+
+    // Check if all depths > 0 are coherent
+    var all_coherent = true;
+    var any_coherent = false;
+    for (body) |t| {
+        if (t != .ergodic) {
+            all_coherent = false;
+        } else {
+            any_coherent = true;
+        }
+    }
+    if (all_coherent) return .universal;
+    if (!any_coherent) return .never;
+
+    // Check for periodicity: try periods 2..body.len/2
+    const len = body.len;
+    var p: usize = 2;
+    while (p <= len / 2) : (p += 1) {
+        var is_periodic = true;
+        for (0..len) |i| {
+            const coherent_at_i = body[i] == .ergodic;
+            const coherent_at_mod = body[i % p] == .ergodic;
+            if (coherent_at_i != coherent_at_mod) {
+                is_periodic = false;
+                break;
+            }
+        }
+        if (is_periodic) return .periodic;
+    }
+
+    return .sparse;
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -408,6 +474,43 @@ test "dispatchCI: parentless plus → build, ergodic → run_tests, minus → va
         };
         try std.testing.expectEqual(expected, action);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Coherence Class taxonomy
+// ---------------------------------------------------------------------------
+
+test "classifyCoherence: all-ergodic → universal (Class A, Thue-Morse)" {
+    // Thue-Morse: depth 0 arbitrary, depths 1..7 all coherent
+    const trace = [_]Trit{ .minus, .ergodic, .ergodic, .ergodic, .ergodic, .ergodic, .ergodic, .ergodic };
+    try std.testing.expectEqual(CoherenceClass.universal, classifyCoherence(&trace));
+}
+
+test "classifyCoherence: Fibonacci pattern → periodic (Class B)" {
+    // Fibonacci: coherent at 0, 4, 8 → period 4 in body (depths 1..8)
+    // depth:  0  1  2  3  4  5  6  7  8
+    // trit:   e  +  +  -  e  -  -  +  e   (e=ergodic=coherent)
+    const trace = [_]Trit{ .ergodic, .plus, .plus, .minus, .ergodic, .minus, .minus, .plus, .ergodic };
+    try std.testing.expectEqual(CoherenceClass.periodic, classifyCoherence(&trace));
+}
+
+test "classifyCoherence: never coherent → never (Class D)" {
+    // Chacon: constant sum 1 at all non-zero depths
+    const trace = [_]Trit{ .minus, .plus, .plus, .plus, .plus, .plus };
+    try std.testing.expectEqual(CoherenceClass.never, classifyCoherence(&trace));
+}
+
+test "classifyCoherence: sparse coherence (Class C)" {
+    // Tribonacci-like: coherent only at depth 7 out of 1..8
+    const trace = [_]Trit{ .ergodic, .plus, .plus, .minus, .plus, .plus, .plus, .ergodic, .minus };
+    try std.testing.expectEqual(CoherenceClass.sparse, classifyCoherence(&trace));
+}
+
+test "CoherenceClass.ciStrategy mapping" {
+    try std.testing.expectEqual(CIAction.build, CoherenceClass.universal.ciStrategy());
+    try std.testing.expectEqual(CIAction.run_tests, CoherenceClass.periodic.ciStrategy());
+    try std.testing.expectEqual(CIAction.validate, CoherenceClass.sparse.ciStrategy());
+    try std.testing.expectEqual(CIAction.review_required, CoherenceClass.never.ciStrategy());
 }
 
 // Pull in zigbjj_{entropy, criticality, jj, narrative, parity} tests so

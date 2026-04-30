@@ -944,6 +944,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Color Memo module (old C-style extern, static cache, no generics)
+    const color_memo_mod = b.addModule("color_memo", .{
+        .root_source_file = b.path("src/color_memo.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Tileable Shader module (pixel-perfect embarrassingly parallel tiles)
     const tileable_shader_mod = b.addModule("tileable_shader", .{
         .root_source_file = b.path("src/tileable_shader.zig"),
@@ -964,6 +971,199 @@ pub fn build(b: *std.Build) void {
     const tileable_shader_tests = b.addTest(.{ .root_module = tileable_shader_test_mod });
     const run_tileable_shader_tests = b.addRunArtifact(tileable_shader_tests);
     _ = run_tileable_shader_tests;
+
+    // Self-Play Color Curriculum module (3-MATCH verified, carry-free GF(3))
+    const self_play_color_mod = b.addModule("self_play_color", .{
+        .root_source_file = b.path("src/self_play_color.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    self_play_color_mod.addImport("lux_color", lux_color_mod);
+
+    const self_play_color_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/self_play_color.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    self_play_color_test_mod.addImport("lux_color", lux_color_mod);
+    const self_play_color_tests = b.addTest(.{ .root_module = self_play_color_test_mod });
+    const run_self_play_color_tests = b.addRunArtifact(self_play_color_tests);
+
+    const test_self_play_step = b.step("test-self-play-color", "Run self-play color curriculum tests");
+    test_self_play_step.dependOn(&run_self_play_color_tests.step);
+
+    // SET Card Game module (zero-copy GF(3)^4, Möbius inversion, evolutionary)
+    const set_game_mod = b.addModule("set_game", .{
+        .root_source_file = b.path("src/set_game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    set_game_mod.addImport("lux_color", lux_color_mod);
+
+    const set_game_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/set_game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    set_game_test_mod.addImport("lux_color", lux_color_mod);
+    const set_game_tests = b.addTest(.{ .root_module = set_game_test_mod });
+    const run_set_game_tests = b.addRunArtifact(set_game_tests);
+
+    const test_set_game_step = b.step("test-set-game", "Run SET card game tests");
+    test_set_game_step.dependOn(&run_set_game_tests.step);
+
+    // SET Card Game CLI (JSON-line protocol for Emacs comint)
+    const set_game_cli_mod = b.createModule(.{
+        .root_source_file = b.path("src/set_game_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    set_game_cli_mod.addImport("set_game", set_game_mod);
+    set_game_cli_mod.addImport("lux_color", lux_color_mod);
+    const set_game_cli = b.addExecutable(.{
+        .name = "set-game-cli",
+        .root_module = set_game_cli_mod,
+    });
+    b.installArtifact(set_game_cli);
+
+    const run_set_game_cli = b.addRunArtifact(set_game_cli);
+    if (b.args) |args| run_set_game_cli.addArgs(args);
+    const run_set_game_step = b.step("run-set-game", "Run SET card game CLI");
+    run_set_game_step.dependOn(&run_set_game_cli.step);
+
+    // ========================================
+    // SET RL Open Game (compositionality obstructions, 3-MATCH)
+    // ========================================
+    const set_rl_open_game_mod = b.addModule("set_rl_open_game", .{
+        .root_source_file = b.path("src/set_rl_open_game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    set_rl_open_game_mod.addImport("set_game", set_game_mod);
+    set_rl_open_game_mod.addImport("lux_color", lux_color_mod);
+
+    const set_rl_open_game_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/set_rl_open_game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    set_rl_open_game_test_mod.addImport("set_game", set_game_mod);
+    set_rl_open_game_test_mod.addImport("lux_color", lux_color_mod);
+    const set_rl_open_game_tests = b.addTest(.{ .root_module = set_rl_open_game_test_mod });
+    const run_set_rl_open_game_tests = b.addRunArtifact(set_rl_open_game_tests);
+    const test_set_rl_step = b.step("test-set-rl-open-game", "Run SET RL open game tests");
+    test_set_rl_step.dependOn(&run_set_rl_open_game_tests.step);
+
+    // ========================================
+    // OSC Terminal Color Query (OSC 10/11/4 + OSC 1069)
+    // ========================================
+    const osc_query_mod = b.addModule("osc_query", .{
+        .root_source_file = b.path("src/osc_query.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    osc_query_mod.addImport("lux_color", lux_color_mod);
+
+    const osc_query_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/osc_query.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    osc_query_test_mod.addImport("lux_color", lux_color_mod);
+    const osc_query_tests = b.addTest(.{ .root_module = osc_query_test_mod });
+    const run_osc_query_tests = b.addRunArtifact(osc_query_tests);
+    const test_osc_query_step = b.step("test-osc-query", "Run OSC query tests");
+    test_osc_query_step.dependOn(&run_osc_query_tests.step);
+
+    // ========================================
+    // Gumbel-Softmax Trit Relaxation (Option B)
+    // ========================================
+    const gumbel_trit_mod = b.addModule("gumbel_trit", .{
+        .root_source_file = b.path("src/gumbel_trit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    gumbel_trit_mod.addImport("lux_color", lux_color_mod);
+
+    const gumbel_trit_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/gumbel_trit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    gumbel_trit_test_mod.addImport("lux_color", lux_color_mod);
+    const gumbel_trit_tests = b.addTest(.{ .root_module = gumbel_trit_test_mod });
+    const run_gumbel_trit_tests = b.addRunArtifact(gumbel_trit_tests);
+    const test_gumbel_trit_step = b.step("test-gumbel-trit", "Run Gumbel-Softmax trit tests");
+    test_gumbel_trit_step.dependOn(&run_gumbel_trit_tests.step);
+
+    // Llamafile Reward Model (LLM-as-critic for RL color curriculum)
+    const llamafile_reward_mod = b.addModule("llamafile_reward", .{
+        .root_source_file = b.path("src/llamafile_reward.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    llamafile_reward_mod.addImport("lux_color", lux_color_mod);
+
+    const llamafile_reward_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/llamafile_reward.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    llamafile_reward_test_mod.addImport("lux_color", lux_color_mod);
+    const llamafile_reward_tests = b.addTest(.{ .root_module = llamafile_reward_test_mod });
+    const run_llamafile_reward_tests = b.addRunArtifact(llamafile_reward_tests);
+    const test_llamafile_reward_step = b.step("test-llamafile-reward", "Run llamafile reward model tests");
+    test_llamafile_reward_step.dependOn(&run_llamafile_reward_tests.step);
+
+    // ========================================
+    // Tabular REINFORCE Color Policy (Option C)
+    // ========================================
+    const color_policy_mod = b.addModule("color_policy", .{
+        .root_source_file = b.path("src/color_policy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    color_policy_mod.addImport("lux_color", lux_color_mod);
+    color_policy_mod.addImport("llamafile_reward", llamafile_reward_mod);
+
+    const color_policy_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/color_policy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    color_policy_test_mod.addImport("lux_color", lux_color_mod);
+    color_policy_test_mod.addImport("llamafile_reward", llamafile_reward_mod);
+    const color_policy_tests = b.addTest(.{ .root_module = color_policy_test_mod });
+    const run_color_policy_tests = b.addRunArtifact(color_policy_tests);
+    const test_color_policy_step = b.step("test-color-policy", "Run color policy tests");
+    test_color_policy_step.dependOn(&run_color_policy_tests.step);
+
+    // ========================================
+    // OSC 1069 Learnable Color Protocol (Options A+B+C synthesis)
+    // ========================================
+    const osc1069_mod = b.addModule("osc1069", .{
+        .root_source_file = b.path("src/osc1069.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    osc1069_mod.addImport("lux_color", lux_color_mod);
+    osc1069_mod.addImport("osc_query", osc_query_mod);
+    osc1069_mod.addImport("gumbel_trit", gumbel_trit_mod);
+    osc1069_mod.addImport("color_policy", color_policy_mod);
+
+    const osc1069_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/osc1069.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    osc1069_test_mod.addImport("lux_color", lux_color_mod);
+    osc1069_test_mod.addImport("osc_query", osc_query_mod);
+    osc1069_test_mod.addImport("gumbel_trit", gumbel_trit_mod);
+    osc1069_test_mod.addImport("color_policy", color_policy_mod);
+    const osc1069_tests = b.addTest(.{ .root_module = osc1069_test_mod });
+    const run_osc1069_tests = b.addRunArtifact(osc1069_tests);
+    const test_osc1069_step = b.step("test-osc1069", "Run OSC 1069 learnable color tests");
+    test_osc1069_step.dependOn(&run_osc1069_tests.step);
 
     // ========================================
     // Worlds Module (A/B Testing, Multiplayer, OpenBCI Integration)
@@ -2009,6 +2209,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_transport_mod.addImport("syrup", syrup_mod);
+    ocapn_transport_mod.addImport("compat", compat_mod);
     const ocapn_bootstrap_mod = b.addModule("ocapn_bootstrap", .{
         .root_source_file = b.path("src/ocapn_bootstrap.zig"),
         .target = target,
@@ -2092,8 +2293,15 @@ pub fn build(b: *std.Build) void {
     const stranded_run_step = b.step("test-stranded-run", "Run tests inside the 8 stranded-on-main files");
     stranded_run_step.dependOn(&run_stranded_tests.step);
 
+    // Color memo tests (old C-style extern)
+    const color_memo_tests = b.addTest(.{ .root_module = color_memo_mod });
+    const run_color_memo_tests = b.addRunArtifact(color_memo_tests);
+    const color_memo_test_step = b.step("test-color-memo", "Run color_memo.zig tests");
+    color_memo_test_step.dependOn(&run_color_memo_tests.step);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
+    test_step.dependOn(&run_color_memo_tests.step);
     test_step.dependOn(&run_stranded_tests.step); // run tests in the 8 novel files
     test_step.dependOn(&run_cap_tests.step);
     test_step.dependOn(&run_vat_tests.step);
@@ -3310,6 +3518,17 @@ pub fn build(b: *std.Build) void {
     });
     nc_backend_mod.addImport("retty", retty_mod);
 
+    // TranslateC for notcurses (0.16-forward pattern: replaces @cImport)
+    const nc_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c_headers/notcurses.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    nc_translate_c.addSystemIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    nc_translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    nc_backend_mod.addImport("c", nc_translate_c.createModule());
+
     // Simple TCP module
     const simple_tcp_mod = b.createModule(.{
         .root_source_file = b.path("src/simple_tcp.zig"),
@@ -3749,4 +3968,7 @@ pub fn build(b: *std.Build) void {
     const run_beeper_client_tests = b.addRunArtifact(beeper_client_tests);
     const test_beeper_step = b.step("test-beeper", "Run Beeper client tests");
     test_beeper_step.dependOn(&run_beeper_client_tests.step);
+
+    test_step.dependOn(&run_self_play_color_tests.step); // self-play color curriculum
+    test_step.dependOn(&run_set_game_tests.step); // SET card game
 }

@@ -1,20 +1,20 @@
-//! Color Bandwidth Test — Perceptual channel capacity measurement
+//! Color Bandwidth Test — channel capacity measurement
 //!
-//! Implements the PerceptualColourMaps.jl / Gay.jl protocol:
+//! Implements the ColourMaps.jl / Gay.jl protocol:
 //! every interaction tests color distinguishability at three checkpoints:
 //!   1. FIRST  — opening color (gamut check, contrast against background)
 //!   2. LAST   — closing color (drift/collapse detection)
 //!   3. RANDOM — spot-check at a random index (uniform sampling)
 //!
 //! Based on:
-//!   - Peter Kovesi, PerceptualColourMaps.jl: arc length in CIELAB ≈ perceptual difference
+//!   - Peter Kovesi, ColourMaps.jl: arc length in CIELAB ≈ color difference
 //!   - Gay.jl: SplitMix64 deterministic color generation
 //!   - Nørretranders: 11M bits/sec → 40 bits/sec (the User Illusion)
-//!     The color channel bandwidth IS those 40 bits — what survives perceptual filtering
+//!     The color channel bandwidth IS those 40 bits — what survives filtering
 //!
 //! The "positionally dependent noise → color" distillation:
 //!   atmospheric noise at a geographic position + temporal seed → SplitMix64 →
-//!   deterministic hue → CIELAB perceptual distance → bandwidth in bits
+//!   deterministic hue → CIELAB distance → bandwidth in bits
 //!
 //! Usage: call `testBandwidth(seed, n_colors)` to get a BandwidthReport with
 //! per-checkpoint Delta-E values and estimated channel capacity.
@@ -40,7 +40,7 @@ pub fn splitmix64(seed: u64, index: u64) u64 {
 }
 
 // =============================================================================
-// CIELAB Color Space (perceptually uniform)
+// CIELAB Color Space (uniform)
 // =============================================================================
 
 pub const Lab = struct {
@@ -107,10 +107,10 @@ pub fn rgbToLab(rgb: RGB) Lab {
 }
 
 // =============================================================================
-// CIEDE2000 Delta-E (perceptual color difference)
+// CIEDE2000 Delta-E (color difference)
 // =============================================================================
 
-/// CIEDE2000 perceptual color distance.
+/// CIEDE2000 color distance.
 /// Delta-E < 1.0 is imperceptible to most observers.
 /// Delta-E 1-2 is perceptible on close inspection.
 /// Delta-E > 5 is clearly different.
@@ -203,12 +203,12 @@ pub fn ciede2000(lab1: Lab, lab2: Lab) f32 {
 
 pub fn seedToRgb(seed: u64, index: u64) RGB {
     const val = splitmix64(seed, index);
-    // Extract 10 bits each for H, S, L (matches Gay.jl perceptual distribution)
+    // Extract 10 bits each for H, S, L (matches Gay.jl distribution)
     const h_raw = @as(f32, @floatFromInt((val >> 0) & 0x3FF)) / 1023.0; // [0, 1]
     const s_raw = @as(f32, @floatFromInt((val >> 10) & 0x3FF)) / 1023.0;
     const l_raw = @as(f32, @floatFromInt((val >> 20) & 0x3FF)) / 1023.0;
 
-    // Perceptual mapping: constrain S and L for distinguishability
+    // Constrain S and L for distinguishability
     const h = h_raw * 360.0;
     const s = 0.4 + s_raw * 0.5; // [0.4, 0.9] — avoid grays
     const l = 0.3 + l_raw * 0.4; // [0.3, 0.7] — avoid too dark/light
@@ -264,9 +264,9 @@ pub const BandwidthReport = struct {
     random: Checkpoint,
 
     // Global stats
-    min_delta_e: f32, // Minimum perceptual distance in sequence
-    mean_delta_e: f32, // Mean perceptual distance between adjacent pairs
-    max_delta_e: f32, // Maximum perceptual distance
+    min_delta_e: f32, // Minimum color distance in sequence
+    mean_delta_e: f32, // Mean color distance between adjacent pairs
+    max_delta_e: f32, // Maximum color distance
     estimated_bits: f32, // log2(gamut_volume / min_distinguishable_volume)
     bandwidth_ok: bool, // All three checkpoints pass JND threshold
 
@@ -304,8 +304,8 @@ pub const BandwidthReport = struct {
 // =============================================================================
 
 /// JND (Just Noticeable Difference) threshold in Delta-E units.
-/// 1.0 is the standard perceptual threshold (Mahy et al. 1994).
-/// Kovesi uses 2.0 for "clearly different" in PerceptualColourMaps.jl.
+/// 1.0 is the standard threshold (Mahy et al. 1994).
+/// Kovesi uses 2.0 for "clearly different" in ColourMaps.jl.
 pub const JND_THRESHOLD: f32 = 1.0;
 
 /// Test color bandwidth for a seed over n_colors.
@@ -443,13 +443,13 @@ fn zeroBandwidth(seed: u64, n: u64) BandwidthReport {
 }
 
 // =============================================================================
-// Spectral attenuation: graph expansion bounds perceptual capacity
+// Spectral attenuation: graph expansion bounds channel capacity
 // =============================================================================
 
-/// Effective bandwidth = perceptual capacity * spectral gap.
+/// Effective bandwidth = channel capacity * spectral gap.
 ///
 /// The spectral gap of the interaction graph determines what fraction of
-/// perceptual channel capacity actually propagates across the network.
+/// channel capacity actually propagates across the network.
 ///   gap ~ 1.0 (Ramanujan): full capacity propagates (optimal mixing)
 ///   gap ~ 0.0 (localized): capacity collapses (disconnected subgroups)
 ///
@@ -480,7 +480,7 @@ pub fn attenuateBySpectralGap(report: BandwidthReport, spectral_gap: f32) Bandwi
 // Sweep bandwidth: parallel task coloring with spectral gap validation
 // =============================================================================
 
-/// Measures whether N parallel sweeps are perceptually distinguishable.
+/// Measures whether N parallel sweeps are distinguishable.
 /// Each sweep gets a deterministic color from the same seed. The spectral
 /// gap encodes task orthogonality: independent sweeps have gap ~1, coupled
 /// sweeps degrade toward 0.
@@ -623,7 +623,7 @@ test "CIEDE2000 magenta has no wavelength" {
     const de_red = ciede2000(magenta_lab, red_lab);
     const de_blue = ciede2000(magenta_lab, blue_lab);
 
-    // Magenta is perceptually between red and blue but distinct from both
+    // Magenta is between red and blue but distinct from both
     try std.testing.expect(de_red > 10);
     try std.testing.expect(de_blue > 10);
 }

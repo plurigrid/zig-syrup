@@ -4,7 +4,7 @@
 //!   gf3_palette.zig  → GF(3)^5 cyclotomic address (standard part)
 //!   splitmix_trit.zig → SPI-compatible deterministic color generation
 //!   lux_color.zig    → operadic composition with golden angle rotation
-//!   hyperreal.zig    → infinitesimal sub-perceptual entropy
+//!   hyperreal.zig    → infinitesimal entropy
 //!   color_simd.zig   → SIMD batch projection
 //!
 //! Referential transparency: ColorValue.at(seed, index) is a pure function.
@@ -162,7 +162,7 @@ fn colorAtRaw(seed: u64, index: u64) u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Infinitesimal (f16 triple for hyperreal sub-perceptual entropy)
+// Infinitesimal (f16 triple for hyperreal infinitesimal entropy)
 // ---------------------------------------------------------------------------
 
 pub const Infinitesimal = struct {
@@ -326,7 +326,7 @@ pub const GOLDEN_ANGLE: f32 = 137.5077640500378;
 /// Carries its full algebraic provenance:
 ///   - trit_word: GF(3)^5 cyclotomic address (standard part)
 ///   - depth: operadic nesting depth
-///   - infinitesimal: hyperreal sub-perceptual entropy
+///   - infinitesimal: hyperreal infinitesimal entropy
 ///   - seed_fingerprint: SPI provenance (truncated hash of seed+index)
 ///
 /// Construction is pure. No mutation. Leibniz substitutability holds:
@@ -376,7 +376,7 @@ pub const ColorValue = struct {
         };
     }
 
-    /// Operadic composition: color of (op applied to args).
+    /// Operadic composition: color through which (op applied to args) coheres.
     ///
     /// Implements category-colored operad partial composition o_i
     /// (Trnka 2023, TAC Vol. 39, Def. 2.2):

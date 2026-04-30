@@ -21,7 +21,7 @@
 //!   C₀C₁: chroma/sat     9 levels                  → HSL saturation × value
 //!
 //! The CNOT₃ gate from entangle.zig operates on any individual trit,
-//! rotating that perceptual dimension independently.
+//! rotating that dimension independently.
 
 const std = @import("std");
 const entangle = @import("entangle.zig");
@@ -66,7 +66,7 @@ pub const TritWord = struct {
     }
 
     /// Apply CNOT₃ to a specific trit position.
-    /// Rotates that perceptual dimension by the control trit.
+    /// Rotates that dimension by the control trit.
     pub fn applyCNOT3(self: TritWord, position: u3, control: Trit) TritWord {
         if (position >= 5) return self;
         var result = self;

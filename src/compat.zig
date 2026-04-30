@@ -21,3 +21,14 @@ pub fn stdinRead(buf: []u8) usize {
 }
 
 pub const Mutex = std.Thread.Mutex;
+
+// Re-export std.net types for ocapn_transport.zig
+pub const Stream = std.net.Stream;
+pub const Server = std.net.Server;
+pub const Address = std.net.Address;
+pub const tcpConnectToAddress = std.net.tcpConnectToAddress;
+
+// ArrayListUnmanaged empty initializer
+pub fn emptyList(comptime T: type) std.ArrayListUnmanaged(T) {
+    return .{};
+}

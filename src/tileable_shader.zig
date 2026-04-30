@@ -104,7 +104,7 @@ pub const ShaderFn = *const fn (f32, f32, u64) u32;
 
 /// A single tile in the tiled grid.
 /// Contains TILE_SIZE x TILE_SIZE pixels.
-/// Each pixel color is computed from the shader function.
+/// Each pixel coheres through color via the shader function.
 pub const Tile = struct {
     /// Tile coordinates in the grid
     tx: u32,

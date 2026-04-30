@@ -1,8 +1,8 @@
 //! Homoiconic Colored Parentheses for Cathode Ray Displays
 //!
 //! Renders S-expressions with rainbow parentheses using all 16.7M colors
-//! available on 24-bit digital displays. The color assignment follows
-//! mathematical principles ensuring maximal perceptual dispersion.
+//! available on 24-bit displays. The color assignment follows
+//! mathematical principles ensuring maximal dispersion.
 //!
 //! Key concepts:
 //! - Golden Angle (φ⁻¹ × 360° ≈ 137.508°): Sunflower spiral hue rotation
@@ -146,7 +146,7 @@ fn fastCos(degrees: f64) f64 {
     return cos_table[idx] * (1.0 - frac) + cos_table[next_idx] * frac;
 }
 
-/// HCL color (Hue-Chroma-Lightness, perceptually uniform)
+/// HCL (Hue-Chroma-Lightness, uniform)
 pub const HCL = struct {
     h: f64, // Hue in degrees [0, 360)
     c: f64, // Chroma [0, ~1.3]

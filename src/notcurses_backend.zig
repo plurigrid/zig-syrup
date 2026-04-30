@@ -1,9 +1,8 @@
 const std = @import("std");
 const retty = @import("retty");
 
-const c = @cImport({
-    @cInclude("notcurses/notcurses.h");
-});
+// 0.16 pattern: @cImport deprecated → build.zig addTranslateC provides "c" module
+const c = @import("c");
 
 pub const NotcursesBackend = struct {
     nc: *c.notcurses,

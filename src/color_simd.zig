@@ -43,7 +43,7 @@ pub const Color = struct {
     }
 };
 
-/// HCL (cylindrical perceptual color space)
+/// HCL (cylindrical color space)
 pub const HCL = struct {
     h: f32, // Hue [0, 360)
     c: f32, // Chroma [0, 1+]
@@ -149,7 +149,7 @@ pub fn rgb_to_hcl_batch(colors: []const Color, allocator: std.mem.Allocator) ![]
         const min_val = @min(r_vec, @min(g_vec, b_vec));
         const chroma_vec = max_val - min_val;
 
-        // RGB → Luminance (perceptual)
+        // RGB → Luminance
         const lum_vec = @as(ColorVec4, @splat(0.299)) * r_vec +
             @as(ColorVec4, @splat(0.587)) * g_vec +
             @as(ColorVec4, @splat(0.114)) * b_vec;

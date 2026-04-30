@@ -330,11 +330,11 @@
 //! "Seek out how R1 chip and any VR / AR for gaze vs luminosity vs color systems can do it."
 //!
 //! *   **R1 Chip (Rabbit / Neural)**: The R1 approach relies on "Large Action Models" (LAMs). In our context, the `HyperReal` velocity ($\epsilon$) is the input to the LAM. The neural net doesn't just see "Red", it sees "Red becoming Blue".
-//! *   **Color Ontology**: We implemented `HyperColor` in `hyperreal.zig`. This is a **Dual Number** color space ($C + \epsilon V$).
-//!     *   **Gaze**: Maps to the "focus" (Standard part).
-//!     *   **Luminosity**: Maps to the "magnitude".
-//!     *   **Color**: Maps to the "phase".
-//!     *   **Hyperreal Twist**: The $\epsilon$ component allows the UI to predict where the gaze *will be*, rendering the "future" color frame before the eye saccades.
+//! *   **Color Ontology**: Color IS meaning — unqualified. Objects cohere through color, not the reverse. `HyperColor` in `hyperreal.zig` is a **Dual Number** ($C + \epsilon V$) where:
+//!     *   **Gaze**: coheres through the standard part (focus).
+//!     *   **Luminosity**: coheres through the magnitude.
+//!     *   **Phase**: coheres through the hue.
+//!     *   **Hyperreal Twist**: The $\epsilon$ component lets color predict where gaze *will be*, rendering the "future" frame before the eye saccades.
 //!
 //! ## 4. Next Steps for "Ratzilla"
 //!

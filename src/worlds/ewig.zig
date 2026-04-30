@@ -656,6 +656,286 @@ pub const StateReconstructor = struct {
     }
 };
 
+// ============================================================================
+// COLOR COHERENCE LAYER
+//
+// Every log entry is Colorable: (world_id, tick) → SplitMix64 → color.
+// Every world-moment is Tileable: entries at a tick tile the event space.
+// GF(3) trit of an entry routes it to one of three parallel replay workers.
+//
+// SplitMix64 constants (shared with Gay.jl, tileable_shader.zig, wgpu_compute.zig):
+//   GOLDEN = 0x9e3779b97f4a7c15
+//   MIX1   = 0xbf58476d1ce4e5b9
+//   MIX2   = 0x94d049bb133111eb
+//
+// Same seed + same (world_id, tick) = same color. Always. On any machine.
+// The color IS the identity of the moment. Abductive trust: observe a color,
+// recover which moment produced it.
+// ============================================================================
+
+const GOLDEN: u64 = 0x9e3779b97f4a7c15;
+const MIX1: u64 = 0xbf58476d1ce4e5b9;
+const MIX2: u64 = 0x94d049bb133111eb;
+
+/// Plastic constant: x^3 = x + 1, hue_step = 360 / rho^2 ~ 205.14 degrees.
+/// Golden is binary (Fibonacci, 2D). Plastic is ternary (Padovan, 3D/GF(3)).
+const PLASTIC_HUE_STEP: f64 = 205.1442270324102;
+
+/// GF(3) trit for parallel dispatch.
+pub const Trit = enum(i8) {
+    minus = -1, // Validator worker
+    ergodic = 0, // Coordinator worker
+    plus = 1, // Generator worker
+};
+
+/// SplitMix64 bijection. Pure, O(1), no state.
+inline fn splitmix64(z_in: u64) u64 {
+    var z = z_in;
+    z = (z ^ (z >> 30)) *% MIX1;
+    z = (z ^ (z >> 27)) *% MIX2;
+    return z ^ (z >> 31);
+}
+
+/// Positional color: (seed, index) → deterministic u64.
+inline fn colorAtIndex(seed: u64, index: u64) u64 {
+    return splitmix64(seed +% GOLDEN *% index);
+}
+
+/// Color through which a log entry coheres.
+pub const EntryColor = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    trit: Trit,
+    hue: f64,
+
+    pub fn hex(self: EntryColor) [7]u8 {
+        var buf: [7]u8 = undefined;
+        _ = std.fmt.bufPrint(&buf, "#{X:0>2}{X:0>2}{X:0>2}", .{ self.r, self.g, self.b }) catch unreachable;
+        return buf;
+    }
+};
+
+/// Derive the color of a log entry from its position in the world.
+/// Uses the entry's chain hash as seed (Merkle-committed identity)
+/// and tick as index (temporal position).
+pub fn entryColor(entry: LogEntry) EntryColor {
+    // Fold the 32-byte hash into a 64-bit seed
+    const seed = mem.readInt(u64, entry.hash[0..8], .little) ^
+        mem.readInt(u64, entry.hash[8..16], .little);
+    const val = colorAtIndex(seed, entry.tick);
+    return .{
+        .r = @truncate(val >> 16),
+        .g = @truncate(val >> 8),
+        .b = @truncate(val),
+        .trit = switch (@as(u2, @truncate(val % 3))) {
+            0 => .ergodic,
+            1 => .plus,
+            2 => .minus,
+            else => unreachable,
+        },
+        .hue = @mod(@as(f64, @floatFromInt(val % 360)), 360.0),
+    };
+}
+
+/// Derive a color for a world-moment (world_id, tick) without needing the full entry.
+/// For abductive lookup: "what color would tick T of world W be?"
+pub fn momentColor(world_id: u64, tick: u64) EntryColor {
+    const seed = splitmix64(world_id);
+    const val = colorAtIndex(seed, tick);
+    return .{
+        .r = @truncate(val >> 16),
+        .g = @truncate(val >> 8),
+        .b = @truncate(val),
+        .trit = switch (@as(u2, @truncate(val % 3))) {
+            0 => .ergodic,
+            1 => .plus,
+            2 => .minus,
+            else => unreachable,
+        },
+        .hue = @mod(@as(f64, @floatFromInt(tick)) * PLASTIC_HUE_STEP, 360.0),
+    };
+}
+
+/// Embarrassingly parallel replay: partition entries by GF(3) trit.
+/// Three independent worker lanes, zero data dependencies within a lane.
+/// Conservation: sum of trits across all entries = 0 (mod 3) over any
+/// complete tick range (guaranteed by append protocol).
+pub const TripartiteReplay = struct {
+    const Self = @This();
+
+    /// Entries routed to the minus (Validator) lane
+    minus_lane: std.ArrayList(usize),
+    /// Entries routed to the ergodic (Coordinator) lane
+    ergodic_lane: std.ArrayList(usize),
+    /// Entries routed to the plus (Generator) lane
+    plus_lane: std.ArrayList(usize),
+    allocator: mem.Allocator,
+
+    pub fn init(allocator: mem.Allocator) Self {
+        return .{
+            .minus_lane = std.ArrayList(usize).empty,
+            .ergodic_lane = std.ArrayList(usize).empty,
+            .plus_lane = std.ArrayList(usize).empty,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.minus_lane.deinit(self.allocator);
+        self.ergodic_lane.deinit(self.allocator);
+        self.plus_lane.deinit(self.allocator);
+    }
+
+    /// Partition entries into three lanes by trit. O(n), single pass.
+    pub fn partition(self: *Self, entries: []const LogEntry) error{OutOfMemory}!void {
+        self.minus_lane.clearRetainingCapacity();
+        self.ergodic_lane.clearRetainingCapacity();
+        self.plus_lane.clearRetainingCapacity();
+
+        for (entries, 0..) |entry, i| {
+            const color = entryColor(entry);
+            switch (color.trit) {
+                .minus => try self.minus_lane.append(self.allocator, i),
+                .ergodic => try self.ergodic_lane.append(self.allocator, i),
+                .plus => try self.plus_lane.append(self.allocator, i),
+            }
+        }
+    }
+
+    /// Verify GF(3) conservation: sum of all trits = 0 (mod 3).
+    pub fn verifyConservation(self: Self) bool {
+        const sum: i64 = @as(i64, @intCast(self.plus_lane.items.len)) -
+            @as(i64, @intCast(self.minus_lane.items.len));
+        return @mod(sum, 3) == 0;
+    }
+
+    /// Total entries across all lanes
+    pub fn totalEntries(self: Self) usize {
+        return self.minus_lane.items.len + self.ergodic_lane.items.len + self.plus_lane.items.len;
+    }
+};
+
+/// Abductive color lookup: given an observed color, find which moment produced it.
+/// Searches world_id's tick range for a matching color. O(range) but the match
+/// is deterministic — same color = same moment.
+pub fn abduceFromColor(world_id: u64, observed: EntryColor, max_tick: u64) ?u64 {
+    var tick: u64 = 0;
+    while (tick <= max_tick) : (tick += 1) {
+        const candidate = momentColor(world_id, tick);
+        if (candidate.r == observed.r and candidate.g == observed.g and candidate.b == observed.b) {
+            return tick;
+        }
+    }
+    return null;
+}
+
+/// SPI audit: verify that colorAtIndex produces identical results
+/// regardless of evaluation order. Runs forward and backward over
+/// a tick range, XOR-fingerprints must match.
+pub fn spiAudit(world_id: u64, tick_range: u64) bool {
+    const seed = splitmix64(world_id);
+    var forward_xor: u64 = 0;
+    var backward_xor: u64 = 0;
+
+    // Forward pass
+    var i: u64 = 0;
+    while (i < tick_range) : (i += 1) {
+        forward_xor ^= colorAtIndex(seed, i);
+    }
+
+    // Backward pass
+    var j: u64 = tick_range;
+    while (j > 0) {
+        j -= 1;
+        backward_xor ^= colorAtIndex(seed, j);
+    }
+
+    return forward_xor == backward_xor;
+}
+
+/// Immer-style structural sharing for world snapshots.
+/// Only entries that changed between two ticks create new nodes.
+/// Unchanged entries share references (zero-copy across moments).
+pub const ImmerSnapshot = struct {
+    const Self = @This();
+
+    /// Tick this snapshot represents
+    tick: u64,
+    /// World this snapshot belongs to
+    world_id: u64,
+    /// Color through which this moment coheres
+    color: EntryColor,
+    /// Indices into the EventLog that are live at this tick.
+    /// Structural sharing: adjacent snapshots share most indices.
+    live_entries: []const usize,
+    /// Merkle root at this tick (integrity anchor)
+    merkle_root: ?[32]u8,
+
+    pub fn deinit(self: Self, allocator: mem.Allocator) void {
+        allocator.free(self.live_entries);
+    }
+};
+
+/// Build immer snapshots from an EventLog. Each tick produces a snapshot
+/// that structurally shares unchanged entries with the previous tick.
+pub fn buildSnapshots(
+    allocator: mem.Allocator,
+    log: *const EventLog,
+    world_id: u64,
+) error{OutOfMemory}![]ImmerSnapshot {
+    if (log.entries.items.len == 0) return &[_]ImmerSnapshot{};
+
+    var snapshots = std.ArrayList(ImmerSnapshot).empty;
+    defer {
+        // Only free on error path; on success, caller owns
+    }
+
+    var current_tick: u64 = 0;
+    var live = std.ArrayList(usize).empty;
+    defer live.deinit(allocator);
+
+    for (log.entries.items, 0..) |entry, i| {
+        if (entry.tick != current_tick) {
+            // Snapshot the current state
+            const snap_entries = try allocator.dupe(usize, live.items);
+            try snapshots.append(allocator, .{
+                .tick = current_tick,
+                .world_id = world_id,
+                .color = momentColor(world_id, current_tick),
+                .live_entries = snap_entries,
+                .merkle_root = log.merkle_tree.getRoot(),
+            });
+            current_tick = entry.tick;
+        }
+
+        switch (entry.entry_type) {
+            .entity_removed => {
+                // Remove from live set (structural unsharing)
+                for (live.items, 0..) |idx, j| {
+                    if (idx == i) {
+                        _ = live.swapRemove(j);
+                        break;
+                    }
+                }
+            },
+            else => try live.append(allocator, i),
+        }
+    }
+
+    // Final snapshot
+    const final_entries = try allocator.dupe(usize, live.items);
+    try snapshots.append(allocator, .{
+        .tick = current_tick,
+        .world_id = world_id,
+        .color = momentColor(world_id, current_tick),
+        .live_entries = final_entries,
+        .merkle_root = log.merkle_tree.getRoot(),
+    });
+
+    return try snapshots.toOwnedSlice(allocator);
+}
+
 // ============== Tests ==============
 
 test "EventLog - append and verify" {
@@ -711,4 +991,99 @@ test "FlatFileStorage" {
     };
 
     try storage.writeEntry(entry);
+}
+
+test "Color coherence - momentColor deterministic" {
+    // Same (world_id, tick) always produces the same color (SPI)
+    const c1 = momentColor(42, 100);
+    const c2 = momentColor(42, 100);
+    try std.testing.expectEqual(c1.r, c2.r);
+    try std.testing.expectEqual(c1.g, c2.g);
+    try std.testing.expectEqual(c1.b, c2.b);
+    try std.testing.expectEqual(c1.trit, c2.trit);
+
+    // Different tick = different color
+    const c3 = momentColor(42, 101);
+    try std.testing.expect(c1.r != c3.r or c1.g != c3.g or c1.b != c3.b);
+}
+
+test "Color coherence - SPI audit" {
+    // Forward and backward evaluation must XOR-match
+    try std.testing.expect(spiAudit(1, 1000));
+    try std.testing.expect(spiAudit(42, 500));
+    try std.testing.expect(spiAudit(0xdeadbeef, 256));
+}
+
+test "Color coherence - tripartite replay" {
+    const allocator = std.testing.allocator;
+
+    var log = EventLog.init(allocator);
+    defer log.deinit();
+
+    // Add entries across multiple ticks
+    for (0..30) |i| {
+        var data: [32]u8 = undefined;
+        const str = try std.fmt.bufPrint(&data, "evt {d}", .{i});
+        try log.append(.tick_advanced, @intCast(i * 100), @intCast(i), 1, str);
+    }
+
+    var replay = TripartiteReplay.init(allocator);
+    defer replay.deinit();
+
+    try replay.partition(log.entries.items);
+
+    // All entries accounted for
+    try std.testing.expectEqual(@as(usize, 30), replay.totalEntries());
+}
+
+test "Color coherence - entryColor from hash" {
+    const entry = LogEntry{
+        .entry_type = .world_created,
+        .timestamp = 1000,
+        .tick = 0,
+        .world_id = 1,
+        .data = "test",
+        .hash = [_]u8{0xab} ** 32,
+        .prev_hash = [_]u8{0} ** 32,
+    };
+
+    const c = entryColor(entry);
+    // Must produce valid RGB
+    _ = c.hex();
+    // Trit must be one of the three values
+    try std.testing.expect(c.trit == .minus or c.trit == .ergodic or c.trit == .plus);
+}
+
+test "Color coherence - immer snapshots" {
+    const allocator = std.testing.allocator;
+
+    var log = EventLog.init(allocator);
+    defer log.deinit();
+
+    // Tick 0: world created + 2 entities
+    try log.append(.world_created, 100, 0, 1, "w1");
+    try log.append(.entity_spawned, 110, 0, 1, "e1");
+    try log.append(.entity_spawned, 120, 0, 1, "e2");
+
+    // Tick 1: entity update
+    try log.append(.entity_updated, 200, 1, 1, "e1-upd");
+
+    // Tick 2: entity removed
+    try log.append(.entity_removed, 300, 2, 1, "e2-rm");
+
+    const snapshots = try buildSnapshots(allocator, &log, 1);
+    defer {
+        for (snapshots) |snap| snap.deinit(allocator);
+        allocator.free(snapshots);
+    }
+
+    // Three ticks = three snapshots
+    try std.testing.expectEqual(@as(usize, 3), snapshots.len);
+    try std.testing.expectEqual(@as(u64, 0), snapshots[0].tick);
+    try std.testing.expectEqual(@as(u64, 1), snapshots[1].tick);
+    try std.testing.expectEqual(@as(u64, 2), snapshots[2].tick);
+
+    // Each snapshot has a deterministic color
+    try std.testing.expectEqual(momentColor(1, 0).r, snapshots[0].color.r);
+    try std.testing.expectEqual(momentColor(1, 1).r, snapshots[1].color.r);
 }

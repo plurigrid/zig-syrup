@@ -166,6 +166,13 @@ pub const ColoredParensWorld = struct {
     }
 
     fn computeColor(self: *ColoredParensWorld, trit: Trit, depth: u16) ExprColor {
+        // For golden-angle worlds (variant A), use the comptime memo table — O(1).
+        // Other variants (plastic/silver) compute at runtime since they use
+        // different angle progressions not in the precomputed table.
+        if (self.variant == .A) {
+            return lux_color.memoColor(trit, depth, 0);
+        }
+
         const base = trit.baseHue();
         const rotation = @as(f32, @floatFromInt(depth)) * self.angle;
         const hue = @mod(base + rotation, 360.0);
@@ -183,6 +190,22 @@ pub const ColoredParensWorld = struct {
             .hue = hue,
             .rgb = rgb,
         };
+    }
+
+    /// Compute expression fingerprint for cross-world matching.
+    /// Same expression structure → same fingerprint → same color regardless of world.
+    pub fn exprFingerprint(expr: Expr) u64 {
+        switch (expr) {
+            .atom => |name| return lux_color.exprFingerprint(name, &.{}),
+            .list => |list| {
+                var child_fps: [16]u64 = undefined;
+                const n = @min(list.args.len, 16);
+                for (list.args[0..n], 0..) |arg, i| {
+                    child_fps[i] = exprFingerprint(arg);
+                }
+                return lux_color.exprFingerprint(list.op, child_fps[0..n]);
+            },
+        }
     }
 
     /// Build BCI pipeline example
@@ -274,6 +297,30 @@ test "colored parens three world variants" {
 
         try std.testing.expect(output.len > 0);
     }
+}
+
+test "cross-world fingerprint: same expression same color" {
+    const allocator = std.testing.allocator;
+
+    // Build identical BCI pipeline in two different worlds
+    const expr_a = try ColoredParensWorld.bciPipeline(allocator);
+    defer expr_a.deinit(allocator);
+    const expr_b = try ColoredParensWorld.bciPipeline(allocator);
+    defer expr_b.deinit(allocator);
+
+    const fp_a = ColoredParensWorld.exprFingerprint(expr_a);
+    const fp_b = ColoredParensWorld.exprFingerprint(expr_b);
+
+    // Same structure → same fingerprint
+    try std.testing.expectEqual(fp_a, fp_b);
+
+    // Same fingerprint + same seed → same color
+    const seed: u64 = 2026;
+    const c_a = lux_color.fingerprintColor(fp_a, seed);
+    const c_b = lux_color.fingerprintColor(fp_b, seed);
+    try std.testing.expectEqual(c_a.r, c_b.r);
+    try std.testing.expectEqual(c_a.g, c_b.g);
+    try std.testing.expectEqual(c_a.b, c_b.b);
 }
 
 // =============================================================================
