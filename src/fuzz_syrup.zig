@@ -218,6 +218,7 @@ test "regression: non-canonical integers/lengths/bigints are rejected (wire mall
         "B2:+\x00", // bigint non-minimal magnitude (leading zero byte)
         "B01:+\x05", // bigint leading-zero length
         "B1:x\x05", // bigint invalid sign byte
+        "B2:+\x05", // small value redundantly in B-form (encoder uses decimal <=16 bytes)
     };
     for (non_canonical) |bytes| {
         var arena = std.heap.ArenaAllocator.init(alloc);
@@ -232,4 +233,41 @@ test "regression: non-canonical integers/lengths/bigints are rejected (wire mall
         defer arena.deinit();
         _ = try syrup.decode(bytes, arena.allocator());
     }
+}
+
+test "regression: bigint decimal range, i64 min, and integer/bigint compare" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const rt = struct {
+        fn check(bytes: []const u8, alloc: std.mem.Allocator) !void {
+            const v = try syrup.decode(bytes, alloc);
+            const b2 = try v.encodeAlloc(alloc);
+            const v2 = try syrup.decode(b2, alloc);
+            const b3 = try v2.encodeAlloc(alloc);
+            try std.testing.expect(std.mem.eql(u8, b2, b3));
+        }
+    }.check;
+
+    // 9-byte-magnitude bigints round-trip via decimal (a u64 accumulator would
+    // have overflowed decoding what the encoder emits as decimal).
+    try rt("18446744073709551616+", a); // 2^64
+    try rt("18446744073709551616-", a); // -2^64
+    // i64 boundaries incl. the previously-crashing i64 min (decode AND encode).
+    try rt("9223372036854775807+", a); // i64 max
+    try rt("9223372036854775808-", a); // i64 min
+    try rt("9223372036854775808+", a); // i64 max + 1 -> bigint
+    // >16-byte magnitude stays in canonical B-form.
+    try rt("B18:+\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11", a);
+
+    // integer-vs-bigint compare must not crash (shared typeOrder) and must order
+    // by value — reachable from mixed numeric keys in a set/dict.
+    const big = try syrup.decode("18446744073709551616+", a); // 2^64
+    const negbig = try syrup.decode("18446744073709551616-", a);
+    const small = syrup.Value{ .integer = 5 };
+    try std.testing.expect(!big.eql(small));
+    try std.testing.expect(big.compare(small) == .gt);
+    try std.testing.expect(small.compare(big) == .lt);
+    try std.testing.expect(negbig.compare(small) == .lt);
 }

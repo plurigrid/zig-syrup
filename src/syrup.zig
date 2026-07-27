@@ -383,6 +383,16 @@ pub const Value = union(enum) {
             return compareRecordLike(self, other);
         }
 
+        // `.integer` and `.bigint` share a typeOrder (both are integers), so the
+        // mismatch guard above does NOT separate them. Route cross pairs through a
+        // value comparison; the same-type `switch` below would otherwise do an
+        // unchecked `other.integer`/`other.bigint` and CRASH on e.g. mixed numeric
+        // keys in a set/dict during canonical-order checking (reachable from
+        // untrusted input).
+        if ((self == .integer or self == .bigint) and (other == .integer or other == .bigint)) {
+            return compareIntegerLike(self, other);
+        }
+
         // Same type - compare values
         // For strings/symbols/bytes: compare by wire format (length then content)
         return switch (self) {
@@ -458,6 +468,36 @@ pub const Value = union(enum) {
             if (val_cmp != .eq) return val_cmp;
         }
         return std.math.order(a.len, b.len);
+    }
+
+    /// Compare two integer-kind values (`.integer` i64 or `.bigint`) by numeric
+    /// value, across the integer/bigint boundary, without any unchecked union
+    /// access. Uses `BigInt.toI128` (finite iff magnitude ≤ 16 bytes and fits
+    /// i128); a bigint too large for i128 dominates any i64 in magnitude, so its
+    /// sign alone orders it against a finite value.
+    fn compareIntegerLike(self: Value, other: Value) Order {
+        const a: ?i128 = intLikeToI128(self);
+        const b: ?i128 = intLikeToI128(other);
+        if (a) |av| {
+            if (b) |bv| return std.math.order(av, bv);
+            // other is a bigint too big for i128 ⇒ its magnitude dominates.
+            return if (other.bigint.negative) .gt else .lt;
+        } else {
+            if (b != null) {
+                // self is the huge bigint.
+                return if (self.bigint.negative) .lt else .gt;
+            }
+            // Both exceed i128 ⇒ both are `.bigint`; compare as bigints.
+            return self.bigint.compare(other.bigint);
+        }
+    }
+
+    fn intLikeToI128(v: Value) ?i128 {
+        return switch (v) {
+            .integer => |i| @as(i128, i),
+            .bigint => |b| b.toI128(),
+            else => null,
+        };
     }
 
     fn isRecordLike(v: Value) bool {
@@ -788,7 +828,12 @@ pub const Value = union(enum) {
 };
 
 fn encodeInteger(value: i64, writer: anytype) !void {
-    const abs: u64 = if (value >= 0) @intCast(value) else @intCast(-value);
+    // `-value` overflows for i64 min (`-(-2^63)` = 2^63 ∉ i64), so compute the
+    // magnitude via `-(value+1)+1` to stay in range.
+    const abs: u64 = if (value >= 0)
+        @intCast(value)
+    else
+        @as(u64, @intCast(-(value + 1))) + 1;
     const sign: u8 = if (value >= 0) '+' else '-';
     try writer.print("{d}{c}", .{ abs, sign });
 }
@@ -1037,15 +1082,38 @@ pub const Parser = struct {
         return self.input[self.pos..];
     }
 
+    /// Build a `.bigint` from a u128 magnitude, allocating exactly the minimal
+    /// big-endian byte length (no leading zero byte, ≥ 1 byte).
+    fn bigintFromU128(self: *Parser, num: u128, negative: bool) ParseError!Value {
+        var be: [16]u8 = undefined;
+        var v = num;
+        var i: usize = 16;
+        while (i > 0) {
+            i -= 1;
+            be[i] = @truncate(v);
+            v >>= 8;
+        }
+        var start: usize = 0;
+        while (start < be.len - 1 and be[start] == 0) start += 1;
+        const minimal = be[start..];
+        const mag = try self.allocator.alloc(u8, minimal.len);
+        @memcpy(mag, minimal);
+        return Value{ .bigint = .{ .magnitude = mag, .negative = negative } };
+    }
+
     /// Parse integer, bytes, string, or symbol
     fn parseNumberOrString(self: *Parser) ParseError!Value {
         const digit_start = self.pos;
-        var num: u64 = 0;
+        // u128 so decimal decoding covers the full range the encoder emits as
+        // decimal (it uses decimal for any bigint whose magnitude is ≤ 16 bytes =
+        // 128 bits; a u64 accumulator overflowed on 9–16 byte values, so the
+        // encoder could emit decimal its own decoder could not read).
+        var num: u128 = 0;
         var digit_count: usize = 0;
         while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
-            const digit: u64 = self.input[self.pos] - '0';
+            const digit: u128 = self.input[self.pos] - '0';
             // Check for overflow
-            if (num > (std.math.maxInt(u64) - digit) / 10) {
+            if (num > (std.math.maxInt(u128) - digit) / 10) {
                 return error.Overflow;
             }
             num = num * 10 + digit;
@@ -1076,44 +1144,29 @@ pub const Parser = struct {
 
         switch (marker) {
             '+' => {
-                if (num > @as(u64, @intCast(std.math.maxInt(i64)))) {
-                    // Convert to bigint
-                    const mag = try self.allocator.alloc(u8, 8);
-                    var v = num;
-                    var i: usize = 8;
-                    while (i > 0) {
-                        i -= 1;
-                        mag[i] = @truncate(v);
-                        v >>= 8;
-                    }
-                    // Strip leading zeros
-                    var start: usize = 0;
-                    while (start < mag.len - 1 and mag[start] == 0) start += 1;
-                    return Value{ .bigint = .{ .magnitude = mag[start..], .negative = false } };
+                if (num > @as(u128, std.math.maxInt(i64))) {
+                    return self.bigintFromU128(num, false);
                 }
                 return Value{ .integer = @intCast(num) };
             },
             '-' => {
                 // Negative zero is non-canonical; zero is only ever `0+`.
                 if (num == 0) return error.NonCanonical;
-                if (num > @as(u64, @intCast(std.math.maxInt(i64))) + 1) {
-                    const mag = try self.allocator.alloc(u8, 8);
-                    var v = num;
-                    var i: usize = 8;
-                    while (i > 0) {
-                        i -= 1;
-                        mag[i] = @truncate(v);
-                        v >>= 8;
-                    }
-                    var start: usize = 0;
-                    while (start < mag.len - 1 and mag[start] == 0) start += 1;
-                    return Value{ .bigint = .{ .magnitude = mag[start..], .negative = true } };
+                if (num <= @as(u128, std.math.maxInt(i64))) {
+                    return Value{ .integer = -@as(i64, @intCast(num)) };
                 }
-                return Value{ .integer = -@as(i64, @intCast(num)) };
+                // i64 min (magnitude 2^63) must be built directly: @intCast(2^63)
+                // to i64 overflows, so the old `-@as(i64, @intCast(num))` crashed.
+                if (num == @as(u128, std.math.maxInt(i64)) + 1) {
+                    return Value{ .integer = std.math.minInt(i64) };
+                }
+                return self.bigintFromU128(num, true);
             },
             ':' => {
-                const len = num;
-                const usize_len: usize = @intCast(len);
+                // Guard the u128→usize cast: any length exceeding the remaining
+                // input is unsatisfiable, and this keeps @intCast in range.
+                if (num > self.input.len) return error.UnexpectedEOF;
+                const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
                 }
@@ -1122,8 +1175,10 @@ pub const Parser = struct {
                 return Value{ .bytes = data };
             },
             '"' => {
-                const len = num;
-                const usize_len: usize = @intCast(len);
+                // Guard the u128→usize cast: any length exceeding the remaining
+                // input is unsatisfiable, and this keeps @intCast in range.
+                if (num > self.input.len) return error.UnexpectedEOF;
+                const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
                 }
@@ -1132,8 +1187,10 @@ pub const Parser = struct {
                 return Value{ .string = data };
             },
             '\'' => {
-                const len = num;
-                const usize_len: usize = @intCast(len);
+                // Guard the u128→usize cast: any length exceeding the remaining
+                // input is unsatisfiable, and this keeps @intCast in range.
+                if (num > self.input.len) return error.UnexpectedEOF;
+                const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
                 }
@@ -1183,12 +1240,14 @@ pub const Parser = struct {
         const magnitude = self.input[self.pos .. self.pos + usize_len - 1];
         self.pos += usize_len - 1;
 
-        // Canonical magnitude is big-endian minimal: non-empty with no leading
-        // zero byte. This rejects the negative-zero bigint ("B1:-", "B2:-\x00"),
-        // leading-zero padding, and empty magnitude — each of which re-encodes to
-        // a DIFFERENT canonical string (zero is the integer "0+", never a bigint),
-        // i.e. wire malleability.
-        if (magnitude.len == 0 or magnitude[0] == 0) return error.NonCanonical;
+        // Canonical B-form is used ONLY for magnitudes larger than 16 bytes — the
+        // encoder emits everything up to 128 bits as decimal — and the magnitude
+        // must be big-endian minimal (no leading zero byte). This rejects the
+        // negative-zero bigint ("B1:-", "B2:-\x00"), leading-zero padding, empty
+        // magnitude, and any small value redundantly wrapped in B-form (e.g.
+        // "B2:+\x05" for 5) — each re-encodes to a DIFFERENT canonical string, i.e.
+        // wire malleability.
+        if (magnitude.len <= 16 or magnitude[0] == 0) return error.NonCanonical;
 
         // Copy magnitude to owned memory
         const mag_copy = try self.allocator.alloc(u8, magnitude.len);
