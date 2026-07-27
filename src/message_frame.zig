@@ -97,6 +97,10 @@ pub fn frameCount(buf: []const u8) usize {
     while (pos < buf.len) {
         if (buf.len - pos < HEADER_SIZE) break;
         const payload_len = peekFrameLength(buf[pos..]) orelse break;
+        // Must mirror decodeFrame's validation. Without this, frameCount counts a
+        // frame decodeFrame rejects as MessageTooLarge, so a caller that sizes its
+        // decode loop from frameCount runs past what it can actually parse.
+        if (payload_len > MAX_MESSAGE_SIZE) break;
         const total: usize = HEADER_SIZE + payload_len;
         if (pos + total > buf.len) break;
         count += 1;

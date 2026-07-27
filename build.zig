@@ -1938,6 +1938,41 @@ pub fn build(b: *std.Build) void {
     const fuzz_syrup_struct_step = b.step("fuzz-syrup-struct", "Structure-aware fuzz: generate valid values, then mutate + truncate (ReleaseSafe)");
     fuzz_syrup_struct_step.dependOn(&run_fuzz_syrup_struct.step);
 
+    // Fuzz the repo's OTHER untrusted-byte parsers (framing, BCI streams, EDF,
+    // did:key, OLC, IBC denom) with per-target properties: a frameCount vs
+    // decodeFrame differential, stream anti-amplification bounds, crash-safety.
+    const fuzz_parsers_mod = b.createModule(.{
+        .root_source_file = b.path("src/fuzz_parsers.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+    });
+    fuzz_parsers_mod.addImport("syrup", syrup_mod);
+    {
+        // Each target gets its own module so its test blocks stay out of the
+        // fuzz compilation (several reference stale std APIs / sibling modules).
+        const fp = struct {
+            fn mod(bb: *std.Build, path: []const u8, t: anytype, o: anytype) *std.Build.Module {
+                return bb.createModule(.{ .root_source_file = bb.path(path), .target = t, .optimize = o });
+            }
+        };
+        const opt: std.builtin.OptimizeMode = .ReleaseSafe;
+        const fp_frame = fp.mod(b, "src/message_frame.zig", target, opt);
+        fp_frame.addImport("syrup", syrup_mod);
+        const fp_geo = fp.mod(b, "src/geo.zig", target, opt);
+        fp_geo.addImport("syrup", syrup_mod);
+        fuzz_parsers_mod.addImport("message_frame", fp_frame);
+        fuzz_parsers_mod.addImport("geo", fp_geo);
+        fuzz_parsers_mod.addImport("cyton_parser", fp.mod(b, "src/cyton_parser.zig", target, opt));
+        fuzz_parsers_mod.addImport("dsi24_parser", fp.mod(b, "src/dsi24_parser.zig", target, opt));
+        fuzz_parsers_mod.addImport("edf_reader", fp.mod(b, "src/edf_reader.zig", target, opt));
+        fuzz_parsers_mod.addImport("did_key", fp.mod(b, "src/did_key.zig", target, opt));
+        fuzz_parsers_mod.addImport("ibc_denom_verifier", fp.mod(b, "src/ibc_denom_verifier.zig", target, opt));
+    }
+    const fuzz_parsers = b.addTest(.{ .root_module = fuzz_parsers_mod });
+    const run_fuzz_parsers = b.addRunArtifact(fuzz_parsers);
+    const fuzz_parsers_step = b.step("fuzz-parsers", "Fuzz message_frame / cyton / dsi24 / edf / did_key / geo / ibc parsers (ReleaseSafe)");
+    fuzz_parsers_step.dependOn(&run_fuzz_parsers.step);
+
     // Tests for Cyton Parser
     const cyton_parser_test_mod = b.createModule(.{
         .root_source_file = b.path("src/cyton_parser.zig"),

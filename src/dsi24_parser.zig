@@ -176,7 +176,7 @@ pub fn parseStream(
     data: []const u8,
     allocator: std.mem.Allocator,
 ) (ParseError || error{OutOfMemory})![]DSI24Sample {
-    var samples = std.ArrayListUnmanaged(DSI24Sample){};
+    var samples: std.ArrayListUnmanaged(DSI24Sample) = .empty;
     errdefer samples.deinit(allocator);
 
     var i: usize = 0;

@@ -138,7 +138,7 @@ pub fn parseStream(
     data: []const u8,
     allocator: std.mem.Allocator,
 ) (ParseError || error{OutOfMemory})![]CytonSample {
-    var samples = std.ArrayListUnmanaged(CytonSample){};
+    var samples: std.ArrayListUnmanaged(CytonSample) = .empty;
     errdefer samples.deinit(allocator);
 
     var i: usize = 0;
@@ -162,11 +162,16 @@ pub fn parseStream(
         if (parseCytonPacket(packet, timestamp)) |sample| {
             try samples.append(allocator, sample);
             timestamp += @as(i64, @intCast(glimpse.TICKS_PER_SECOND / @as(u64, @intFromFloat(CYTON_SAMPLE_RATE)))); // exact: 564,480 glimpses per sample
+            // Consume the whole packet. Advancing by 1 after a SUCCESSFUL parse
+            // re-parsed overlapping windows, so a small attacker-controlled input
+            // could yield up to ~1 sample per byte instead of one per 33-byte
+            // packet — a memory-amplification DoS. dsi24_parser.parseStream
+            // already advances by the packet length here.
+            i += CYTON_PACKET_LEN;
         } else |_| {
-            // Skip this packet and continue searching
+            // Not a valid packet at this offset: skip one byte and resync.
+            i += 1;
         }
-
-        i += 1;
     }
 
     return samples.toOwnedSlice(allocator);
