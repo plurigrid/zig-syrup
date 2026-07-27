@@ -334,15 +334,32 @@ pub fn encodeOlc(lat: f64, lng: f64, code_length: u8, buffer: []u8) OlcError!usi
         pos += 1;
     }
 
-    // Encode grid refinement (characters 11-15)
+    // Encode grid refinement (characters 11-15).
+    //
+    // lat_val/lng_val are the leftover offsets INSIDE the length-10 cell, still
+    // in degrees (< 20^-3 = 1.25e-4). They must be measured against the shrinking
+    // grid resolution. The previous code did floor(lat_val * 5) on that raw degree
+    // remainder, which is always 0 — so EVERY grid character encoded as digit 0
+    // and any code longer than 10 named the corner of its pair cell instead of the
+    // refined cell. decodeOlc (which divides its cell height by 5/4 per character)
+    // was right; this now mirrors it exactly.
     if (code_length > PAIR_CODE_LENGTH) {
+        var lat_res = std.math.pow(f64, ENCODING_BASE, -3.0); // length-10 cell height
+        var lng_res = std.math.pow(f64, ENCODING_BASE, -3.0); // length-10 cell width
         var grid_digit = digit;
         while (grid_digit < code_length) : (grid_digit += 1) {
-            const lat_digit: usize = @intFromFloat(@divFloor(lat_val * 5.0, 1.0));
-            const lng_digit: usize = @intFromFloat(@divFloor(lng_val * 4.0, 1.0));
+            lat_res /= 5.0;
+            lng_res /= 4.0;
 
-            lat_val = (lat_val * 5.0) - @as(f64, @floatFromInt(lat_digit));
-            lng_val = (lng_val * 4.0) - @as(f64, @floatFromInt(lng_digit));
+            // Clamp: guards float edge cases at a cell boundary, and keeps the
+            // @intFromFloat below in range (a bare cast could panic).
+            const lat_q = @divFloor(lat_val, lat_res);
+            const lng_q = @divFloor(lng_val, lng_res);
+            const lat_digit: usize = if (lat_q <= 0) 0 else @min(@as(usize, @intFromFloat(lat_q)), 4);
+            const lng_digit: usize = if (lng_q <= 0) 0 else @min(@as(usize, @intFromFloat(lng_q)), 3);
+
+            lat_val -= @as(f64, @floatFromInt(lat_digit)) * lat_res;
+            lng_val -= @as(f64, @floatFromInt(lng_digit)) * lng_res;
 
             const combined = lat_digit * 4 + lng_digit;
             if (pos >= buffer.len) return error.BufferTooSmall;

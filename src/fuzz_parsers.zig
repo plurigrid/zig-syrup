@@ -42,6 +42,7 @@ var n_run: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_frame_ok: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_cyton_samples: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_dsi_samples: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
+var n_olc_roundtrip: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 /// Worst observed samples-per-input-byte for cyton (amplification evidence).
 var cyton_worst_num: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var cyton_worst_den: std.atomic.Value(u64) = std.atomic.Value(u64).init(1);
@@ -136,6 +137,7 @@ fn worker(tid: u64) void {
     var frames_ok: u64 = 0;
     var cyt: u64 = 0;
     var dsi: u64 = 0;
+    var olc: u64 = 0;
 
     var i: u64 = 0;
     while (i < ITERS_PER_THREAD) : (i += 1) {
@@ -143,7 +145,7 @@ fn worker(tid: u64) void {
         var fba = std.heap.FixedBufferAllocator.init(backing);
         const a = fba.allocator();
 
-        const target = rnd.uintLessThan(u8, 7);
+        const target = rnd.uintLessThan(u8, 8);
         const n = rnd.uintLessThan(usize, MAX_INPUT);
         const input = buf[0..n];
         runs += 1;
@@ -259,8 +261,59 @@ fn worker(tid: u64) void {
                 }
                 _ = did_key.resolve(a, input) catch {};
             },
+            6 => {
+                // OLC ROUND-TRIP DIFFERENTIAL. The defining contract of a Plus
+                // Code: the encoded point must lie inside the cell you get back,
+                // and re-encoding that cell's centre must reproduce the code.
+                // Crash-safety alone cannot see a wrong-but-safe geometry bug.
+                const lat = rnd.float(f64) * 180.0 - 90.0;
+                const lng = rnd.float(f64) * 360.0 - 180.0;
+                const lens = [_]u8{ 2, 4, 6, 8, 10, 11, 12, 13, 14, 15 };
+                const code_len = lens[rnd.uintLessThan(usize, lens.len)];
+
+                var cbuf: [32]u8 = undefined;
+                const written = geo.encodeOlc(lat, lng, code_len, &cbuf) catch continue;
+                const code = cbuf[0..written];
+
+                // The encoder's own output must be accepted by the decoder.
+                const area = geo.decodeOlc(code) catch {
+                    std.debug.print(
+                        "\nOLC BUG: encodeOlc produced a code decodeOlc rejects\n  lat={d} lng={d} len={d} code={s}\n",
+                        .{ lat, lng, code_len, code },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                };
+
+                // Containment (tiny epsilon for float boundary rounding only).
+                const eps = 1e-9;
+                if (lat < area.south_latitude - eps or lat > area.north_latitude + eps or
+                    lng < area.west_longitude - eps or lng > area.east_longitude + eps)
+                {
+                    std.debug.print(
+                        "\nOLC CONTAINMENT BUG: point outside its own cell\n  lat={d} lng={d} len={d} code={s}\n  cell lat[{d}, {d}] lng[{d}, {d}]\n",
+                        .{ lat, lng, code_len, code, area.south_latitude, area.north_latitude, area.west_longitude, area.east_longitude },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                }
+
+                // Fixpoint: encoding the cell centre at the same length must give
+                // back the identical code.
+                var cbuf2: [32]u8 = undefined;
+                const w2 = geo.encodeOlc(area.centerLatitude(), area.centerLongitude(), code_len, &cbuf2) catch continue;
+                if (!std.mem.eql(u8, code, cbuf2[0..w2])) {
+                    std.debug.print(
+                        "\nOLC FIXPOINT BUG: centre of the cell re-encodes differently\n  code={s} centre-code={s} len={d}\n",
+                        .{ code, cbuf2[0..w2], code_len },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                }
+                olc += 1;
+            },
             else => {
-                // Open Location Code + IBC denom trace.
+                // Open Location Code + IBC denom trace, crash-safety on junk.
                 fill(rnd, input, "23456789CFGHJMPQRVWX+0");
                 _ = geo.isValid(input);
                 _ = geo.decodeOlc(input) catch {};
@@ -273,6 +326,37 @@ fn worker(tid: u64) void {
     _ = n_frame_ok.fetchAdd(frames_ok, .monotonic);
     _ = n_cyton_samples.fetchAdd(cyt, .monotonic);
     _ = n_dsi_samples.fetchAdd(dsi, .monotonic);
+    _ = n_olc_roundtrip.fetchAdd(olc, .monotonic);
+}
+
+test "regression: OLC grid refinement varies (codes longer than 10 chars)" {
+    // Two points in the SAME length-10 cell but different refinement sub-cells
+    // must encode to DIFFERENT codes, and each must decode to a cell containing
+    // it. Before the fix, encodeOlc computed every grid digit from a raw degree
+    // remainder and always got 0, so both points produced the IDENTICAL code and
+    // both cells sat at the corner of the pair cell.
+    const base_lat: f64 = 47.0;
+    const base_lng: f64 = 8.0;
+    const cell = std.math.pow(f64, 20.0, -3.0); // 1.25e-4 = length-10 cell size
+
+    var a_buf: [32]u8 = undefined;
+    var b_buf: [32]u8 = undefined;
+    const a_lat = base_lat + cell * 0.1;
+    const a_lng = base_lng + cell * 0.1;
+    const b_lat = base_lat + cell * 0.9;
+    const b_lng = base_lng + cell * 0.9;
+    const a = a_buf[0..try geo.encodeOlc(a_lat, a_lng, 15, &a_buf)];
+    const b = b_buf[0..try geo.encodeOlc(b_lat, b_lng, 15, &b_buf)];
+
+    try std.testing.expect(!std.mem.eql(u8, a, b));
+
+    const area_a = try geo.decodeOlc(a);
+    try std.testing.expect(a_lat >= area_a.south_latitude and a_lat <= area_a.north_latitude);
+    try std.testing.expect(a_lng >= area_a.west_longitude and a_lng <= area_a.east_longitude);
+
+    const area_b = try geo.decodeOlc(b);
+    try std.testing.expect(b_lat >= area_b.south_latitude and b_lat <= area_b.north_latitude);
+    try std.testing.expect(b_lng >= area_b.west_longitude and b_lng <= area_b.east_longitude);
 }
 
 test "regression: did_tdw.verifyLog does not leak under injected OOM" {
@@ -336,11 +420,11 @@ test "fuzz: repo parsers (frame differential, stream anti-amplification, crash-s
     for (&threads) |t| t.join();
 
     std.debug.print(
-        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} threads\n",
+        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips | {d} threads\n",
         .{
-            n_run.load(.monotonic),      n_frame_ok.load(.monotonic),
+            n_run.load(.monotonic),           n_frame_ok.load(.monotonic),
             n_cyton_samples.load(.monotonic), n_dsi_samples.load(.monotonic),
-            THREADS,
+            n_olc_roundtrip.load(.monotonic), THREADS,
         },
     );
     try std.testing.expect(!failed.load(.monotonic));
