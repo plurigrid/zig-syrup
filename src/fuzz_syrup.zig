@@ -235,6 +235,61 @@ test "regression: non-canonical integers/lengths/bigints are rejected (wire mall
     }
 }
 
+test "regression: NaN floats do not panic ordering (compare must be total)" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const nan64 = syrup.Value{ .float = std.math.nan(f64) };
+    const nan32 = syrup.Value{ .float32 = std.math.nan(f32) };
+    const one64 = syrup.Value{ .float = 1.0 };
+    const one32 = syrup.Value{ .float32 = 1.0 };
+
+    // `std.math.order` hits `unreachable` on NaN (a==b, a<b, a>b all false), so
+    // these panicked before the fix. Ordering by wire bytes is total.
+    _ = nan64.compare(one64);
+    _ = one64.compare(nan64);
+    _ = nan64.compare(nan64);
+    _ = nan32.compare(one32);
+    _ = nan32.compare(nan32);
+    try std.testing.expect(nan64.eql(nan64)); // same bits ⇒ same encoding
+    try std.testing.expect(!nan64.eql(one64));
+
+    // The public canonical builders sort with `compare`, so a NaN decoded from
+    // untrusted input crashed the moment it became a set/dict member.
+    const items = [_]syrup.Value{ one64, nan64, syrup.Value{ .float = -1.0 }, nan32 };
+    _ = try syrup.setCanonical(a, &items);
+    const entries = [_]syrup.Value.DictEntry{
+        .{ .key = nan64, .value = syrup.Value{ .integer = 1 } },
+        .{ .key = one64, .value = syrup.Value{ .integer = 2 } },
+    };
+    _ = try syrup.dictionaryCanonical(a, &entries);
+
+    // compare must agree with hash: both are defined on the wire bytes, so
+    // +0.0 and -0.0 are distinct values (they encode to different bytes).
+    const pos_zero = syrup.Value{ .float = 0.0 };
+    const neg_zero = syrup.Value{ .float = -0.0 };
+    try std.testing.expect(!pos_zero.eql(neg_zero));
+    try std.testing.expect(pos_zero.hash() != neg_zero.hash());
+}
+
+test "regression: bigint length digits are overflow-checked" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A long digit run in the B-form length overflowed u64: panic under
+    // ReleaseSafe, silent WRAP under ReleaseFast (attacker-chosen length).
+    // Found by the structure-aware fuzzer via a mutated record.
+    try std.testing.expectError(error.Overflow, syrup.decode("B99999999999999999999999999:+\x01", a));
+    // The exact fuzzer-found input: <6'jyduxf B18903914347440212373268800 ...
+    const found = "<6'jyduxfB18903914347440212373268800\x1b6581+>";
+    _ = syrup.decode(found, a) catch {}; // must return an error, never crash
+    // A length that parses but exceeds the input must be a clean EOF, and must
+    // not overflow the `pos + len` sum.
+    try std.testing.expectError(error.UnexpectedEOF, syrup.decode("B18446744073709551615:+\x01", a));
+}
+
 test "regression: bigint decimal range, i64 min, and integer/bigint compare" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

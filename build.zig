@@ -1923,6 +1923,21 @@ pub fn build(b: *std.Build) void {
     const fuzz_syrup_random_step = b.step("fuzz-syrup-random", "Multi-threaded random crash-safety fuzz of decode() (macOS-native, ReleaseSafe)");
     fuzz_syrup_random_step.dependOn(&run_fuzz_syrup_random.step);
 
+    // Structure-aware (grammar) fuzzer: generates VALID Syrup values, then
+    // round-trips / mutates / truncates them. Random bytes bounce off the first
+    // byte ~91% of the time; generated values reach the deep container, record
+    // and bigint paths where length/index bugs live.
+    const fuzz_syrup_struct_mod = b.createModule(.{
+        .root_source_file = b.path("src/fuzz_syrup_struct.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+    });
+    fuzz_syrup_struct_mod.addImport("syrup", syrup_mod);
+    const fuzz_syrup_struct = b.addTest(.{ .root_module = fuzz_syrup_struct_mod });
+    const run_fuzz_syrup_struct = b.addRunArtifact(fuzz_syrup_struct);
+    const fuzz_syrup_struct_step = b.step("fuzz-syrup-struct", "Structure-aware fuzz: generate valid values, then mutate + truncate (ReleaseSafe)");
+    fuzz_syrup_struct_step.dependOn(&run_fuzz_syrup_struct.step);
+
     // Tests for Cyton Parser
     const cyton_parser_test_mod = b.createModule(.{
         .root_source_file = b.path("src/cyton_parser.zig"),

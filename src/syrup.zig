@@ -411,8 +411,16 @@ pub const Value = union(enum) {
             },
             .integer => |a| std.math.order(a, other.integer),
             .bigint => |a| a.compare(other.bigint),
-            .float32 => |a| std.math.order(a, other.float32),
-            .float => |a| std.math.order(a, other.float),
+            // Floats order by their WIRE bytes (big-endian bit pattern), not
+            // numerically. Numeric order is NOT total: `std.math.order` hits
+            // `unreachable` on NaN (a==b, a<b, a>b all false), so a set or dict
+            // containing a NaN — reachable from untrusted input as `D` + 8
+            // arbitrary bytes — PANICKED during canonical-order checking.
+            // Comparing bits is total, equals memcmp of the encoded bytes (so
+            // `eq` ⟺ identical encoding, which is what canonical order means),
+            // and matches `hashWith`, which already hashes the raw bits.
+            .float32 => |a| std.math.order(@as(u32, @bitCast(a)), @as(u32, @bitCast(other.float32))),
+            .float => |a| std.math.order(@as(u64, @bitCast(a)), @as(u64, @bitCast(other.float))),
             .bytes => |a| compareLengthPrefixed(a, other.bytes),
             .string => |a| compareLengthPrefixed(a, other.string),
             .symbol => |a| compareLengthPrefixed(a, other.symbol),
@@ -1213,7 +1221,13 @@ pub const Parser = struct {
         var len: u64 = 0;
         var len_digits: usize = 0;
         while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
-            len = len * 10 + (self.input[self.pos] - '0');
+            // Overflow-checked, exactly as parseNumberOrString does. Without this
+            // a long digit run ("B" + 26 digits) overflowed u64: a panic under
+            // ReleaseSafe, and — worse — a SILENT WRAP under ReleaseFast, handing
+            // the attacker an arbitrary small length for the slice math below.
+            const digit: u64 = self.input[self.pos] - '0';
+            if (len > (std.math.maxInt(u64) - digit) / 10) return error.Overflow;
+            len = len * 10 + digit;
             self.pos += 1;
             len_digits += 1;
         }
@@ -1225,7 +1239,9 @@ pub const Parser = struct {
         }
         self.pos += 1; // Skip ':'
 
-        if (len < 1 or self.pos + len > self.input.len) {
+        // `len > input.len` first: it is unsatisfiable anyway, and it keeps the
+        // `self.pos + len` sum below from overflowing usize on a huge valid len.
+        if (len < 1 or len > self.input.len or self.pos + len > self.input.len) {
             return error.UnexpectedEOF;
         }
 
