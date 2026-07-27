@@ -89,9 +89,13 @@ pub fn parse(allocator: Allocator, did: []const u8) !DidWeb {
     // First segment is domain (percent-decode %3A → :)
     const raw_domain = segments.items[0];
     const domain = try percentDecode(allocator, raw_domain);
+    // Ownership passes to the returned DidWeb only on success; any failure below
+    // must release what we already hold, or a partial parse leaks it.
+    errdefer allocator.free(domain);
 
     // Build URL
     var url_buf = std.array_list.AlignedManaged(u8, null).init(allocator);
+    errdefer url_buf.deinit();
     try url_buf.appendSlice("https://");
     try url_buf.appendSlice(domain);
 
@@ -108,6 +112,7 @@ pub fn parse(allocator: Allocator, did: []const u8) !DidWeb {
     }
 
     const url = try url_buf.toOwnedSlice();
+    errdefer allocator.free(url);
     const did_copy = try allocator.dupe(u8, did);
 
     // Derive trit from domain hash

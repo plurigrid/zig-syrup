@@ -132,11 +132,19 @@ pub fn parse(allocator: Allocator, did: []const u8) !DidPkh {
 
     const namespace = ChainNamespace.fromString(ns_str);
 
+    // Each dupe must be released if a later one fails — inside a struct literal
+    // the earlier allocations would otherwise be orphaned by the error return.
+    const did_copy = try allocator.dupe(u8, did);
+    errdefer allocator.free(did_copy);
+    const chain_copy = try allocator.dupe(u8, chain_ref);
+    errdefer allocator.free(chain_copy);
+    const addr_copy = try allocator.dupe(u8, address);
+
     return .{
-        .did = try allocator.dupe(u8, did),
+        .did = did_copy,
         .namespace = namespace,
-        .chain_ref = try allocator.dupe(u8, chain_ref),
-        .address = try allocator.dupe(u8, address),
+        .chain_ref = chain_copy,
+        .address = addr_copy,
         .trit = namespace.trit(),
         .allocator = allocator,
     };

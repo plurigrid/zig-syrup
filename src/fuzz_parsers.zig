@@ -29,6 +29,9 @@ const did_key = @import("did_key");
 const geo = @import("geo");
 const ibc = @import("ibc_denom_verifier");
 const did_tdw = @import("did_tdw");
+const did_web = @import("did_web");
+const did_gay = @import("did_gay");
+const did_pkh = @import("did_pkh");
 
 const THREADS = 10;
 const ITERS_PER_THREAD: u64 = 60_000;
@@ -421,6 +424,61 @@ test "regression: OLC shorten/recover are inverses (prefix overwrite + antimerid
         const rec = rec_buf[0..try geo.recoverOlc(short, c.ref_lat, c.ref_lng, &rec_buf)];
 
         try std.testing.expectEqualStrings(full, rec);
+    }
+}
+
+test "leak sweep: DID parsers release everything under injected OOM" {
+    // Every one of these types has a deinit(), i.e. the API hands ownership to the
+    // caller — so a parse that fails partway MUST release whatever it already
+    // allocated. std.testing.allocator fails the test otherwise. This is the same
+    // property that caught the did_tdw.verifyLog leak.
+    //
+    // (bristol.Circuit is deliberately excluded: it has no deinit at all, so that
+    // module is arena-only by construction and "leaking" is its contract.)
+    const web_inputs = [_][]const u8{
+        "did:web:example.com",
+        "did:web:example.com:user:alice",
+        "did:web:sub.domain.example.com%3A8080:path:deep:deeper",
+        "did:web:",
+        "did:web:a:b:c:d:e:f:g:h",
+    };
+    const gay_inputs = [_][]const u8{
+        "did:gay:example",
+        "did:gay:alice:bob:carol",
+        "did:gay:",
+        "did:gay:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    };
+    const pkh_inputs = [_][]const u8{
+        "did:pkh:eip155:1:0xb9c5714089478a327f09197987f16f9e5d936e8a",
+        "did:pkh:bip122:000000000019d6689c085ae165831e93:128Lkh3S7CkDTBZ8",
+        "did:pkh:",
+        "did:pkh:eip155:1",
+    };
+    const key_inputs = [_][]const u8{
+        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+        "did:key:z",
+        "did:key:",
+        "did:key:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    };
+
+    var idx: usize = 0;
+    while (idx < 20) : (idx += 1) {
+        for (web_inputs) |s| {
+            var f = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = idx });
+            if (did_web.parse(f.allocator(), s)) |v| v.deinit() else |_| {}
+        }
+        for (gay_inputs) |s| {
+            var f = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = idx });
+            if (did_gay.parse(f.allocator(), s)) |v| v.deinit() else |_| {}
+        }
+        for (pkh_inputs) |s| {
+            var f = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = idx });
+            if (did_pkh.parse(f.allocator(), s)) |v| v.deinit() else |_| {}
+        }
+        for (key_inputs) |s| {
+            var f = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = idx });
+            if (did_key.resolve(f.allocator(), s)) |v| v.deinit() else |_| {}
+        }
     }
 }
 
