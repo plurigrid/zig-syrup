@@ -1965,7 +1965,9 @@ pub fn build(b: *std.Build) void {
         fuzz_parsers_mod.addImport("cyton_parser", fp.mod(b, "src/cyton_parser.zig", target, opt));
         fuzz_parsers_mod.addImport("dsi24_parser", fp.mod(b, "src/dsi24_parser.zig", target, opt));
         fuzz_parsers_mod.addImport("edf_reader", fp.mod(b, "src/edf_reader.zig", target, opt));
-        fuzz_parsers_mod.addImport("did_key", fp.mod(b, "src/did_key.zig", target, opt));
+        // NOTE: did_key and gay/sexp both pull in gay/splitmix.zig, and a file may
+        // belong to only one module — so those two are imported by RELATIVE path in
+        // the harness instead, sharing splitmix inside the root module.
         fuzz_parsers_mod.addImport("ibc_denom_verifier", fp.mod(b, "src/ibc_denom_verifier.zig", target, opt));
         fuzz_parsers_mod.addImport("did_tdw", fp.mod(b, "src/did_tdw.zig", target, opt));
         fuzz_parsers_mod.addImport("did_web", fp.mod(b, "src/did_web.zig", target, opt));

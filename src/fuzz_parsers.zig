@@ -25,13 +25,17 @@ const frame = @import("message_frame");
 const cyton = @import("cyton_parser");
 const dsi24 = @import("dsi24_parser");
 const edf = @import("edf_reader");
-const did_key = @import("did_key");
+// did_key and gay/sexp both import gay/splitmix.zig, and a file may belong to only
+// one module — so these two come in by relative path and share splitmix here in the
+// root module rather than each getting their own.
+const did_key = @import("did_key.zig");
 const geo = @import("geo");
 const ibc = @import("ibc_denom_verifier");
 const did_tdw = @import("did_tdw");
 const did_web = @import("did_web");
 const did_gay = @import("did_gay");
 const did_pkh = @import("did_pkh");
+const sexp = @import("gay/sexp.zig");
 
 const THREADS = 10;
 const ITERS_PER_THREAD: u64 = 60_000;
@@ -47,6 +51,7 @@ var n_cyton_samples: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_dsi_samples: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_olc_roundtrip: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_olc_shortrec: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
+var n_sexp: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 /// Worst observed samples-per-input-byte for cyton (amplification evidence).
 var cyton_worst_num: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var cyton_worst_den: std.atomic.Value(u64) = std.atomic.Value(u64).init(1);
@@ -129,6 +134,54 @@ fn buildEdf(rnd: std.Random, out: []u8) ?[]u8 {
     return b;
 }
 
+/// Emit a random but SYNTACTICALLY VALID s-expression into `out`, returning the
+/// bytes written (null if it would not fit). Random text parses only rarely, so
+/// without this the print/parse fixpoint barely runs and never sees deep nesting.
+/// Leaves are drawn from forms the printer is known to round-trip, so a failure
+/// indicates a real parse/print disagreement rather than an unprintable atom.
+fn genSexpText(rnd: std.Random, out: []u8, depth: u8, pos: *usize) bool {
+    const leaves = [_][]const u8{
+        "nil", "true", "false", "42", "-7", "3.5", "0", "abc", "xyz", "a1",
+        ":kw", ":other", "\"str\"", "\"\"", "sym-name",
+    };
+    const put = struct {
+        fn s(o: []u8, p: *usize, text: []const u8) bool {
+            if (p.* + text.len > o.len) return false;
+            @memcpy(o[p.*..][0..text.len], text);
+            p.* += text.len;
+            return true;
+        }
+    }.s;
+
+    if (depth == 0 or rnd.uintLessThan(u8, 10) < 5) {
+        return put(out, pos, leaves[rnd.uintLessThan(usize, leaves.len)]);
+    }
+
+    const kind = rnd.uintLessThan(u8, 4);
+    const open: []const u8 = switch (kind) {
+        0 => "(",
+        1 => "[",
+        2 => "{",
+        else => "'(",
+    };
+    const close: []const u8 = switch (kind) {
+        0 => ")",
+        1 => "]",
+        2 => "}",
+        else => ")",
+    };
+    if (!put(out, pos, open)) return false;
+    // Dicts need an even number of elements (key/value pairs).
+    var n = rnd.uintLessThan(usize, 4);
+    if (kind == 2) n *= 2;
+    var k: usize = 0;
+    while (k < n) : (k += 1) {
+        if (k > 0 and !put(out, pos, " ")) return false;
+        if (!genSexpText(rnd, out, depth - 1, pos)) return false;
+    }
+    return put(out, pos, close);
+}
+
 fn worker(tid: u64) void {
     var prng = std.Random.DefaultPrng.init(0xFACADE ^ (tid *% 0x9E3779B97F4A7C15));
     const rnd = prng.random();
@@ -143,6 +196,7 @@ fn worker(tid: u64) void {
     var dsi: u64 = 0;
     var olc: u64 = 0;
     var shortrec: u64 = 0;
+    var sx: u64 = 0;
 
     var i: u64 = 0;
     while (i < ITERS_PER_THREAD) : (i += 1) {
@@ -150,7 +204,7 @@ fn worker(tid: u64) void {
         var fba = std.heap.FixedBufferAllocator.init(backing);
         const a = fba.allocator();
 
-        const target = rnd.uintLessThan(u8, 9);
+        const target = rnd.uintLessThan(u8, 10);
         const n = rnd.uintLessThan(usize, MAX_INPUT);
         const input = buf[0..n];
         runs += 1;
@@ -352,6 +406,56 @@ fn worker(tid: u64) void {
                 }
                 shortrec += 1;
             },
+            8 => {
+                // S-EXPRESSION PRINT/PARSE FIXPOINT. Seeded with sexp-ish text so
+                // parses actually succeed. Because the value comes from real
+                // parsed input (not a generator), there is no risk of inventing an
+                // atom the printer cannot round-trip — any failure is a genuine
+                // disagreement between parse and print.
+                // Half generated-valid (deep structures, reliably parses), half
+                // biased-random (keeps exercising the tokenizer's error paths).
+                var text: []const u8 = undefined;
+                if (rnd.boolean()) {
+                    var wpos: usize = 0;
+                    if (!genSexpText(rnd, input, 4, &wpos)) continue;
+                    text = input[0..wpos];
+                } else {
+                    fill(rnd, input, "()[]{}#'\"\\ \t:;abcXYZ0123456789.-+nil true false");
+                    text = input;
+                }
+                const s1 = sexp.parse(text, a) catch continue;
+                const p1 = sexp.print(s1, a) catch continue;
+
+                // A printed value must parse back.
+                const s2 = sexp.parse(p1, a) catch {
+                    std.debug.print(
+                        "\nSEXP BUG: printed form does not re-parse\n  input={s}\n  printed={s}\n",
+                        .{ text, p1 },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                };
+                // ...to an equal value...
+                if (!s1.eql(s2)) {
+                    std.debug.print(
+                        "\nSEXP BUG: re-parsed value differs\n  input={s}\n  printed={s}\n",
+                        .{ text, p1 },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                }
+                // ...and printing is then idempotent.
+                const p2 = sexp.print(s2, a) catch continue;
+                if (!std.mem.eql(u8, p1, p2)) {
+                    std.debug.print(
+                        "\nSEXP BUG: print not idempotent\n  input={s}\n  print1={s}\n  print2={s}\n",
+                        .{ text, p1, p2 },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                }
+                sx += 1;
+            },
             else => {
                 // Open Location Code + IBC denom trace, crash-safety on junk.
                 fill(rnd, input, "23456789CFGHJMPQRVWX+0");
@@ -368,6 +472,7 @@ fn worker(tid: u64) void {
     _ = n_dsi_samples.fetchAdd(dsi, .monotonic);
     _ = n_olc_roundtrip.fetchAdd(olc, .monotonic);
     _ = n_olc_shortrec.fetchAdd(shortrec, .monotonic);
+    _ = n_sexp.fetchAdd(sx, .monotonic);
 }
 
 test "regression: OLC grid refinement varies (codes longer than 10 chars)" {
@@ -543,12 +648,12 @@ test "fuzz: repo parsers (frame differential, stream anti-amplification, crash-s
     for (&threads) |t| t.join();
 
     std.debug.print(
-        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips, {d} shorten/recover | {d} threads\n",
+        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips, {d} shorten/recover | {d} sexp fixpoints | {d} threads\n",
         .{
             n_run.load(.monotonic),           n_frame_ok.load(.monotonic),
             n_cyton_samples.load(.monotonic), n_dsi_samples.load(.monotonic),
             n_olc_roundtrip.load(.monotonic), n_olc_shortrec.load(.monotonic),
-            THREADS,
+            n_sexp.load(.monotonic),          THREADS,
         },
     );
     try std.testing.expect(!failed.load(.monotonic));
