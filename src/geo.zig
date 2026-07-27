@@ -536,7 +536,8 @@ pub fn shortenOlc(code: []const u8, ref_lat: f64, ref_lng: f64, buffer: []u8) Ol
     const center_lng = area.centerLongitude();
 
     const lat_diff = @abs(ref_lat - center_lat);
-    const lng_diff = @abs(ref_lng - center_lng);
+    // Cyclic: a reference just across the antimeridian is close, not ~360 away.
+    const lng_diff = @abs(lngDelta(ref_lng, center_lng));
     const range = @max(lat_diff, lng_diff);
 
     var removal: usize = 0;
@@ -598,24 +599,49 @@ pub fn recoverOlc(short_code: []const u8, ref_lat: f64, ref_lng: f64, buffer: []
 
     const res = shortenResolution(prefix_len);
 
+    // Shift whichever axis landed more than half a resolution unit from the
+    // reference, then re-encode ONCE with both adjusted values.
+    //
+    // Previously each axis re-encoded and @memcpy'd the prefix on its own, using
+    // the raw reference for the OTHER axis — so when both fired, the second wipe
+    // discarded the first axis's correction, and the axis that adjusted first came
+    // back wrong. (Observed: full=72C72393+2P recovered as 72972393+2P — the
+    // longitude digit corrected, the latitude digit reverted to the reference's.)
+    // Defaulting each axis to the decoded centre keeps its prefix digits intact,
+    // so only the axis that actually needs shifting moves.
+    var adj_lat = center_lat;
+    var adj_lng = center_lng;
     if (center_lat - ref_lat > res / 2.0) {
-        // Re-encode with adjusted lat
-        _ = try encodeOlc(center_lat - res, ref_lng, 10, &ref_buf);
-        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+        adj_lat = center_lat - res;
     } else if (ref_lat - center_lat > res / 2.0) {
-        _ = try encodeOlc(center_lat + res, ref_lng, 10, &ref_buf);
-        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
+        adj_lat = center_lat + res;
     }
-
-    if (center_lng - ref_lng > res / 2.0) {
-        _ = try encodeOlc(ref_lat, center_lng - res, 10, &ref_buf);
-        @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
-    } else if (ref_lng - center_lng > res / 2.0) {
-        _ = try encodeOlc(ref_lat, center_lng + res, 10, &ref_buf);
+    // Longitude is cyclic — use the wrapped difference so a reference on the far
+    // side of the antimeridian is seen as near, not ~360 degrees away.
+    const dlng = lngDelta(center_lng, ref_lng);
+    if (dlng > res / 2.0) {
+        adj_lng = center_lng - res;
+    } else if (-dlng > res / 2.0) {
+        adj_lng = center_lng + res;
+    }
+    if (adj_lat != center_lat or adj_lng != center_lng) {
+        _ = try encodeOlc(adj_lat, adj_lng, 10, &ref_buf);
         @memcpy(buffer[0..prefix_len], ref_buf[0..prefix_len]);
     }
 
     return full_len;
+}
+
+/// Signed longitude difference `a - b`, wrapped into [-180, 180).
+/// Longitude is cyclic: 179 and -179 are 2 degrees apart, not 358. Comparing raw
+/// subtractions makes any pair straddling the antimeridian look ~360 degrees
+/// apart, which defeats both the shorten distance test and the recover
+/// adjustment. Latitude is NOT cyclic and must not use this.
+fn lngDelta(a: f64, b: f64) f64 {
+    var d = a - b;
+    while (d > LNG_MAX) d -= 360.0;
+    while (d < -LNG_MAX) d += 360.0;
+    return d;
 }
 
 fn shortenResolution(prefix_len: usize) f64 {

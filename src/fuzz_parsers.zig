@@ -43,6 +43,7 @@ var n_frame_ok: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_cyton_samples: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_dsi_samples: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_olc_roundtrip: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
+var n_olc_shortrec: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 /// Worst observed samples-per-input-byte for cyton (amplification evidence).
 var cyton_worst_num: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var cyton_worst_den: std.atomic.Value(u64) = std.atomic.Value(u64).init(1);
@@ -138,6 +139,7 @@ fn worker(tid: u64) void {
     var cyt: u64 = 0;
     var dsi: u64 = 0;
     var olc: u64 = 0;
+    var shortrec: u64 = 0;
 
     var i: u64 = 0;
     while (i < ITERS_PER_THREAD) : (i += 1) {
@@ -145,7 +147,7 @@ fn worker(tid: u64) void {
         var fba = std.heap.FixedBufferAllocator.init(backing);
         const a = fba.allocator();
 
-        const target = rnd.uintLessThan(u8, 8);
+        const target = rnd.uintLessThan(u8, 9);
         const n = rnd.uintLessThan(usize, MAX_INPUT);
         const input = buf[0..n];
         runs += 1;
@@ -312,6 +314,41 @@ fn worker(tid: u64) void {
                 }
                 olc += 1;
             },
+            7 => {
+                // SHORTEN/RECOVER DIFFERENTIAL: relative to the SAME reference,
+                // shortenOlc and recoverOlc must be inverses — recovering a
+                // shortened code has to reproduce the original full code.
+                const lat = rnd.float(f64) * 180.0 - 90.0;
+                const lng = rnd.float(f64) * 360.0 - 180.0;
+                var full_buf: [32]u8 = undefined;
+                const fl = geo.encodeOlc(lat, lng, 10, &full_buf) catch continue;
+                const full = full_buf[0..fl];
+
+                // Reference at a random distance, spanning every removal tier
+                // (8/6/4/2 chars removed, and far enough for no shortening).
+                const scales = [_]f64{ 0.0002, 0.008, 0.15, 3.0, 50.0 };
+                const scale = scales[rnd.uintLessThan(usize, scales.len)];
+                const ref_lat = @min(@max(lat + (rnd.float(f64) - 0.5) * scale, -90.0), 90.0);
+                const ref_lng = @min(@max(lng + (rnd.float(f64) - 0.5) * scale, -180.0), 180.0);
+
+                var short_buf: [32]u8 = undefined;
+                const sl = geo.shortenOlc(full, ref_lat, ref_lng, &short_buf) catch continue;
+                const short = short_buf[0..sl];
+
+                var rec_buf: [32]u8 = undefined;
+                const rl = geo.recoverOlc(short, ref_lat, ref_lng, &rec_buf) catch continue;
+                const rec = rec_buf[0..rl];
+
+                if (!std.mem.eql(u8, full, rec)) {
+                    std.debug.print(
+                        "\nOLC SHORTEN/RECOVER BUG: not inverses\n  lat={d} lng={d}\n  ref_lat={d} ref_lng={d}\n  full={s} short={s} recovered={s}\n",
+                        .{ lat, lng, ref_lat, ref_lng, full, short, rec },
+                    );
+                    failed.store(true, .monotonic);
+                    break;
+                }
+                shortrec += 1;
+            },
             else => {
                 // Open Location Code + IBC denom trace, crash-safety on junk.
                 fill(rnd, input, "23456789CFGHJMPQRVWX+0");
@@ -327,6 +364,7 @@ fn worker(tid: u64) void {
     _ = n_cyton_samples.fetchAdd(cyt, .monotonic);
     _ = n_dsi_samples.fetchAdd(dsi, .monotonic);
     _ = n_olc_roundtrip.fetchAdd(olc, .monotonic);
+    _ = n_olc_shortrec.fetchAdd(shortrec, .monotonic);
 }
 
 test "regression: OLC grid refinement varies (codes longer than 10 chars)" {
@@ -357,6 +395,33 @@ test "regression: OLC grid refinement varies (codes longer than 10 chars)" {
     const area_b = try geo.decodeOlc(b);
     try std.testing.expect(b_lat >= area_b.south_latitude and b_lat <= area_b.north_latitude);
     try std.testing.expect(b_lng >= area_b.west_longitude and b_lng <= area_b.east_longitude);
+}
+
+test "regression: OLC shorten/recover are inverses (prefix overwrite + antimeridian)" {
+    const Case = struct { lat: f64, lng: f64, ref_lat: f64, ref_lng: f64 };
+    const cases = [_]Case{
+        // Both axes needed adjusting: the latitude fix was overwritten when the
+        // longitude branch re-encoded the prefix using the raw reference latitude
+        // (full=72C72393+2P came back as 72972393+2P).
+        .{ .lat = 18.01759745338643, .lng = -174.9456692586951, .ref_lat = 17.83646729183896, .ref_lng = -175.07240698926444 },
+        // Reference sits exactly on the antimeridian, 2.4 degrees from the point
+        // the short way round — a raw subtraction called it ~342 degrees away
+        // (full=5VJVMJ92+4Q came back as 53JVMJ92+4Q).
+        .{ .lat = -17.332166524464142, .lng = 177.6019914449068, .ref_lat = -21.7463226408412, .ref_lng = 180.0 },
+    };
+
+    for (cases) |c| {
+        var full_buf: [32]u8 = undefined;
+        const full = full_buf[0..try geo.encodeOlc(c.lat, c.lng, 10, &full_buf)];
+
+        var short_buf: [32]u8 = undefined;
+        const short = short_buf[0..try geo.shortenOlc(full, c.ref_lat, c.ref_lng, &short_buf)];
+
+        var rec_buf: [32]u8 = undefined;
+        const rec = rec_buf[0..try geo.recoverOlc(short, c.ref_lat, c.ref_lng, &rec_buf)];
+
+        try std.testing.expectEqualStrings(full, rec);
+    }
 }
 
 test "regression: did_tdw.verifyLog does not leak under injected OOM" {
@@ -420,11 +485,12 @@ test "fuzz: repo parsers (frame differential, stream anti-amplification, crash-s
     for (&threads) |t| t.join();
 
     std.debug.print(
-        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips | {d} threads\n",
+        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips, {d} shorten/recover | {d} threads\n",
         .{
             n_run.load(.monotonic),           n_frame_ok.load(.monotonic),
             n_cyton_samples.load(.monotonic), n_dsi_samples.load(.monotonic),
-            n_olc_roundtrip.load(.monotonic), THREADS,
+            n_olc_roundtrip.load(.monotonic), n_olc_shortrec.load(.monotonic),
+            THREADS,
         },
     );
     try std.testing.expect(!failed.load(.monotonic));
