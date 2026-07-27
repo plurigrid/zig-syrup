@@ -955,6 +955,12 @@ pub const ParseError = error{
     SetTooLarge,
     RecordTooLarge,
     MaxDepth,
+    /// A number or length prefix was not in canonical form: no digits (bare
+    /// `+`/`-`/`:`), non-minimal leading zeros (`00+`, `007+`), or negative zero
+    /// (`0-`). Accepting these lets distinct byte strings decode to the same
+    /// value — wire malleability, a bytes-identity hazard for CIDs / capability
+    /// nullifiers. Canonical serialization must reject them.
+    NonCanonical,
     OutOfMemory,
     Overflow,
 };
@@ -1033,6 +1039,7 @@ pub const Parser = struct {
 
     /// Parse integer, bytes, string, or symbol
     fn parseNumberOrString(self: *Parser) ParseError!Value {
+        const digit_start = self.pos;
         var num: u64 = 0;
         var digit_count: usize = 0;
         while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
@@ -1052,6 +1059,20 @@ pub const Parser = struct {
 
         const marker = self.input[self.pos];
         self.pos += 1;
+
+        // Canonical digit validation for integers ('+'/'-') and length prefixes
+        // (':' '"' '\''): a digit run is mandatory and must be minimal (no leading
+        // zeros beyond the single digit "0"). Without this, `+`, `-`, `:` (no
+        // digits), `00+`, `007+` all decode successfully to values that re-encode
+        // to a DIFFERENT canonical byte string — wire malleability. Negative zero
+        // (`0-`) is rejected in the '-' branch below (canonical zero is `0+`).
+        switch (marker) {
+            '+', '-', ':', '"', '\'' => {
+                if (digit_count == 0) return error.NonCanonical;
+                if (digit_count > 1 and self.input[digit_start] == '0') return error.NonCanonical;
+            },
+            else => {},
+        }
 
         switch (marker) {
             '+' => {
@@ -1073,6 +1094,8 @@ pub const Parser = struct {
                 return Value{ .integer = @intCast(num) };
             },
             '-' => {
+                // Negative zero is non-canonical; zero is only ever `0+`.
+                if (num == 0) return error.NonCanonical;
                 if (num > @as(u64, @intCast(std.math.maxInt(i64))) + 1) {
                     const mag = try self.allocator.alloc(u8, 8);
                     var v = num;
@@ -1128,12 +1151,17 @@ pub const Parser = struct {
     fn parseBigIntExtended(self: *Parser) ParseError!Value {
         self.pos += 1; // Skip 'B'
 
-        // Parse length
+        // Parse length (canonical: at least one digit, no leading zeros)
+        const len_start = self.pos;
         var len: u64 = 0;
+        var len_digits: usize = 0;
         while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
             len = len * 10 + (self.input[self.pos] - '0');
             self.pos += 1;
+            len_digits += 1;
         }
+        if (len_digits == 0) return error.NonCanonical;
+        if (len_digits > 1 and self.input[len_start] == '0') return error.NonCanonical;
 
         if (self.pos >= self.input.len or self.input[self.pos] != ':') {
             return error.InvalidFormat;
@@ -1146,11 +1174,21 @@ pub const Parser = struct {
 
         const sign_byte = self.input[self.pos];
         self.pos += 1;
+        // Sign must be exactly '+' or '-'; otherwise any stray byte is silently
+        // read as positive — another malleability vector.
+        if (sign_byte != '+' and sign_byte != '-') return error.NonCanonical;
         const negative = sign_byte == '-';
 
         const usize_len: usize = @intCast(len);
         const magnitude = self.input[self.pos .. self.pos + usize_len - 1];
         self.pos += usize_len - 1;
+
+        // Canonical magnitude is big-endian minimal: non-empty with no leading
+        // zero byte. This rejects the negative-zero bigint ("B1:-", "B2:-\x00"),
+        // leading-zero padding, and empty magnitude — each of which re-encodes to
+        // a DIFFERENT canonical string (zero is the integer "0+", never a bigint),
+        // i.e. wire malleability.
+        if (magnitude.len == 0 or magnitude[0] == 0) return error.NonCanonical;
 
         // Copy magnitude to owned memory
         const mag_copy = try self.allocator.alloc(u8, magnitude.len);

@@ -198,3 +198,38 @@ test "regression: deep nesting returns error.MaxDepth, never crashes" {
         try std.testing.expectError(error.MaxDepth, syrup.decode(bytes, arena.allocator()));
     }
 }
+
+test "regression: non-canonical integers/lengths/bigints are rejected (wire malleability)" {
+    const alloc = std.testing.allocator;
+
+    // Each of these decoded successfully before the fix and re-encoded to a
+    // DIFFERENT canonical byte string — distinct wire bytes for the same value,
+    // a bytes-identity hazard for CIDs / capability nullifiers. The round-trip
+    // fuzzer surfaced them; these lock the fix in deterministically.
+    const non_canonical = [_][]const u8{
+        "0-", // negative zero          -> canonical is "0+"
+        "00+", // leading zero
+        "007+", // leading zeros
+        "+", // integer, no digits
+        "-", // integer, no digits
+        "00:", // length, leading zero
+        "B1:-", // bigint negative zero (empty magnitude, '-')
+        "B2:-\x00", // bigint negative zero (zero magnitude byte)
+        "B2:+\x00", // bigint non-minimal magnitude (leading zero byte)
+        "B01:+\x05", // bigint leading-zero length
+        "B1:x\x05", // bigint invalid sign byte
+    };
+    for (non_canonical) |bytes| {
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+        try std.testing.expectError(error.NonCanonical, syrup.decode(bytes, arena.allocator()));
+    }
+
+    // Canonical forms must still decode cleanly (no over-rejection).
+    const canonical = [_][]const u8{ "0+", "7+", "123-", "10+", "0:", "3:abc" };
+    for (canonical) |bytes| {
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        defer arena.deinit();
+        _ = try syrup.decode(bytes, arena.allocator());
+    }
+}
