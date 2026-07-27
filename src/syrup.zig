@@ -954,6 +954,7 @@ pub const ParseError = error{
     DictionaryTooLarge,
     SetTooLarge,
     RecordTooLarge,
+    MaxDepth,
     OutOfMemory,
     Overflow,
 };
@@ -964,9 +965,19 @@ pub const ParseError = error{
 
 /// Parser state for streaming Syrup deserialization
 pub const Parser = struct {
+    /// Maximum container nesting depth. Untrusted input recurses through
+    /// `parse()` once per nesting level; without this bound a payload like
+    /// "[[[[..." exhausts the native stack (measured SIGSEGV between depth
+    /// 5000 and 10000 on an 8 MiB stack). 256 is generous for real OCapN /
+    /// CapTP messages (which nest a handful deep) and ~20-40x below the crash
+    /// threshold. Mirrors serde_json's default recursion limit (128).
+    pub const MAX_DEPTH: u16 = 256;
+
     input: []const u8,
     pos: usize = 0,
     allocator: Allocator,
+    /// Live container-nesting depth, bounded by `MAX_DEPTH`.
+    depth: u16 = 0,
 
     /// Create a new parser
     pub fn init(input: []const u8, allocator: Allocator) Parser {
@@ -974,6 +985,7 @@ pub const Parser = struct {
             .input = input,
             .pos = 0,
             .allocator = allocator,
+            .depth = 0,
         };
     }
 
@@ -982,6 +994,11 @@ pub const Parser = struct {
         if (self.pos >= self.input.len) {
             return error.UnexpectedEOF;
         }
+        // Bound recursion depth. Every nested value re-enters `parse()` while
+        // the parent frame is still live, so `depth` reflects exact nesting.
+        if (self.depth >= MAX_DEPTH) return error.MaxDepth;
+        self.depth += 1;
+        defer self.depth -= 1;
 
         const ch = self.input[self.pos];
         return switch (ch) {

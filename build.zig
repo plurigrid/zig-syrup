@@ -1891,6 +1891,23 @@ pub fn build(b: *std.Build) void {
     const fuzz_syrup_step = b.step("fuzz-syrup", "Fuzz test Syrup parser and encoder");
     fuzz_syrup_step.dependOn(&run_fuzz_syrup.step);
 
+    // Smoke variant: run the fuzz targets as ordinary tests (each testOne once
+    // on the smith's seed input) plus the deterministic MaxDepth regression.
+    // Needed because zig 0.17.0-dev.1441's `--fuzz` / `root_module.fuzz = true`
+    // libfuzzer runtime segfaults in ensureCorpusLoaded on ANY target (verified
+    // against a 6-line minimal target). This step is CI-usable today; switch to
+    // `zig build fuzz-syrup --fuzz` once the toolchain fuzzer runtime is fixed.
+    const fuzz_syrup_smoke_mod = b.createModule(.{
+        .root_source_file = b.path("src/fuzz_syrup.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fuzz_syrup_smoke_mod.addImport("syrup", syrup_mod);
+    const fuzz_syrup_smoke = b.addTest(.{ .root_module = fuzz_syrup_smoke_mod });
+    const run_fuzz_syrup_smoke = b.addRunArtifact(fuzz_syrup_smoke);
+    const fuzz_syrup_smoke_step = b.step("fuzz-syrup-smoke", "Run Syrup fuzz targets once + MaxDepth regression (no --fuzz)");
+    fuzz_syrup_smoke_step.dependOn(&run_fuzz_syrup_smoke.step);
+
     // Tests for Cyton Parser
     const cyton_parser_test_mod = b.createModule(.{
         .root_source_file = b.path("src/cyton_parser.zig"),
