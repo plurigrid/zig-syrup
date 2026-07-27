@@ -1967,6 +1967,7 @@ pub fn build(b: *std.Build) void {
         fuzz_parsers_mod.addImport("edf_reader", fp.mod(b, "src/edf_reader.zig", target, opt));
         fuzz_parsers_mod.addImport("did_key", fp.mod(b, "src/did_key.zig", target, opt));
         fuzz_parsers_mod.addImport("ibc_denom_verifier", fp.mod(b, "src/ibc_denom_verifier.zig", target, opt));
+        fuzz_parsers_mod.addImport("did_tdw", fp.mod(b, "src/did_tdw.zig", target, opt));
     }
     const fuzz_parsers = b.addTest(.{ .root_module = fuzz_parsers_mod });
     const run_fuzz_parsers = b.addRunArtifact(fuzz_parsers);

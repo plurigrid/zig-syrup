@@ -170,9 +170,16 @@ pub fn verifyLog(allocator: Allocator, log_lines: []const []const u8) !VerifiedL
     if (log_lines.len == 0) return error.EmptyLog;
 
     var entries = try allocator.alloc(LogEntry, log_lines.len);
+    errdefer allocator.free(entries);
+    // Each iteration dupes a string; if a later allocation fails we must release
+    // the ones already made. Without this, an OOM mid-loop leaked the entries
+    // array plus every prior dupe.
+    var filled: usize = 0;
+    errdefer for (entries[0..filled]) |e| allocator.free(e.version_time);
+
     var balance: Trit = .zero;
     const chain_valid = true;
-    var prev_hash = [_]u8{0} ** 32;
+    var prev_hash: [32]u8 = @splat(0);
 
     for (log_lines, 0..) |line, i| {
         // Hash this entry: SHA-256(prev_hash || line)
@@ -193,6 +200,7 @@ pub fn verifyLog(allocator: Allocator, log_lines: []const []const u8) !VerifiedL
             .prev_hash = prev_hash,
             .trit = trit,
         };
+        filled = i + 1;
 
         balance = Trit.add(balance, trit);
         prev_hash = entry_hash;

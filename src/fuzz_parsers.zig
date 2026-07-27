@@ -28,6 +28,7 @@ const edf = @import("edf_reader");
 const did_key = @import("did_key");
 const geo = @import("geo");
 const ibc = @import("ibc_denom_verifier");
+const did_tdw = @import("did_tdw");
 
 const THREADS = 10;
 const ITERS_PER_THREAD: u64 = 60_000;
@@ -56,6 +57,71 @@ fn fill(rnd: std.Random, buf: []u8, alphabet: ?[]const u8) void {
                 rnd.int(u8);
         } else rnd.int(u8);
     }
+}
+
+/// Write `v` as ASCII into a fixed-width EDF field, space-padded (EDF fields are
+/// left-aligned ASCII).
+fn writeField(field: []u8, v: i64) void {
+    @memset(field, ' ');
+    var tmp: [24]u8 = undefined;
+    const s = std.fmt.bufPrint(&tmp, "{d}", .{v}) catch return;
+    const n = @min(s.len, field.len);
+    @memcpy(field[0..n], s[0..n]);
+}
+
+/// Build a SELF-CONSISTENT EDF header (version, matching header_bytes, channel
+/// count) with randomized numeric fields. Random bytes essentially never satisfy
+/// `header_bytes == 256 + 256*n_channels`, so without this the per-channel
+/// parsing loops — where the numeric conversions live — are unreachable.
+fn buildEdf(rnd: std.Random, out: []u8) ?[]u8 {
+    const n: usize = rnd.uintLessThan(usize, 5);
+    const header_bytes: usize = 256 + 256 * n;
+    if (out.len < header_bytes) return null;
+    const b = out[0..header_bytes];
+    @memset(b, ' ');
+
+    b[0] = '0'; // version must start with '0'
+    writeField(b[184..192], @intCast(header_bytes));
+    writeField(b[236..244], @intCast(rnd.uintLessThan(u32, 1000))); // n_records
+    writeField(b[244..252], 1); // record_duration
+    writeField(b[252..256], @intCast(n)); // n_channels
+
+    // Numeric per-channel fields. Each is 8 ASCII chars, so it can carry values
+    // far outside the i16/u16 the parser stores them in — that is the point.
+    const wild = struct {
+        fn v(r: std.Random) i64 {
+            return switch (r.uintLessThan(u8, 4)) {
+                0 => @intCast(r.uintLessThan(u32, 100)), // in range
+                1 => 99_999_999, // overflows u16 and i16
+                2 => -9_999_999, // underflows i16
+                else => r.int(i32), // anything
+            };
+        }
+    }.v;
+
+    var off: usize = 256 + 104 * n; // physical_min block
+    for (0..n) |_| {
+        writeField(b[off..][0..8], @intCast(rnd.uintLessThan(u32, 100)));
+        off += 8;
+    }
+    for (0..n) |_| { // physical_max
+        writeField(b[off..][0..8], @intCast(rnd.uintLessThan(u32, 100)));
+        off += 8;
+    }
+    for (0..n) |_| { // digital_min  -> stored in i16
+        writeField(b[off..][0..8], wild(rnd));
+        off += 8;
+    }
+    for (0..n) |_| { // digital_max  -> stored in i16
+        writeField(b[off..][0..8], wild(rnd));
+        off += 8;
+    }
+    off += 80 * n; // prefiltering
+    for (0..n) |_| { // samples_per_record -> stored in u16
+        writeField(b[off..][0..8], wild(rnd));
+        off += 8;
+    }
+    return b;
 }
 
 fn worker(tid: u64) void {
@@ -172,9 +238,16 @@ fn worker(tid: u64) void {
                 }
             },
             4 => {
-                // EDF headers are ASCII numerics in fixed-width fields.
-                fill(rnd, input, " 0123456789.-+EDF+CX");
-                _ = edf.EDFFile.parse(input) catch {};
+                // Half structured (reaches the per-channel numeric conversions),
+                // half biased-random (exercises the early header validation).
+                if (rnd.boolean()) {
+                    if (buildEdf(rnd, input)) |edf_buf| {
+                        _ = edf.EDFFile.parse(edf_buf) catch {};
+                    }
+                } else {
+                    fill(rnd, input, " 0123456789.-+EDF+CX");
+                    _ = edf.EDFFile.parse(input) catch {};
+                }
             },
             5 => {
                 // did:key:z<base58btc>
@@ -200,6 +273,28 @@ fn worker(tid: u64) void {
     _ = n_frame_ok.fetchAdd(frames_ok, .monotonic);
     _ = n_cyton_samples.fetchAdd(cyt, .monotonic);
     _ = n_dsi_samples.fetchAdd(dsi, .monotonic);
+}
+
+test "regression: did_tdw.verifyLog does not leak under injected OOM" {
+    // verifyLog allocates an entries array and then dupes a string per entry.
+    // If a later allocation fails, everything already allocated must be released
+    // before returning the error. std.testing.allocator fails this test if not.
+    const lines = [_][]const u8{
+        "2026-07-27T00:00:00Z genesis entry payload",
+        "2026-07-27T00:01:00Z rotation entry payload",
+        "2026-07-27T00:02:00Z another rotation payload",
+        "2026-07-27T00:03:00Z yet another payload",
+    };
+    // Walk the fail index across every allocation the call makes.
+    var idx: usize = 0;
+    while (idx < 16) : (idx += 1) {
+        var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = idx });
+        if (did_tdw.verifyLog(failing.allocator(), &lines)) |vlog| {
+            vlog.deinit(); // succeeded: release normally
+        } else |_| {
+            // failed: verifyLog must have cleaned up after itself
+        }
+    }
 }
 
 test "regression: frameCount agrees with decodeFrame on an oversized frame" {

@@ -79,7 +79,8 @@ pub const EDFFile = struct {
         @memcpy(&result.reserved, buf[192..236]);
         result.n_records = try parseAsciiU32(buf[236..244]);
         result.record_duration = try parseAsciiF64(buf[244..252]);
-        result.n_channels = @intCast(try parseAsciiU32(buf[252..256]));
+        result.n_channels = std.math.cast(u16, try parseAsciiU32(buf[252..256])) orelse
+            return EDFError.InvalidChannelCount;
 
         if (result.n_channels > MAX_CHANNELS) return EDFError.InvalidChannelCount;
 
@@ -117,14 +118,18 @@ pub const EDFFile = struct {
             result.channels[i].physical_max = try parseAsciiF64(buf[offset..][0..8]);
             offset += 8;
         }
-        // Digital min (8 bytes each)
+        // Digital min (8 bytes each). An 8-char ASCII field holds values far
+        // outside i16, so a bare @intCast PANICS on untrusted input ("integer
+        // does not fit in destination type"). Reject out-of-range instead.
         for (0..n) |i| {
-            result.channels[i].digital_min = @intCast(try parseAsciiI32(buf[offset..][0..8]));
+            result.channels[i].digital_min = std.math.cast(i16, try parseAsciiI32(buf[offset..][0..8])) orelse
+                return EDFError.ParseIntError;
             offset += 8;
         }
         // Digital max (8 bytes each)
         for (0..n) |i| {
-            result.channels[i].digital_max = @intCast(try parseAsciiI32(buf[offset..][0..8]));
+            result.channels[i].digital_max = std.math.cast(i16, try parseAsciiI32(buf[offset..][0..8])) orelse
+                return EDFError.ParseIntError;
             offset += 8;
         }
         // Prefiltering (80 bytes each)
@@ -132,9 +137,11 @@ pub const EDFFile = struct {
             @memcpy(&result.channels[i].prefiltering, buf[offset..][0..80]);
             offset += 80;
         }
-        // Samples per record (8 bytes each)
+        // Samples per record (8 bytes each). Same hazard: 8 ASCII digits reach
+        // 99,999,999, far beyond u16.
         for (0..n) |i| {
-            result.channels[i].samples_per_record = @intCast(try parseAsciiU32(buf[offset..][0..8]));
+            result.channels[i].samples_per_record = std.math.cast(u16, try parseAsciiU32(buf[offset..][0..8])) orelse
+                return EDFError.ParseIntError;
             offset += 8;
         }
         // Reserved (32 bytes each) — skip
