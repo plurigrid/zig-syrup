@@ -1908,6 +1908,21 @@ pub fn build(b: *std.Build) void {
     const fuzz_syrup_smoke_step = b.step("fuzz-syrup-smoke", "Run Syrup fuzz targets once + MaxDepth regression (no --fuzz)");
     fuzz_syrup_smoke_step.dependOn(&run_fuzz_syrup_smoke.step);
 
+    // Random / property fuzzer that WORKS on macOS (coverage `--fuzz` is ELF-only
+    // and dead on Darwin). Multi-threaded crash-safety pounding of decode() on
+    // random + structural-biased bytes. Forced ReleaseSafe so overflow/bounds/UB
+    // panic instead of wrapping silently.
+    const fuzz_syrup_random_mod = b.createModule(.{
+        .root_source_file = b.path("src/fuzz_syrup_random.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+    });
+    fuzz_syrup_random_mod.addImport("syrup", syrup_mod);
+    const fuzz_syrup_random = b.addTest(.{ .root_module = fuzz_syrup_random_mod });
+    const run_fuzz_syrup_random = b.addRunArtifact(fuzz_syrup_random);
+    const fuzz_syrup_random_step = b.step("fuzz-syrup-random", "Multi-threaded random crash-safety fuzz of decode() (macOS-native, ReleaseSafe)");
+    fuzz_syrup_random_step.dependOn(&run_fuzz_syrup_random.step);
+
     // Tests for Cyton Parser
     const cyton_parser_test_mod = b.createModule(.{
         .root_source_file = b.path("src/cyton_parser.zig"),
