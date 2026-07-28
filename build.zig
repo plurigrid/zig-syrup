@@ -1027,7 +1027,13 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(set_game_cli);
 
     const run_set_game_cli = b.addRunArtifact(set_game_cli);
-    if (b.args) |args| run_set_game_cli.addArgs(args);
+    // zig 0.17-dev removed std.Build.args in favor of Run.addPassthruArgs;
+    // guard (per tree A's build.zig) so this configures on 0.16 and 0.17-dev.
+    if (comptime @hasField(std.Build, "args")) {
+        if (b.args) |args| run_set_game_cli.addArgs(args);
+    } else {
+        run_set_game_cli.addPassthruArgs();
+    }
     const run_set_game_step = b.step("run-set-game", "Run SET card game CLI");
     run_set_game_step.dependOn(&run_set_game_cli.step);
 
@@ -1860,7 +1866,7 @@ pub fn build(b: *std.Build) void {
     });
     fuzz_world_enum_mod.addImport("lux_color", lux_color_mod);
     const fuzz_world_enum = b.addTest(.{ .root_module = fuzz_world_enum_mod });
-    fuzz_world_enum.root_module.fuzz = true;
+    fuzz_world_enum.root_module.fuzz = target.result.os.tag != .macos;
     const run_fuzz_world_enum = b.addRunArtifact(fuzz_world_enum);
 
     const fuzz_colored_parens_mod = b.createModule(.{
@@ -1870,7 +1876,7 @@ pub fn build(b: *std.Build) void {
     });
     fuzz_colored_parens_mod.addImport("lux_color", lux_color_mod);
     const fuzz_colored_parens = b.addTest(.{ .root_module = fuzz_colored_parens_mod });
-    fuzz_colored_parens.root_module.fuzz = true;
+    fuzz_colored_parens.root_module.fuzz = target.result.os.tag != .macos;
     const run_fuzz_colored_parens = b.addRunArtifact(fuzz_colored_parens);
 
     const fuzz_worlds_step = b.step("fuzz-worlds", "Fuzz test worlds modules");
@@ -1885,7 +1891,10 @@ pub fn build(b: *std.Build) void {
     });
     fuzz_syrup_mod.addImport("syrup", syrup_mod);
     const fuzz_syrup = b.addTest(.{ .root_module = fuzz_syrup_mod });
-    fuzz_syrup.root_module.fuzz = true;
+    // Zig 0.17-dev's coverage fuzzer crashes in ensureCorpusLoaded on Darwin
+    // before any harness callback runs. Keep the public fuzz-syrup step useful
+    // there by running each target once; Linux retains coverage-guided fuzzing.
+    fuzz_syrup.root_module.fuzz = target.result.os.tag != .macos;
     const run_fuzz_syrup = b.addRunArtifact(fuzz_syrup);
 
     const fuzz_syrup_step = b.step("fuzz-syrup", "Fuzz test Syrup parser and encoder");
@@ -1937,6 +1946,31 @@ pub fn build(b: *std.Build) void {
     const run_fuzz_syrup_struct = b.addRunArtifact(fuzz_syrup_struct);
     const fuzz_syrup_struct_step = b.step("fuzz-syrup-struct", "Structure-aware fuzz: generate valid values, then mutate + truncate (ReleaseSafe)");
     fuzz_syrup_struct_step.dependOn(&run_fuzz_syrup_struct.step);
+
+    // Bounded-memory, zero-corpus parallel driver. It exercises seven independent
+    // oracles across all available CPUs without growing disk usage. Optional
+    // passthrough args: iterations-per-thread, threads, seed, diagnostic mode.
+    const fuzz_parallel_mod = b.createModule(.{
+        .root_source_file = b.path("src/fuzz_parallel.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+    });
+    fuzz_parallel_mod.addImport("syrup", syrup_mod);
+    const fuzz_parallel_frame_mod = b.createModule(.{
+        .root_source_file = b.path("src/message_frame.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+    });
+    fuzz_parallel_frame_mod.addImport("syrup", syrup_mod);
+    fuzz_parallel_mod.addImport("message_frame", fuzz_parallel_frame_mod);
+    const fuzz_parallel = b.addExecutable(.{
+        .name = "fuzz-parallel",
+        .root_module = fuzz_parallel_mod,
+    });
+    const run_fuzz_parallel = b.addRunArtifact(fuzz_parallel);
+    run_fuzz_parallel.addPassthruArgs();
+    const fuzz_parallel_step = b.step("fuzz-parallel", "Bounded-memory 7-oracle parallel fuzz driver");
+    fuzz_parallel_step.dependOn(&run_fuzz_parallel.step);
 
     // Fuzz the repo's OTHER untrusted-byte parsers (framing, BCI streams, EDF,
     // did:key, OLC, IBC denom) with per-target properties: a frameCount vs
@@ -2984,8 +3018,10 @@ pub fn build(b: *std.Build) void {
     stellogen_cli_install_step.dependOn(&b.addInstallArtifact(stellogen_cli_exe, .{}).step);
 
     const run_stellogen_cli = b.addRunArtifact(stellogen_cli_exe);
-    if (b.args) |args| {
-        run_stellogen_cli.addArgs(args);
+    if (comptime @hasField(std.Build, "args")) {
+        if (b.args) |args| run_stellogen_cli.addArgs(args);
+    } else {
+        run_stellogen_cli.addPassthruArgs();
     }
     const stellogen_step = b.step("stellogen", "Run Stellogen compiler");
     stellogen_step.dependOn(&run_stellogen_cli.step);
@@ -3889,7 +3925,11 @@ pub fn build(b: *std.Build) void {
     const witness_worm_install_step = b.step("install-witness-worm", "install witness-worm exe (broken on zig 0.16)");
     witness_worm_install_step.dependOn(&b.addInstallArtifact(witness_worm_exe, .{}).step);
     const run_witness_worm = b.addRunArtifact(witness_worm_exe);
-    if (b.args) |a| run_witness_worm.addArgs(a);
+    if (comptime @hasField(std.Build, "args")) {
+        if (b.args) |a| run_witness_worm.addArgs(a);
+    } else {
+        run_witness_worm.addPassthruArgs();
+    }
     const witness_worm_step = b.step("witness-worm", "Run C. elegans witnessing protocol visualization");
     witness_worm_step.dependOn(&run_witness_worm.step);
 

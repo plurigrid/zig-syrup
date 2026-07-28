@@ -219,7 +219,7 @@ pub const FNIRSEpoch = struct {
     pub fn aggregateTrit(self: *const FNIRSEpoch) Trit {
         var sum: i32 = 0;
         for (self.channels[0..self.n_channels]) |ch| {
-            sum += @intFromEnum(ch.trit);
+            sum += @backingInt(ch.trit);
         }
         if (sum > 0) return .plus;
         if (sum < 0) return .minus;
@@ -251,9 +251,9 @@ pub const BaselineTracker = struct {
 
     pub fn init(alpha: f32) BaselineTracker {
         return .{
-            .baseline_lambda1 = [_]f32{0} ** MAX_FNIRS_CHANNELS,
-            .baseline_lambda2 = [_]f32{0} ** MAX_FNIRS_CHANNELS,
-            .initialized = [_]bool{false} ** MAX_FNIRS_CHANNELS,
+            .baseline_lambda1 = @splat(0),
+            .baseline_lambda2 = @splat(0),
+            .initialized = @splat(false),
             .alpha = alpha,
         };
     }

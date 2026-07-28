@@ -45,7 +45,7 @@ pub fn EnsembleAverage(comptime N: usize) type {
 
         /// Compute uniform ensemble average across N channels.
         pub fn compute(channels: [N][NUM_BANDS]f32) Self {
-            var mean = [_]f32{0} ** NUM_BANDS;
+            var mean: [NUM_BANDS]f32 = @splat(0);
             for (channels) |ch| {
                 for (0..NUM_BANDS) |b| {
                     mean[b] += ch[b];
@@ -55,7 +55,7 @@ pub fn EnsembleAverage(comptime N: usize) type {
                 mean[b] /= @as(f32, @floatFromInt(N));
             }
 
-            var variance = [_]f32{0} ** NUM_BANDS;
+            var variance: [NUM_BANDS]f32 = @splat(0);
             for (channels) |ch| {
                 for (0..NUM_BANDS) |b| {
                     const diff = ch[b] - mean[b];
@@ -75,7 +75,7 @@ pub fn EnsembleAverage(comptime N: usize) type {
             for (weights) |w| total_weight += w;
             if (total_weight <= 0) return compute(channels);
 
-            var mean = [_]f32{0} ** NUM_BANDS;
+            var mean: [NUM_BANDS]f32 = @splat(0);
             for (channels, 0..) |ch, i| {
                 const w = weights[i] / total_weight;
                 for (0..NUM_BANDS) |b| {
@@ -83,7 +83,7 @@ pub fn EnsembleAverage(comptime N: usize) type {
                 }
             }
 
-            var variance = [_]f32{0} ** NUM_BANDS;
+            var variance: [NUM_BANDS]f32 = @splat(0);
             for (channels, 0..) |ch, i| {
                 const w = weights[i] / total_weight;
                 for (0..NUM_BANDS) |b| {
@@ -125,8 +125,8 @@ pub fn ReadoutLayer(comptime N: usize) type {
         /// Zero-initialized (requires training).
         pub fn initZero() Self {
             return Self{
-                .weights = [_][FEATURE_DIM]f32{[_]f32{0} ** FEATURE_DIM} ** OUTPUT_DIM,
-                .bias = [_]f32{0} ** OUTPUT_DIM,
+                .weights = @splat(@as([FEATURE_DIM]f32, @splat(0))),
+                .bias = @splat(0),
             };
         }
 
@@ -134,7 +134,7 @@ pub fn ReadoutLayer(comptime N: usize) type {
         /// Band mapping: delta/theta → minus, alpha → zero, beta/gamma → plus.
         /// Variance features provide noise robustness weighting.
         pub fn initHeuristic() Self {
-            var weights = [_][FEATURE_DIM]f32{[_]f32{0} ** FEATURE_DIM} ** OUTPUT_DIM;
+            var weights: [OUTPUT_DIM][FEATURE_DIM]f32 = @splat(@as([FEATURE_DIM]f32, @splat(0)));
 
             // Mean features [0..5]: delta, theta, alpha, beta, gamma
             // Variance features [5..10]: delta_var, theta_var, alpha_var, beta_var, gamma_var
@@ -242,7 +242,7 @@ pub fn ReadoutLayer(comptime N: usize) type {
 
             // One-hot target: trit enum → index (minus=-1→0, zero=0→1, plus=+1→2)
             var target: [OUTPUT_DIM]f32 = [_]f32{ 0, 0, 0 };
-            const target_idx: usize = @intCast(@as(i8, @intFromEnum(target_trit)) + 1);
+            const target_idx: usize = @intCast(@as(i8, @backingInt(target_trit)) + 1);
             target[target_idx] = 1.0;
 
             // Compute errors and MSE
@@ -307,7 +307,7 @@ fn RingBuffer(comptime T: type, comptime capacity: usize) type {
             for (0..self.count) |i| {
                 const idx = (start + i) % capacity;
                 const t = getTrit(self.items[idx]);
-                const ti: usize = @intCast(@as(i8, @intFromEnum(t)) + 1); // -1→0, 0→1, +1→2
+                const ti: usize = @intCast(@as(i8, @backingInt(t)) + 1); // -1→0, 0→1, +1→2
                 counts[ti] += 1;
             }
             var best: usize = 0;
@@ -415,7 +415,7 @@ pub fn ERC(comptime N: usize) type {
         /// Export to propagator CellValue.
         pub fn toCellValue(self: *const Self) propagator.CellValue(f32) {
             const result = self.latestResult() orelse return .{ .nothing = {} };
-            return .{ .value = @as(f32, @floatFromInt(@intFromEnum(result.trit))) };
+            return .{ .value = @as(f32, @floatFromInt(@backingInt(result.trit))) };
         }
 
         /// Online weight adaptation via LMS.

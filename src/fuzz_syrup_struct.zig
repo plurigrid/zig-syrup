@@ -20,7 +20,7 @@
 const std = @import("std");
 const syrup = @import("syrup");
 
-const THREADS = 10;
+const MAX_THREADS = 64;
 /// CI default; soak runs raise this.
 const ITERS_PER_THREAD: u64 = 200_000;
 /// Generation depth. Far below Parser.MAX_DEPTH (256) — this fuzzer is about
@@ -33,6 +33,10 @@ var n_rejected: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_mutated: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var n_truncated: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var failed: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+fn workerCount() usize {
+    return @min(MAX_THREADS, @max(1, std.Thread.getCpuCount() catch 1));
+}
 
 fn lessThanValue(_: void, a: syrup.Value, b: syrup.Value) bool {
     return a.compare(b) == .lt;
@@ -47,7 +51,7 @@ fn lessThanEntry(_: void, a: syrup.Value.DictEntry, b: syrup.Value.DictEntry) bo
 /// otherwise every container would bounce off NotCanonicalOrder and the deep
 /// paths would never run.
 fn genValue(rnd: std.Random, a: std.mem.Allocator, depth: u8) error{OutOfMemory}!syrup.Value {
-    const kind = if (depth == 0) rnd.uintLessThan(u8, 11) else rnd.uintLessThan(u8, 15);
+    const kind = if (depth == 0) rnd.uintLessThan(u8, 11) else rnd.uintLessThan(u8, 17);
     switch (kind) {
         0 => return .{ .undefined = {} },
         1 => return .{ .null = {} },
@@ -113,7 +117,7 @@ fn genValue(rnd: std.Random, a: std.mem.Allocator, depth: u8) error{OutOfMemory}
             }
             return .{ .dictionary = entries[0..w] };
         },
-        else => {
+        14 => {
             const label = try a.create(syrup.Value);
             const slen = rnd.uintLessThan(usize, 8);
             const sym = try a.alloc(u8, slen);
@@ -124,12 +128,32 @@ fn genValue(rnd: std.Random, a: std.mem.Allocator, depth: u8) error{OutOfMemory}
             for (fields) |*f| f.* = try genValue(rnd, a, depth - 1);
             return .{ .record = .{ .label = label, .fields = fields } };
         },
+        15 => {
+            const tag = try a.alloc(u8, rnd.uintLessThan(usize, 8));
+            for (tag) |*c| c.* = 'a' + rnd.uintLessThan(u8, 26);
+            const payload = try a.create(syrup.Value);
+            payload.* = try genValue(rnd, a, depth - 1);
+            return .{ .tagged = .{ .tag = tag, .payload = payload } };
+        },
+        else => {
+            const message = try a.alloc(u8, rnd.uintLessThan(usize, 8));
+            for (message) |*c| c.* = 'a' + rnd.uintLessThan(u8, 26);
+            const identifier = try a.alloc(u8, rnd.uintLessThan(usize, 8));
+            for (identifier) |*c| c.* = rnd.int(u8);
+            const data = try a.create(syrup.Value);
+            data.* = try genValue(rnd, a, depth - 1);
+            return .{ .@"error" = .{
+                .message = message,
+                .identifier = identifier,
+                .data = data,
+            } };
+        },
     }
 }
 
 fn worker(tid: u64) void {
     // Deterministic per-thread seed → any failure is reproducible from (tid, iter).
-    var prng = std.Random.DefaultPrng.init(0x5EED_1234 ^ (tid *% 0x9E3779B97F4A7C15));
+    var prng = std.Random.DefaultPrng.init(0x5EED_1234 ^ @as(u64, std.testing.random_seed) ^ (tid *% 0x9E3779B97F4A7C15));
     const rnd = prng.random();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -200,9 +224,11 @@ fn worker(tid: u64) void {
 }
 
 test "structure-aware fuzz: generate, round-trip, mutate, truncate" {
-    var threads: [THREADS]std.Thread = undefined;
-    for (&threads, 0..) |*t, k| t.* = try std.Thread.spawn(.{}, worker, .{@as(u64, k)});
-    for (&threads) |t| t.join();
+    const thread_count = workerCount();
+    const threads = try std.testing.allocator.alloc(std.Thread, thread_count);
+    defer std.testing.allocator.free(threads);
+    for (threads, 0..) |*t, k| t.* = try std.Thread.spawn(.{}, worker, .{@as(u64, k)});
+    for (threads) |t| t.join();
 
     const gen = n_generated.load(.monotonic);
     const fix = n_fixpoint.load(.monotonic);
@@ -210,8 +236,8 @@ test "structure-aware fuzz: generate, round-trip, mutate, truncate" {
     const mut = n_mutated.load(.monotonic);
     const trunc = n_truncated.load(.monotonic);
     std.debug.print(
-        "\nstruct-fuzz: {d} values generated | {d} fixpoints, {d} declined | {d} mutations, {d} truncations survived | {d} threads\n",
-        .{ gen, fix, rej, mut, trunc, THREADS },
+        "\nstruct-fuzz: seed=0x{x} {d} values generated | {d} fixpoints, {d} declined | {d} mutations, {d} truncations survived | {d} threads\n",
+        .{ std.testing.random_seed, gen, fix, rej, mut, trunc, thread_count },
     );
 
     try std.testing.expect(!failed.load(.monotonic));

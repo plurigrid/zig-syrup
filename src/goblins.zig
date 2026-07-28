@@ -476,7 +476,7 @@ export fn pumpkin_encode_presence(
     pos += user_id_len;
 
     // status as symbol
-    const status_sym = switch (@as(PresenceStatus, @enumFromInt(status))) {
+    const status_sym = switch (@as(PresenceStatus, @fromBackingInt(@intCast(status)))) {
         .online => "6'online",
         .offline => "7'offline",
         .away => "4'away",
@@ -687,9 +687,9 @@ pub const CapTPSession = struct {
     session_id: u64 = 0,
     my_pubkey: [32]u8 = undefined,
     // ORC-T: ref counts for exported objects (indexed by export position)
-    export_ref_counts: [MAX_STURDY_REFS]u16 = [_]u16{0} ** MAX_STURDY_REFS,
+    export_ref_counts: [MAX_STURDY_REFS]u16 = @splat(0),
     // ORC-T: answer positions currently in use (for op:gc-answers)
-    answer_positions: [MAX_STURDY_REFS]bool = [_]bool{false} ** MAX_STURDY_REFS,
+    answer_positions: [MAX_STURDY_REFS]bool = @splat(false),
     next_answer_pos: u16 = 0,
 
     pub fn init(pubkey: [32]u8) CapTPSession {
@@ -1399,7 +1399,7 @@ test "e2e: presence-update encode round-trip" {
     const written = pumpkin_encode_presence(
         user.ptr,
         user.len,
-        @intFromEnum(PresenceStatus.online),
+        @backingInt(PresenceStatus.online),
         &buf,
         buf.len,
     );
@@ -1621,7 +1621,7 @@ test "e2e: sealed-envelope encode" {
 test "e2e: full pumpkin-chat session simulation" {
     // Simulates: connect → handshake → join room → send message → receive history → leave
 
-    var session = CapTPSession.init([_]u8{0x42} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0x42)));
     try std.testing.expectEqual(SessionState.disconnected, session.state);
 
     // 1. Encode op:start-session handshake
@@ -1725,7 +1725,7 @@ test "e2e: full pumpkin-chat session simulation" {
     const pres_len = pumpkin_encode_presence(
         user.ptr,
         user.len,
-        @intFromEnum(PresenceStatus.offline),
+        @backingInt(PresenceStatus.offline),
         &pres_buf,
         pres_buf.len,
     );
@@ -1750,7 +1750,7 @@ test "e2e: full pumpkin-chat session simulation" {
 }
 
 test "e2e: websocket captp frame wrap/unwrap round-trip" {
-    var ws = WebSocketCapTP.init([_]u8{0x69} ** 32);
+    var ws = WebSocketCapTP.init(@as([32]u8, @splat(0x69)));
 
     // Encode a chat message
     var syrup_buf: [512]u8 = undefined;
@@ -1787,7 +1787,7 @@ test "e2e: websocket captp frame wrap/unwrap round-trip" {
 }
 
 test "e2e: websocket upgrade request encoding" {
-    var ws = WebSocketCapTP.init([_]u8{0} ** 32);
+    var ws = WebSocketCapTP.init(@as([32]u8, @splat(0)));
     var buf: [512]u8 = undefined;
     const len = ws.encodeUpgradeRequest("chat.example.com", "/ocapn/ws", &buf);
     try std.testing.expect(len > 0);
@@ -1834,7 +1834,7 @@ test "e2e: sealed message over websocket full pipeline" {
     try std.testing.expect(env_len > 0);
 
     // Wrap in WebSocket
-    var ws = WebSocketCapTP.init([_]u8{0x42} ** 32);
+    var ws = WebSocketCapTP.init(@as([32]u8, @splat(0x42)));
     var ws_buf: [2048]u8 = undefined;
     const ws_len = ws.wrapInWebSocketFrame(env_buf[0..env_len], &ws_buf);
     try std.testing.expect(ws_len > 0);
@@ -1882,7 +1882,7 @@ test "e2e: GF(3) conservation across pumpkin-chat session" {
         const len = pumpkin_encode_presence(
             user.ptr,
             user.len,
-            @intFromEnum(PresenceStatus.online),
+            @backingInt(PresenceStatus.online),
             &buf,
             buf.len,
         );
@@ -1896,7 +1896,7 @@ test "e2e: GF(3) conservation across pumpkin-chat session" {
 }
 
 test "e2e: CapTPSession ref table management" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
 
     // Add exports up to limit
     for (0..MAX_STURDY_REFS) |i| {
@@ -1919,7 +1919,7 @@ test "e2e: CapTPSession ref table management" {
 // --- Part C: ORC-T (distributed GC) tests ---
 
 test "orct: export ref count lifecycle" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
 
     // Export an object — ref count starts at 1
     const slot = session.addLocalExport(42).?;
@@ -1943,7 +1943,7 @@ test "orct: export ref count lifecycle" {
 }
 
 test "orct: wire_delta overflow clamps to zero" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
     _ = session.addLocalExport(7);
 
     // wire_delta > ref_count should clamp to 0 and return true
@@ -1984,7 +1984,7 @@ test "orct: op:gc-answers encode" {
 }
 
 test "orct: apply gc-exports to session" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
 
     // Export 3 objects, send each ref multiple times
     _ = session.addLocalExport(10); // slot 0, refcount=1
@@ -2006,7 +2006,7 @@ test "orct: apply gc-exports to session" {
 }
 
 test "orct: answer position alloc and gc-answers reuse" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
 
     // Allocate answer positions
     const a0 = session.allocAnswerPos().?;
@@ -2031,7 +2031,7 @@ test "orct: answer position alloc and gc-answers reuse" {
 }
 
 test "orct: answer position exhaustion and recovery" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
 
     // Fill all answer positions
     for (0..MAX_STURDY_REFS) |_| {
@@ -2047,7 +2047,7 @@ test "orct: answer position exhaustion and recovery" {
 }
 
 test "orct: full GC round-trip encode + apply" {
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
 
     // Setup: export 2 objects, send refs multiple times
     _ = session.addLocalExport(100); // slot 0
@@ -2098,7 +2098,7 @@ test "orct: GF(3) conservation across GC lifecycle" {
     try std.testing.expect(gf3_conserved(&trits, 3));
 
     // Create session, export all 3 triad members
-    var session = CapTPSession.init([_]u8{0} ** 32);
+    var session = CapTPSession.init(@as([32]u8, @splat(0)));
     for (0..3) |i| {
         _ = session.addLocalExport(@intCast(seeds[i] & 0xFFFF));
     }

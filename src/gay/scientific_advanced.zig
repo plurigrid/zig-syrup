@@ -260,7 +260,7 @@ pub const Verse = struct {
             .fingerprint = fp,
             .color = gayColor(fp),
             .resolved = false,
-            .assets = [_]f64{0} ** 8,
+            .assets = @splat(0),
             .asset_count = 0,
         };
     }
@@ -343,7 +343,7 @@ pub fn skcComplexity(data: []const u8) f64 {
     // Approximate: count unique bigrams / total bigrams
     if (data.len < 2) return 0.0;
     var unique: u32 = 0;
-    var seen: [256]bool = [_]bool{false} ** 256;
+    var seen: [256]bool = @splat(false);
     for (0..data.len - 1) |i| {
         const bigram: u8 = data[i] ^ data[i + 1];
         if (!seen[bigram]) {
@@ -481,7 +481,7 @@ pub const WallClockBridge = struct {
         }
 
         // Measure "entropy" via unique byte distribution
-        var byte_counts: [256]u32 = [_]u32{0} ** 256;
+        var byte_counts: [256]u32 = @splat(0);
         rng = seed;
         for (0..@min(n_colors, 1000)) |_| {
             rng = sm64(rng);
@@ -515,7 +515,7 @@ pub const ColorBandwidth = struct {
 
     pub fn measure(seed: u64, horizon: u32) ColorBandwidth {
         var unique: u32 = 0;
-        var seen: [256]bool = [_]bool{false} ** 256;
+        var seen: [256]bool = @splat(false);
         var rng = seed;
         for (0..horizon) |_| {
             rng = sm64(rng);
@@ -608,7 +608,7 @@ pub const ColoredTheory = struct {
     seed: u64,
 
     pub fn init(name_hash: u64, level: TheoryLevel, logic: LogicSystem) ColoredTheory {
-        const seed = gaySeed(name_hash ^ @as(u64, @intFromEnum(logic)));
+        const seed = gaySeed(name_hash ^ @as(u64, @backingInt(logic)));
         return .{
             .name_hash = name_hash,
             .level = level,

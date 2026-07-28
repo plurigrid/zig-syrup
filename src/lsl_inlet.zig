@@ -254,13 +254,13 @@ pub const MAX_CHANNELS: usize = 128;
 
 /// Discovered stream metadata (Zig-owned copy, safe after C pointers freed)
 pub const StreamInfo = struct {
-    name_buf: [MAX_NAME_LEN]u8 = [_]u8{0} ** MAX_NAME_LEN,
+    name_buf: [MAX_NAME_LEN]u8 = @splat(0),
     name_len: usize = 0,
-    type_buf: [MAX_NAME_LEN]u8 = [_]u8{0} ** MAX_NAME_LEN,
+    type_buf: [MAX_NAME_LEN]u8 = @splat(0),
     type_len: usize = 0,
-    source_id_buf: [MAX_NAME_LEN]u8 = [_]u8{0} ** MAX_NAME_LEN,
+    source_id_buf: [MAX_NAME_LEN]u8 = @splat(0),
     source_id_len: usize = 0,
-    hostname_buf: [MAX_NAME_LEN]u8 = [_]u8{0} ** MAX_NAME_LEN,
+    hostname_buf: [MAX_NAME_LEN]u8 = @splat(0),
     hostname_len: usize = 0,
     channel_count: u32 = 0,
     nominal_srate: f64 = 0,
@@ -383,7 +383,7 @@ pub const LSLResolver = struct {
     count: usize = 0,
 
     /// Raw liblsl stream info pointers (for creating inlets)
-    raw_ptrs: [MAX_RESOLVED_STREAMS]?*lsl_streaminfo = [_]?*lsl_streaminfo{null} ** MAX_RESOLVED_STREAMS,
+    raw_ptrs: [MAX_RESOLVED_STREAMS]?*lsl_streaminfo = @splat(null),
     raw_count: usize = 0,
 
     /// Resolve streams by property (e.g., "type", "EEG")
@@ -481,7 +481,7 @@ pub const LSLResolver = struct {
 /// A single pulled sample with timestamp
 pub const Sample = struct {
     /// Channel data (float32). Only channels[0..channel_count] are valid.
-    channels: [MAX_CHANNELS]f32 = [_]f32{0} ** MAX_CHANNELS,
+    channels: [MAX_CHANNELS]f32 = @splat(0),
     channel_count: u32 = 0,
     /// LSL timestamp (seconds since some epoch, monotonic)
     timestamp: f64 = 0,
@@ -641,10 +641,10 @@ pub const StreamSynchronizer = struct {
 
     pub fn init() StreamSynchronizer {
         return .{
-            .streams = [_]?SyncStreamInfo{null} ** MAX_STREAMS,
+            .streams = @splat(null),
             .n_streams = 0,
             .epoch_start = nanoTimestamp(),
-            .sample_counts = [_]u64{0} ** MAX_STREAMS,
+            .sample_counts = @splat(0),
         };
     }
 
@@ -905,10 +905,10 @@ test "StreamType modality ordinal mapping" {
 }
 
 test "ChannelFormat enum values match liblsl" {
-    try std.testing.expectEqual(@as(c_int, 1), @intFromEnum(ChannelFormat.cf_float32));
-    try std.testing.expectEqual(@as(c_int, 2), @intFromEnum(ChannelFormat.cf_double64));
-    try std.testing.expectEqual(@as(c_int, 0), @intFromEnum(ChannelFormat.cf_undefined));
-    try std.testing.expectEqual(@as(c_int, 7), @intFromEnum(ChannelFormat.cf_int64));
+    try std.testing.expectEqual(@as(c_int, 1), @backingInt(ChannelFormat.cf_float32));
+    try std.testing.expectEqual(@as(c_int, 2), @backingInt(ChannelFormat.cf_double64));
+    try std.testing.expectEqual(@as(c_int, 0), @backingInt(ChannelFormat.cf_undefined));
+    try std.testing.expectEqual(@as(c_int, 7), @backingInt(ChannelFormat.cf_int64));
 }
 
 test "MAX_CHANNELS sufficient for common devices" {

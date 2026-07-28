@@ -738,6 +738,8 @@ fn readIntList(comptime T: type, v: syrup.Value, allocator: Allocator) ![]const 
 // ---- Tests ------------------------------------------------------------------
 
 test "two Vats: full handshake round-trip over localhost" {
+    if (comptime !@hasDecl(std, "net")) return error.SkipZigTest;
+
     const allocator = std.testing.allocator;
 
     const addr = try std.net.Address.parseIp4("127.0.0.1", 0);

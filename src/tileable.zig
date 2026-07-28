@@ -55,7 +55,7 @@ pub const CombinatorialComplex = struct {
     max_rank: u8 = 0,
     trit_sum: std.atomic.Value(i32) = std.atomic.Value(i32).init(0),
     allocator: Allocator,
-    rank_index: [256]std.ArrayListUnmanaged(CellId) = [_]std.ArrayListUnmanaged(CellId){.{}} ** 256,
+    rank_index: [256]std.ArrayListUnmanaged(CellId) = @splat(.{}),
 
     pub fn init(allocator: Allocator) Self {
         return .{ .allocator = allocator };
@@ -89,7 +89,7 @@ pub const CombinatorialComplex = struct {
         const off = offsetOf(id);
         slab.ranks[off] = 0;
         slab.trits[off] = trit_val;
-        slab.tags[off] = @intFromEnum(CellTag.mortal);
+        slab.tags[off] = @backingInt(CellTag.mortal);
         slab.members_count[off] = 0;
         _ = slab.live_count.fetchAdd(1, .monotonic);
         _ = self.trit_sum.fetchAdd(trit_val, .monotonic);

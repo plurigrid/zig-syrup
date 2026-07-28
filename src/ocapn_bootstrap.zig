@@ -238,7 +238,11 @@ pub const GiftTable = struct {
 /// Generate a fresh 32-byte swiss using a cryptographic RNG.
 pub fn freshSwiss() [SWISS_LEN]u8 {
     var out: [SWISS_LEN]u8 = undefined;
-    std.crypto.random.bytes(&out);
+    if (comptime @hasDecl(std.crypto, "random")) {
+        std.crypto.random.bytes(&out);
+    } else {
+        std.c.arc4random_buf(out[0..].ptr, out.len);
+    }
     return out;
 }
 
@@ -248,7 +252,8 @@ pub fn encodeImportObjectAlloc(allocator: Allocator, position: u32) ![]u8 {
     var out = ByteList.init(allocator);
     errdefer out.deinit();
     try out.appendSlice("<18'desc:import-object");
-    try std.fmt.format(out.writer(), "{d}+", .{position});
+    var pos_buf: [32]u8 = undefined;
+    try out.appendSlice(try std.fmt.bufPrint(&pos_buf, "{d}+", .{position}));
     try out.append('>');
     return out.toOwnedSlice();
 }
@@ -289,7 +294,7 @@ test "register → lookup → fetch" {
     try std.testing.expectEqual(@as(?u32, p2), reg.fetch(s2));
 
     // Unknown swiss returns null.
-    const s3: [SWISS_LEN]u8 = [_]u8{0} ** SWISS_LEN;
+    const s3: [SWISS_LEN]u8 = @splat(0);
     try std.testing.expectEqual(@as(?u32, null), reg.fetch(s3));
 
     // Re-registering the same swiss returns the same position.
@@ -345,8 +350,8 @@ test "GiftTable: deposit then withdraw = delivered" {
     defer gt.deinit(allocator);
 
     const key = GiftKey{
-        .session_id = [_]u8{0xAA} ** 32,
-        .gift_id = [_]u8{0xBB} ** GIFT_ID_LEN,
+        .session_id = @splat(0xAA),
+        .gift_id = @splat(0xBB),
     };
     const r1 = try gt.deposit(allocator, key, "gift-payload");
     try std.testing.expectEqual(GiftResult.held, r1);
@@ -362,8 +367,8 @@ test "GiftTable: withdraw then deposit = delivered (reverse order)" {
     defer gt.deinit(allocator);
 
     const key = GiftKey{
-        .session_id = [_]u8{0xCC} ** 32,
-        .gift_id = [_]u8{0xDD} ** GIFT_ID_LEN,
+        .session_id = @splat(0xCC),
+        .gift_id = @splat(0xDD),
     };
     const r1 = try gt.withdraw(allocator, key, 7);
     try std.testing.expectEqual(GiftResult.held, r1);
@@ -378,8 +383,8 @@ test "GiftTable: duplicate deposit rejected" {
     defer gt.deinit(allocator);
 
     const key = GiftKey{
-        .session_id = [_]u8{0x11} ** 32,
-        .gift_id = [_]u8{0x22} ** GIFT_ID_LEN,
+        .session_id = @splat(0x11),
+        .gift_id = @splat(0x22),
     };
     _ = try gt.deposit(allocator, key, "first");
     const r2 = try gt.deposit(allocator, key, "second");
@@ -392,8 +397,8 @@ test "GiftTable: duplicate withdrawal rejected" {
     defer gt.deinit(allocator);
 
     const key = GiftKey{
-        .session_id = [_]u8{0x33} ** 32,
-        .gift_id = [_]u8{0x44} ** GIFT_ID_LEN,
+        .session_id = @splat(0x33),
+        .gift_id = @splat(0x44),
     };
     _ = try gt.withdraw(allocator, key, 1);
     const r2 = try gt.withdraw(allocator, key, 2);
@@ -406,8 +411,8 @@ test "GiftTable: release removes slot" {
     defer gt.deinit(allocator);
 
     const key = GiftKey{
-        .session_id = [_]u8{0x55} ** 32,
-        .gift_id = [_]u8{0x66} ** GIFT_ID_LEN,
+        .session_id = @splat(0x55),
+        .gift_id = @splat(0x66),
     };
     _ = try gt.deposit(allocator, key, "d");
     _ = try gt.withdraw(allocator, key, 5);
@@ -420,9 +425,9 @@ test "GiftTable: session isolation" {
     var gt = GiftTable.init();
     defer gt.deinit(allocator);
 
-    const gift_id = [_]u8{0x77} ** GIFT_ID_LEN;
-    const key_a = GiftKey{ .session_id = [_]u8{0xAA} ** 32, .gift_id = gift_id };
-    const key_b = GiftKey{ .session_id = [_]u8{0xBB} ** 32, .gift_id = gift_id };
+    const gift_id: [GIFT_ID_LEN]u8 = @splat(0x77);
+    const key_a = GiftKey{ .session_id = @splat(0xAA), .gift_id = gift_id };
+    const key_b = GiftKey{ .session_id = @splat(0xBB), .gift_id = gift_id };
     _ = try gt.deposit(allocator, key_a, "gift-a");
     // Same gift_id, different session — should be independent.
     const r = try gt.withdraw(allocator, key_b, 1);

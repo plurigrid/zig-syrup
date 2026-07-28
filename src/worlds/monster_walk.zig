@@ -177,8 +177,8 @@ pub const Trit = enum(i8) {
     }
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum: i8 = @rem(@as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b)) + 3, 3) - 1;
-        return @enumFromInt(sum);
+        const sum: i8 = @rem(@as(i8, @backingInt(a)) + @as(i8, @backingInt(b)) + 3, 3) - 1;
+        return @fromBackingInt(@intCast(sum));
     }
 
     pub fn name(self: Trit) []const u8 {
@@ -293,7 +293,7 @@ pub const ShardRouter = struct {
     pub fn isConserved(self: *const ShardRouter) bool {
         var sum: i32 = 0;
         for (self.shards, 0..) |shard, i| {
-            sum += @as(i32, @intFromEnum(Trit.fromShard(@intCast(i)))) * @as(i32, @intCast(shard.items.len));
+            sum += @as(i32, @backingInt(Trit.fromShard(@intCast(i)))) * @as(i32, @intCast(shard.items.len));
         }
         return @rem(@mod(sum, 3), 3) == 0;
     }
@@ -364,11 +364,11 @@ pub const Ecstasis = enum(i8) {
     protention = 1, // Zukunft: not-yet, structural anticipation
 
     pub fn fromTrit(t: Trit) Ecstasis {
-        return @enumFromInt(@intFromEnum(t));
+        return @fromBackingInt(@intCast(@backingInt(t)));
     }
 
     pub fn toTrit(self: Ecstasis) Trit {
-        return @enumFromInt(@intFromEnum(self));
+        return @fromBackingInt(@intCast(@backingInt(self)));
     }
 
     pub fn name(self: Ecstasis) []const u8 {
@@ -421,7 +421,7 @@ pub const SharedProtention = struct {
     pub fn isBalanced(protentions: []const SharedProtention) bool {
         var sum: i32 = 0;
         for (protentions) |p| {
-            sum += @as(i32, @intFromEnum(p.ecstasis)) * @as(i32, @intCast(p.agents.len));
+            sum += @as(i32, @backingInt(p.ecstasis)) * @as(i32, @intCast(p.agents.len));
         }
         return @rem(@mod(sum, 3), 3) == 0;
     }
@@ -584,8 +584,8 @@ pub const GenerativeModel = struct {
     pub fn init(agent: AgentHorizon) GenerativeModel {
         var m = GenerativeModel{
             .agent = agent,
-            .predictions = [_]?Trit{null} ** SHARD_COUNT,
-            .observations = [_]?Trit{null} ** SHARD_COUNT,
+            .predictions = @splat(null),
+            .observations = @splat(null),
         };
         // Self-prediction is always correct (reafference).
         m.predictions[agent.shard_id] = Trit.fromShard(agent.shard_id);
@@ -944,7 +944,7 @@ pub fn attestShard(
     var counts = [_]u8{ 0, 0, 0 }; // minus, zero, plus
     for (models) |m| {
         if (m.observations[target_shard]) |obs| {
-            const idx: usize = @intCast(@as(u8, @bitCast(@intFromEnum(obs))) +% 1);
+            const idx: usize = @intCast(@as(u8, @bitCast(@backingInt(obs))) +% 1);
             counts[idx] += 1;
         }
     }
@@ -953,7 +953,7 @@ pub fn attestShard(
     var max_idx: usize = 0;
     if (counts[1] > counts[max_idx]) max_idx = 1;
     if (counts[2] > counts[max_idx]) max_idx = 2;
-    const majority_trit: Trit = @enumFromInt(@as(i8, @intCast(max_idx)) - 1);
+    const majority_trit: Trit = @fromBackingInt(@intCast(@as(i8, @intCast(max_idx)) - 1));
 
     return .{
         .shard_id = home_shard,
@@ -1076,7 +1076,7 @@ pub fn checkShardTritCoverage() CheckResult {
     var i: u8 = 0;
     while (i < SHARD_COUNT) : (i += 1) {
         const t = Trit.fromShard(i);
-        const idx: usize = @intCast(@as(u8, @bitCast(@intFromEnum(t))) +% 1);
+        const idx: usize = @intCast(@as(u8, @bitCast(@backingInt(t))) +% 1);
         counts[idx] += 1;
     }
     // 71 shards: 0→24, 1→24, 2→23 (since 71 mod 3 = 2)
@@ -1595,7 +1595,7 @@ test "SPI: trit from splitmix value" {
     var i: u64 = 0;
     while (i < 100) : (i += 1) {
         const t = splitmixTrit(splitmix64At(i, 0));
-        const idx: usize = @intCast(@as(u8, @bitCast(@intFromEnum(t))) +% 1);
+        const idx: usize = @intCast(@as(u8, @bitCast(@backingInt(t))) +% 1);
         seen[idx] = true;
     }
     for (seen) |s| try std.testing.expect(s);

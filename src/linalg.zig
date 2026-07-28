@@ -132,7 +132,7 @@ pub fn det(n: usize, A: [][]Complex, perm: []usize) Complex {
     // Count transpositions in perm to determine sign
     var swaps: usize = 0;
     // Make a mutable copy of perm to count cycles
-    var visited = [_]bool{false} ** 64; // supports up to 64x64
+    var visited: [64]bool = @splat(false); // supports up to 64x64
     for (0..n) |i| {
         if (visited[i]) continue;
         var cycle_len: usize = 0;

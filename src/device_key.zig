@@ -73,9 +73,11 @@ pub const DeviceKey = struct {
     seq: u64 = 0,
 
     /// Generate a fresh DeviceKey from the system CSPRNG.
-    pub fn generate(vat_id: cap.VatId) DeviceKey {
+    pub fn generate(vat_id: cap.VatId) !DeviceKey {
+        var seed: [SEED_LEN]u8 = undefined;
+        std.crypto.random.bytes(&seed);
         return .{
-            .ed_pair = Ed25519.KeyPair.generate(),
+            .ed_pair = try Ed25519.KeyPair.generateDeterministic(seed),
             .vat_id = vat_id,
         };
     }
@@ -208,7 +210,7 @@ fn buildPayload(allocator: std.mem.Allocator, vat_id: cap.VatId, seq: u64, msg: 
 const testing = std.testing;
 
 test "DeviceKey: sign + verify round-trip" {
-    const seed: [SEED_LEN]u8 = .{0x42} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x42);
     var key = try DeviceKey.generateDeterministic(7, seed);
     const sig = try key.sign("hello", testing.allocator);
 
@@ -224,7 +226,7 @@ test "DeviceKey: sign + verify round-trip" {
 }
 
 test "DeviceKey: tampered message fails verification" {
-    const seed: [SEED_LEN]u8 = .{0x11} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x11);
     var key = try DeviceKey.generateDeterministic(1, seed);
     const sig = try key.sign("alpha", testing.allocator);
     try testing.expectError(error.InvalidSignature, verify(
@@ -238,7 +240,7 @@ test "DeviceKey: tampered message fails verification" {
 }
 
 test "DeviceKey: wrong vat_id rejected (vat-binding)" {
-    const seed: [SEED_LEN]u8 = .{0x22} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x22);
     var key = try DeviceKey.generateDeterministic(5, seed);
     const sig = try key.sign("payload", testing.allocator);
     // Verifier expects vat 9, signature is from vat 5.
@@ -253,7 +255,7 @@ test "DeviceKey: wrong vat_id rejected (vat-binding)" {
 }
 
 test "DeviceKey: seq increments and stale seq rejected" {
-    const seed: [SEED_LEN]u8 = .{0x33} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x33);
     var key = try DeviceKey.generateDeterministic(2, seed);
 
     const sig0 = try key.sign("first", testing.allocator);
@@ -277,7 +279,7 @@ test "DeviceKey: seq increments and stale seq rejected" {
 }
 
 test "Verifier: stream of signatures advances high_water; replay rejected" {
-    const seed: [SEED_LEN]u8 = .{0x44} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x44);
     var key = try DeviceKey.generateDeterministic(3, seed);
 
     var v = Verifier.init(key.publicKeyBytes(), 3);
@@ -296,8 +298,8 @@ test "Verifier: stream of signatures advances high_water; replay rejected" {
 }
 
 test "Different keys cannot verify each other's signatures" {
-    const seed_a: [SEED_LEN]u8 = .{0x55} ** SEED_LEN;
-    const seed_b: [SEED_LEN]u8 = .{0x66} ** SEED_LEN;
+    const seed_a: [SEED_LEN]u8 = @splat(0x55);
+    const seed_b: [SEED_LEN]u8 = @splat(0x66);
     var key_a = try DeviceKey.generateDeterministic(1, seed_a);
     var key_b = try DeviceKey.generateDeterministic(1, seed_b);
 
@@ -313,7 +315,7 @@ test "Different keys cannot verify each other's signatures" {
 }
 
 test "SigningCap: revoked cap returns error.Revoked on sign" {
-    const seed: [SEED_LEN]u8 = .{0x77} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x77);
     var key = try DeviceKey.generateDeterministic(1, seed);
     var rev = cap.Revoker{};
     var sc = confine(&key, &rev);
@@ -324,7 +326,7 @@ test "SigningCap: revoked cap returns error.Revoked on sign" {
 }
 
 test "SigningCap: unrevoked cap exposes only sign + pubkey, never the key bytes" {
-    const seed: [SEED_LEN]u8 = .{0x88} ** SEED_LEN;
+    const seed: [SEED_LEN]u8 = @splat(0x88);
     var key = try DeviceKey.generateDeterministic(11, seed);
     var sc = confine(&key, null);
 
@@ -339,9 +341,9 @@ test "SigningCap: unrevoked cap exposes only sign + pubkey, never the key bytes"
     var sign_count: usize = 0;
     var key_extract_count: usize = 0;
     for (decls) |d| {
-        if (std.mem.eql(u8, d.name, "sign")) sign_count += 1;
-        if (std.mem.indexOf(u8, d.name, "secret") != null) key_extract_count += 1;
-        if (std.mem.indexOf(u8, d.name, "Secret") != null) key_extract_count += 1;
+        if (std.mem.eql(u8, d, "sign")) sign_count += 1;
+        if (std.mem.indexOf(u8, d, "secret") != null) key_extract_count += 1;
+        if (std.mem.indexOf(u8, d, "Secret") != null) key_extract_count += 1;
     }
     try testing.expectEqual(@as(usize, 1), sign_count);
     try testing.expectEqual(@as(usize, 0), key_extract_count);

@@ -43,37 +43,56 @@ pub fn runJj(
     cwd: ?[]const u8,
     args: []const []const u8,
 ) !RunResult {
-    var argv = std.ArrayList([]const u8){};
+    var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(alloc);
     try argv.append(alloc, "jj");
     for (args) |a| try argv.append(alloc, a);
 
-    var child = std.process.Child.init(argv.items, alloc);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    child.stdin_behavior = .Ignore;
-    if (cwd) |c| child.cwd = c;
+    if (comptime @hasDecl(std.process.Child, "init")) {
+        var child = std.process.Child.init(argv.items, alloc);
+        child.stdout_behavior = .Pipe;
+        child.stderr_behavior = .Pipe;
+        child.stdin_behavior = .Ignore;
+        if (cwd) |c| child.cwd = c;
 
-    child.spawn() catch return Error.JjBinaryMissing;
+        child.spawn() catch return Error.JjBinaryMissing;
 
-    const stdout = child.stdout.?.readToEndAlloc(alloc, MAX_OUTPUT) catch |err| {
-        _ = child.kill() catch {};
-        return err;
-    };
-    errdefer alloc.free(stdout);
+        const stdout = child.stdout.?.readToEndAlloc(alloc, MAX_OUTPUT) catch |err| {
+            _ = child.kill() catch {};
+            return err;
+        };
+        errdefer alloc.free(stdout);
 
-    const stderr = child.stderr.?.readToEndAlloc(alloc, MAX_OUTPUT) catch |err| {
-        _ = child.kill() catch {};
-        return err;
-    };
-    errdefer alloc.free(stderr);
+        const stderr = child.stderr.?.readToEndAlloc(alloc, MAX_OUTPUT) catch |err| {
+            _ = child.kill() catch {};
+            return err;
+        };
+        errdefer alloc.free(stderr);
 
-    const term = try child.wait();
-    const code: u8 = switch (term) {
-        .Exited => |c| c,
-        else => 255,
-    };
-    return .{ .stdout = stdout, .stderr = stderr, .exit_code = code };
+        // Zig 0.15 defers binary resolution to waitForSpawn inside wait();
+        // if jj is missing, the error surfaces here rather than at spawn().
+        const term = child.wait() catch return Error.JjBinaryMissing;
+        const code: u8 = switch (term) {
+            .Exited => |c| c,
+            else => 255,
+        };
+        return .{ .stdout = stdout, .stderr = stderr, .exit_code = code };
+    } else {
+        var threaded = std.Io.Threaded.init(alloc, .{});
+        defer threaded.deinit();
+        const io = threaded.io();
+        const run = std.process.run(alloc, io, .{
+            .argv = argv.items,
+            .cwd = if (cwd) |c| .{ .path = c } else .inherit,
+            .stdout_limit = std.Io.Limit.limited(MAX_OUTPUT),
+            .stderr_limit = std.Io.Limit.limited(MAX_OUTPUT),
+        }) catch return Error.JjBinaryMissing;
+        const code: u8 = switch (run.term) {
+            .exited => |c| c,
+            else => 255,
+        };
+        return .{ .stdout = run.stdout, .stderr = run.stderr, .exit_code = code };
+    }
 }
 
 /// Parse one 64-char lowercase hex string into a 32-byte change_id.
@@ -122,7 +141,7 @@ pub fn parents(
     if (r.exit_code != 0) return Error.JjFailed;
 
     var lines = std.mem.tokenizeAny(u8, r.stdout, "\n");
-    var out = std.ArrayList([32]u8){};
+    var out: std.ArrayList([32]u8) = .empty;
     errdefer out.deinit(alloc);
     while (lines.next()) |line| {
         const t = std.mem.trim(u8, line, " \r\t");
@@ -194,9 +213,9 @@ test "parseHexChangeId: round-trip via formatHex" {
 
 test "parseHexChangeId: rejects wrong length" {
     try expectError(Error.InvalidHex, parseHexChangeId("abc"));
-    const short_hex: []const u8 = "a" ** 63;
+    const short_hex: []const u8 = &@as([63]u8, @splat('a'));
     try expectError(Error.InvalidHex, parseHexChangeId(short_hex));
-    const long_hex: []const u8 = "a" ** 65;
+    const long_hex: []const u8 = &@as([65]u8, @splat('a'));
     try expectError(Error.InvalidHex, parseHexChangeId(long_hex));
 }
 
@@ -209,13 +228,13 @@ test "parseHexChangeId: rejects non-hex chars" {
 
 test "formatHex: zero change_id → all zeros" {
     var hex: [64]u8 = undefined;
-    formatHex(&hex, [_]u8{0} ** 32);
-    try std.testing.expectEqualStrings(("0" ** 64), &hex);
+    formatHex(&hex, @as([32]u8, @splat(0)));
+    try std.testing.expectEqualStrings(&@as([64]u8, @splat('0')), &hex);
 }
 
 test "formatHex: accepts uppercase via parser" {
     var hex_lower: [64]u8 = undefined;
-    formatHex(&hex_lower, [_]u8{0xab} ** 32);
+    formatHex(&hex_lower, @as([32]u8, @splat(0xab)));
     var hex_upper: [64]u8 = undefined;
     for (hex_lower, 0..) |c, i| hex_upper[i] = std.ascii.toUpper(c);
     const a = try parseHexChangeId(&hex_lower);

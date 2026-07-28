@@ -37,7 +37,7 @@ const did_gay = @import("did_gay");
 const did_pkh = @import("did_pkh");
 const sexp = @import("gay/sexp.zig");
 
-const THREADS = 10;
+const MAX_THREADS = 64;
 const ITERS_PER_THREAD: u64 = 60_000;
 const MAX_INPUT = 1024;
 const ARENA_BYTES = 32 * 1024 * 1024;
@@ -56,6 +56,10 @@ var n_sexp: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var cyton_worst_num: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var cyton_worst_den: std.atomic.Value(u64) = std.atomic.Value(u64).init(1);
 var failed: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+fn workerCount() usize {
+    return @min(MAX_THREADS, @max(1, std.Thread.getCpuCount() catch 1));
+}
 
 fn fill(rnd: std.Random, buf: []u8, alphabet: ?[]const u8) void {
     for (buf) |*b| {
@@ -141,7 +145,7 @@ fn buildEdf(rnd: std.Random, out: []u8) ?[]u8 {
 /// indicates a real parse/print disagreement rather than an unprintable atom.
 fn genSexpText(rnd: std.Random, out: []u8, depth: u8, pos: *usize) bool {
     const leaves = [_][]const u8{
-        "nil", "true", "false", "42", "-7", "3.5", "0", "abc", "xyz", "a1",
+        "nil", "true",   "false",   "42",   "-7",       "3.5", "0", "abc", "xyz", "a1",
         ":kw", ":other", "\"str\"", "\"\"", "sym-name",
     };
     const put = struct {
@@ -183,7 +187,7 @@ fn genSexpText(rnd: std.Random, out: []u8, depth: u8, pos: *usize) bool {
 }
 
 fn worker(tid: u64) void {
-    var prng = std.Random.DefaultPrng.init(0xFACADE ^ (tid *% 0x9E3779B97F4A7C15));
+    var prng = std.Random.DefaultPrng.init(0xFACADE ^ @as(u64, std.testing.random_seed) ^ (tid *% 0x9E3779B97F4A7C15));
     const rnd = prng.random();
 
     const backing = std.heap.page_allocator.alloc(u8, ARENA_BYTES) catch return;
@@ -643,19 +647,26 @@ test "regression: cyton parseStream does not amplify (one sample per packet)" {
 }
 
 test "fuzz: repo parsers (frame differential, stream anti-amplification, crash-safety)" {
-    var threads: [THREADS]std.Thread = undefined;
-    for (&threads, 0..) |*t, k| t.* = try std.Thread.spawn(.{}, worker, .{@as(u64, k)});
-    for (&threads) |t| t.join();
+    const thread_count = workerCount();
+    const threads = try std.testing.allocator.alloc(std.Thread, thread_count);
+    defer std.testing.allocator.free(threads);
+    for (threads, 0..) |*t, k| t.* = try std.Thread.spawn(.{}, worker, .{@as(u64, k)});
+    for (threads) |t| t.join();
 
     std.debug.print(
-        "\nparser-fuzz: {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips, {d} shorten/recover | {d} sexp fixpoints | {d} threads\n",
+        "\nparser-fuzz: seed=0x{x} {d} runs | {d} frame properties | cyton {d} samples, dsi24 {d} samples | {d} OLC round-trips, {d} shorten/recover | {d} sexp fixpoints | {d} threads\n",
         .{
-            n_run.load(.monotonic),           n_frame_ok.load(.monotonic),
-            n_cyton_samples.load(.monotonic), n_dsi_samples.load(.monotonic),
-            n_olc_roundtrip.load(.monotonic), n_olc_shortrec.load(.monotonic),
-            n_sexp.load(.monotonic),          THREADS,
+            std.testing.random_seed,
+            n_run.load(.monotonic),
+            n_frame_ok.load(.monotonic),
+            n_cyton_samples.load(.monotonic),
+            n_dsi_samples.load(.monotonic),
+            n_olc_roundtrip.load(.monotonic),
+            n_olc_shortrec.load(.monotonic),
+            n_sexp.load(.monotonic),
+            thread_count,
         },
     );
     try std.testing.expect(!failed.load(.monotonic));
-    try std.testing.expect(n_run.load(.monotonic) == THREADS * ITERS_PER_THREAD);
+    try std.testing.expect(n_run.load(.monotonic) == thread_count * ITERS_PER_THREAD);
 }

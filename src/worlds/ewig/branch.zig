@@ -351,7 +351,7 @@ pub const MergeEngine = struct {
         _ = self;
 
         var current = descendant;
-        const zero_hash = [_]u8{0} ** 32;
+        const zero_hash: [32]u8 = @splat(0);
 
         while (!std.mem.eql(u8, &current, &zero_hash)) {
             if (std.mem.eql(u8, &current, &ancestor)) {
@@ -371,7 +371,7 @@ pub const MergeEngine = struct {
         errdefer chain.deinit(self.allocator);
 
         var current = head;
-        const zero_hash = [_]u8{0} ** 32;
+        const zero_hash: [32]u8 = @splat(0);
 
         while (!std.mem.eql(u8, &current, &zero_hash)) {
             const event = events.getByHash(current) orelse break;
@@ -590,7 +590,7 @@ pub const BranchVisualizer = struct {
             try writer.writeAll("    Recent: ");
             var count: usize = 0;
             var current = branch.head;
-            const zero_hash = [_]u8{0} ** 32;
+            const zero_hash: [32]u8 = @splat(0);
 
             while (!std.mem.eql(u8, &current, &zero_hash) and count < 5) : (count += 1) {
                 if (events.getByHash(current)) |event| {
@@ -637,7 +637,7 @@ pub const BranchVisualizer = struct {
             const branch = branches.getBranch(name).?;
 
             var current = branch.head;
-            const zero_hash = [_]u8{0} ** 32;
+            const zero_hash: [32]u8 = @splat(0);
 
             while (!std.mem.eql(u8, &current, &zero_hash)) {
                 if (events.getByHash(current)) |event| {
@@ -668,7 +668,7 @@ pub const BranchVisualizer = struct {
             const short_hash = hash_str[0..8];
             const short_parent = parent_str[0..8];
 
-            const zero_hash = [_]u8{0} ** 32;
+            const zero_hash: [32]u8 = @splat(0);
             if (!std.mem.eql(u8, &event.parent, &zero_hash)) {
                 try writer.print("  \"{s}\" -> \"{s}\";\n", .{ short_hash, short_parent });
             }
@@ -703,7 +703,7 @@ test "branch create and manage" {
     var manager = try BranchManager.init(testing.allocator, "main");
     defer manager.deinit();
 
-    const head = [_]u8{0xAA} ** 32;
+    const head: [32]u8 = @splat(0xAA);
 
     // Create branch
     const branch = try manager.createBranch("feature", "a://world", head);

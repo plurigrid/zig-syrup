@@ -54,7 +54,7 @@ pub const Cell = enum(u8) {
 
     pub fn fromString(s: []const u8) ?Cell {
         inline for (std.meta.fields(Cell)) |f| {
-            if (std.mem.eql(u8, s, @tagName(@as(Cell, @enumFromInt(f.value))))) return @enumFromInt(f.value);
+            if (std.mem.eql(u8, s, @tagName(@as(Cell, @fromBackingInt(@intCast(f.value)))))) return @fromBackingInt(@intCast(f.value));
         }
         return null;
     }
@@ -102,7 +102,7 @@ pub const SubstanceTrajectory = struct {
 
 pub const SystemState = struct {
     // Propagator cells: partial info (null = nothing, value = sensed)
-    cells: [Cell.COUNT]?f32 = [_]?f32{null} ** Cell.COUNT,
+    cells: [Cell.COUNT]?f32 = @splat(null),
 
     // Substance trajectory
     substances: SubstanceTrajectory = .{},
@@ -116,8 +116,8 @@ pub const SystemState = struct {
     cartridges: [10]Cartridge = defaultCartridges(),
 
     // Bandit arms
-    arm_pulls: [8]u32 = [_]u32{0} ** 8,
-    arm_rewards: [8]f64 = [_]f64{0} ** 8,
+    arm_pulls: [8]u32 = @splat(0),
+    arm_rewards: [8]f64 = @splat(0),
 
     // History (ring buffer of last 64 exchanges)
     history_len: u16 = 0,
@@ -127,11 +127,11 @@ pub const SystemState = struct {
     }
 
     pub fn senseCell(self: *SystemState, cell: Cell, value: f32) void {
-        self.cells[@intFromEnum(cell)] = std.math.clamp(value, 0.0, 1.0);
+        self.cells[@backingInt(cell)] = std.math.clamp(value, 0.0, 1.0);
     }
 
     pub fn readCell(self: *const SystemState, cell: Cell) ?f32 {
-        return self.cells[@intFromEnum(cell)];
+        return self.cells[@backingInt(cell)];
     }
 
     pub fn shouldIntervene(self: *const SystemState) bool {
@@ -217,7 +217,7 @@ pub const Arm = enum(u8) {
 /// Epsilon-greedy selection (epsilon=0.1)
 pub fn banditSelect(state: *const SystemState, rng: *std.Random) Arm {
     if (rng.intRangeAtMost(u8, 0, 99) < 10) {
-        return @enumFromInt(rng.intRangeAtMost(u8, 0, Arm.COUNT - 1));
+        return @fromBackingInt(@intCast(rng.intRangeAtMost(u8, 0, Arm.COUNT - 1)));
     }
     var best: Arm = .clonidine;
     var best_val: f64 = -1.0;
@@ -228,14 +228,14 @@ pub fn banditSelect(state: *const SystemState, rng: *std.Random) Arm {
             1.0; // optimistic init
         if (val > best_val) {
             best_val = val;
-            best = @enumFromInt(@as(u8, @intCast(i)));
+            best = @fromBackingInt(@intCast(@as(u8, @intCast(i))));
         }
     }
     return best;
 }
 
 pub fn banditUpdate(state: *SystemState, arm: Arm, reward: f64) void {
-    const i = @intFromEnum(arm);
+    const i = @backingInt(arm);
     state.arm_pulls[i] += 1;
     state.arm_rewards[i] += reward;
 }
@@ -316,7 +316,7 @@ pub fn handleNurseState(allocator: std.mem.Allocator) !json.Value {
     // Build cell lines
     var cell_parts: [Cell.COUNT][]const u8 = undefined;
     for (0..Cell.COUNT) |i| {
-        const c: Cell = @enumFromInt(@as(u8, @intCast(i)));
+        const c: Cell = @fromBackingInt(@intCast(@as(u8, @intCast(i))));
         if (state.cells[i]) |v| {
             cell_parts[i] = try std.fmt.allocPrint(allocator, "  {s}: {d:.2}", .{ c.name(), v });
         } else {
@@ -352,7 +352,7 @@ pub fn handleNurseIntervene(allocator: std.mem.Allocator) !json.Value {
     var rng = prng.random();
 
     const arm = banditSelect(state, &rng);
-    state.arm_pulls[@intFromEnum(arm)] += 1;
+    state.arm_pulls[@backingInt(arm)] += 1;
 
     const slot_str = if (arm.heroSlot()) |s|
         try std.fmt.allocPrint(allocator, " [HERO slot {d}]", .{s})

@@ -32,7 +32,7 @@ pub const ColorConstraint = struct {
             .index = idx,
             .target_hue = null,
             .min_distance = 30.0,
-            .depends_on = [_]u32{0} ** MAX_DEPS,
+            .depends_on = @splat(0),
             .dep_count = 0,
         };
     }
@@ -228,7 +228,7 @@ pub const ParaColorable = struct {
     /// Greedy coloring with deterministic vertex order from seed
     pub fn greedyColoring(self: ParaColorable, index: u64) struct { colors: [256]u32, success: bool } {
         const n = self.graph.n;
-        var colors: [256]u32 = [_]u32{0} ** 256;
+        var colors: [256]u32 = @splat(0);
 
         // Fisher-Yates shuffle for vertex order
         var order: [256]u32 = undefined;
@@ -246,7 +246,7 @@ pub const ParaColorable = struct {
         var success = true;
         for (0..n) |oi| {
             const v = order[oi];
-            var used: [33]bool = [_]bool{false} ** 33;
+            var used: [33]bool = @splat(false);
             for (0..self.graph.adj_count[v]) |ni| {
                 const u = self.graph.adj[v][ni];
                 if (colors[u] > 0 and colors[u] <= 32) used[colors[u]] = true;
@@ -610,9 +610,9 @@ pub const AncestryNode = struct {
                 .b = @as(f64, @floatFromInt(h & 0xFF)) / 255.0,
             },
             .depth = 0,
-            .parents = [_]u64{0} ** 8,
+            .parents = @splat(0),
             .parent_count = 0,
-            .children = [_]u64{0} ** 8,
+            .children = @splat(0),
             .child_count = 0,
         };
     }
@@ -742,7 +742,7 @@ pub const ChromaticOperator = struct {
     color: Color,
 
     pub fn init(name_hash: u64, op_class: OperatorClass) ChromaticOperator {
-        const seed = sm64(0x4005bf0a8b145769 ^ name_hash ^ @as(u64, @intFromEnum(op_class)));
+        const seed = sm64(0x4005bf0a8b145769 ^ name_hash ^ @as(u64, @backingInt(op_class)));
         return .{
             .name_hash = name_hash,
             .op_class = op_class,
@@ -803,7 +803,7 @@ pub const Polarity = enum(u8) {
     }
 
     pub fn next(self: Polarity) Polarity {
-        return @enumFromInt((@intFromEnum(self) + 1) % 3);
+        return @fromBackingInt(@intCast((@backingInt(self) + 1) % 3));
     }
 
     pub fn symbol(self: Polarity) u8 {
@@ -816,7 +816,7 @@ pub const Polarity = enum(u8) {
 };
 
 pub fn phaseToPolarity(phase: u64) Polarity {
-    return @enumFromInt(@as(u8, @intCast(phase % 3)));
+    return @fromBackingInt(@intCast(@as(u8, @intCast(phase % 3))));
 }
 
 pub const TriadicAgent = struct {

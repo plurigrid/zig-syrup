@@ -1360,7 +1360,7 @@ pub const CombinatorialComplex = struct {
     max_rank: u8 = 0,
     trit_sum: std.atomic.Value(i32) = std.atomic.Value(i32).init(0),
     allocator: Allocator,
-    rank_index: [256]std.ArrayListUnmanaged(CellId) = [_]std.ArrayListUnmanaged(CellId){.{}} ** 256,
+    rank_index: [256]std.ArrayListUnmanaged(CellId) = @splat(.{}),
 
     pub fn init(allocator: Allocator) Self {
         return .{
@@ -1397,11 +1397,11 @@ pub const CombinatorialComplex = struct {
         const slab = self.slabs.items[slabOf(id)];
         const off = offsetOf(id);
         slab.ranks[off] = 0;
-        slab.trits[off] = @intFromEnum(trit);
-        slab.tags[off] = @intFromEnum(CellTag.mortal);
+        slab.trits[off] = @backingInt(trit);
+        slab.tags[off] = @backingInt(CellTag.mortal);
         slab.members_count[off] = 0;
         _ = slab.live_count.fetchAdd(1, .monotonic);
-        _ = self.trit_sum.fetchAdd(@intFromEnum(trit), .monotonic);
+        _ = self.trit_sum.fetchAdd(@backingInt(trit), .monotonic);
         try self.rank_index[0].append(self.allocator, id);
         return id;
     }
@@ -1412,8 +1412,8 @@ pub const CombinatorialComplex = struct {
         const slab = self.slabs.items[slabOf(id)];
         const off = offsetOf(id);
         slab.ranks[off] = rank;
-        slab.trits[off] = @intFromEnum(trit);
-        slab.tags[off] = @intFromEnum(CellTag.mortal);
+        slab.trits[off] = @backingInt(trit);
+        slab.tags[off] = @backingInt(CellTag.mortal);
         const n: u8 = @intCast(@min(members.len, 255));
         slab.members_count[off] = n;
         for (0..@min(n, 8)) |i| {
@@ -1425,7 +1425,7 @@ pub const CombinatorialComplex = struct {
             slab.members_overflow[off] = overflow.ptr;
         }
         _ = slab.live_count.fetchAdd(1, .monotonic);
-        _ = self.trit_sum.fetchAdd(@intFromEnum(trit), .monotonic);
+        _ = self.trit_sum.fetchAdd(@backingInt(trit), .monotonic);
         if (rank > self.max_rank) self.max_rank = rank;
         try self.rank_index[rank].append(self.allocator, id);
         return id;
@@ -1435,10 +1435,10 @@ pub const CombinatorialComplex = struct {
         return self.slabs.items[slabOf(id)].ranks[offsetOf(id)];
     }
     pub fn getTrit(self: *const Self, id: CellId) Trit {
-        return @enumFromInt(self.slabs.items[slabOf(id)].trits[offsetOf(id)]);
+        return @fromBackingInt(@intCast(self.slabs.items[slabOf(id)].trits[offsetOf(id)]));
     }
     pub fn getTag(self: *const Self, id: CellId) CellTag {
-        return @enumFromInt(self.slabs.items[slabOf(id)].tags[offsetOf(id)]);
+        return @fromBackingInt(@intCast(self.slabs.items[slabOf(id)].tags[offsetOf(id)]));
     }
     pub fn cellCount(self: *const Self) u32 {
         return self.next_id.load(.monotonic);

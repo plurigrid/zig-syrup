@@ -193,7 +193,7 @@ pub const MAX_ROWS: u16 = 128;
 const MAX_CELLS: usize = @as(usize, MAX_COLS) * MAX_ROWS;
 
 pub const Buffer = struct {
-    cells: [MAX_CELLS]Cell = [_]Cell{.{}} ** MAX_CELLS,
+    cells: [MAX_CELLS]Cell = @splat(.{}),
     width: u16 = 0,
     height: u16 = 0,
 

@@ -151,7 +151,7 @@ pub fn Algebra(comptime p: u32, comptime q: u32, comptime r: u32) type {
     // Used for branchless grade extraction and reverse sign computation.
     const grade_masks: [n + 1]u64 = comptime blk: {
         @setEvalBranchQuota(dim * 10 + 1000);
-        var masks: [n + 1]u64 = [_]u64{0} ** (n + 1);
+        var masks: [n + 1]u64 = @splat(0);
         for (0..dim) |i| {
             const g = popcount(@as(u32, @intCast(i)));
             masks[g] |= @as(u64, 1) << @intCast(i);
@@ -208,7 +208,7 @@ pub fn Algebra(comptime p: u32, comptime q: u32, comptime r: u32) type {
 
         /// Zero multivector.
         pub fn zero() Self {
-            return .{ .coeffs = [_]f64{0.0} ** dim };
+            return .{ .coeffs = @splat(0.0) };
         }
 
         /// Scalar multivector.

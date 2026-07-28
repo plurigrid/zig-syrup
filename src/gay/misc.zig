@@ -127,7 +127,7 @@ pub const CycleResult = struct {
 
 fn decomposeCycles(perm: []const u8) CycleResult {
     var result = CycleResult{};
-    var visited = [_]bool{false} ** MAX_DERANGE;
+    var visited: [MAX_DERANGE]bool = @splat(false);
     for (0..perm.len) |start| {
         if (visited[start]) continue;
         var cycle_len: u8 = 0;

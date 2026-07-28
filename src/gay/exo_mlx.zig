@@ -257,9 +257,9 @@ pub const ExoVerifier = struct {
     pub fn init(cluster: *const ExoCluster, n_tokens: u32) ExoVerifier {
         var v = ExoVerifier{
             .cluster = cluster,
-            .expected_fps = [_]u32{0} ** MAX_DEVICES,
-            .actual_fps = [_]u32{0} ** MAX_DEVICES,
-            .device_verified = [_]bool{false} ** MAX_DEVICES,
+            .expected_fps = @splat(0),
+            .actual_fps = @splat(0),
+            .device_verified = @splat(false),
             .n_tokens = n_tokens,
         };
 

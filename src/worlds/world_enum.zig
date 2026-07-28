@@ -225,9 +225,9 @@ pub fn countNecklaces(n: u4) u32 {
 pub fn deBruijnWindow(trits: []const Trit, pos: u4) u8 {
     if (pos + 3 > trits.len) return 0;
     // Map trit {-1,0,+1} → {0,1,2} for hashing
-    const a: u8 = @intCast(@as(i16, @intFromEnum(trits[pos])) + 1);
-    const b: u8 = @intCast(@as(i16, @intFromEnum(trits[pos + 1])) + 1);
-    const c: u8 = @intCast(@as(i16, @intFromEnum(trits[pos + 2])) + 1);
+    const a: u8 = @intCast(@as(i16, @backingInt(trits[pos])) + 1);
+    const b: u8 = @intCast(@as(i16, @backingInt(trits[pos + 1])) + 1);
+    const c: u8 = @intCast(@as(i16, @backingInt(trits[pos + 2])) + 1);
     return a * 9 + b * 3 + c;
 }
 
@@ -252,8 +252,8 @@ pub const WorldEnumerator = struct {
     pub fn init(allocator: std.mem.Allocator) WorldEnumerator {
         return .{
             .allocator = allocator,
-            .worlds = .{},
-            .necklace_seen = .{},
+            .worlds = .empty,
+            .necklace_seen = .empty,
             .stats = .{},
         };
     }
@@ -365,15 +365,14 @@ pub const WorldEnumerator = struct {
 
     /// Render all worlds' composite colors as a palette
     pub fn renderPalette(self: *const WorldEnumerator, buf: *std.ArrayListUnmanaged(u8)) !void {
-        const writer = buf.writer(self.allocator);
         var ansi_buf: [19]u8 = undefined;
 
         for (self.worlds.items) |w| {
             const color = w.compositeColor();
             const ansi = color.rgb.toAnsiFg(&ansi_buf);
-            try writer.print("{s}\xe2\x96\x88\x1b[0m", .{ansi}); // █ + reset
+            try buf.print(self.allocator, "{s}\xe2\x96\x88\x1b[0m", .{ansi}); // █ + reset
         }
-        try writer.print("\n", .{});
+        try buf.append(self.allocator, '\n');
     }
 };
 
@@ -487,7 +486,7 @@ test "stress test: create and render all worlds" {
     try enumerator.enumerate();
 
     // Render each world's composite color — verify no crashes
-    var palette: std.ArrayListUnmanaged(u8) = .{};
+    var palette: std.ArrayListUnmanaged(u8) = .empty;
 
     for (enumerator.worlds.items) |w| {
         const color = w.compositeColor();
@@ -551,8 +550,10 @@ test "gray code ordering preserves locality" {
 
 test "fuzz: Gray code round-trip" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
-            if (input.len < 2) return;
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
+            if (input.len < 3) return;
             const depth: u4 = @intCast(@as(u3, @truncate(input[0] % 7)) + 1); // 1-7
             const index: u32 = std.mem.readInt(u16, input[1..3][0..2], .little) % ternaryGrayCode(depth);
 
@@ -561,7 +562,7 @@ test "fuzz: Gray code round-trip" {
 
             // Every trit must be valid
             for (trits[0..depth]) |t| {
-                const v = @intFromEnum(t);
+                const v = @backingInt(t);
                 if (v < -1 or v > 1) return error.InvalidTrit;
             }
         }
@@ -570,7 +571,9 @@ test "fuzz: Gray code round-trip" {
 
 test "fuzz: conservation is closed under negation" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 7) return;
             const len: u4 = @intCast(@as(u3, @truncate(input[0] % 6)) + 2); // 2-7
 
@@ -605,7 +608,9 @@ test "fuzz: conservation is closed under negation" {
 
 test "fuzz: bracelet class is rotation-invariant" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 9) return;
             const len: u4 = @intCast(@as(u3, @truncate(input[0] % 6)) + 2); // 2-7
             const rot: u4 = @intCast(input[1] % len);
@@ -636,7 +641,9 @@ test "fuzz: bracelet class is rotation-invariant" {
 
 test "fuzz: bracelet class is reflection-invariant" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 9) return;
             const len: u4 = @intCast(@as(u3, @truncate(input[0] % 6)) + 2); // 2-7
 
@@ -666,7 +673,9 @@ test "fuzz: bracelet class is reflection-invariant" {
 
 test "fuzz: compositeColor never produces NaN or infinity" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 9) return;
             const depth: u4 = @intCast(@as(u3, @truncate(input[0] % 6)) + 2);
             const variant: WorldVariant = switch (input[1] % 3) {
@@ -715,7 +724,9 @@ test "fuzz: compositeColor never produces NaN or infinity" {
 
 test "fuzz: De Bruijn window is bounded" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 9) return;
             const len: u4 = @intCast(@as(u3, @truncate(input[0] % 5)) + 3); // 3-7
 

@@ -66,7 +66,7 @@ pub const MerkleTree = struct {
             .allocator = allocator,
             .leaves = .{},
             .levels = .{},
-            .root = [_]u8{0} ** 32,
+            .root = @splat(0),
         };
     }
 
@@ -86,7 +86,7 @@ pub const MerkleTree = struct {
     /// Build the tree and compute root
     pub fn build(self: *Self) !Hash {
         if (self.leaves.items.len == 0) {
-            self.root = [_]u8{0} ** 32;
+            self.root = @splat(0);
             return self.root;
         }
 
@@ -610,7 +610,7 @@ test "merkle tree" {
     const root = try tree.build();
 
     // Root should not be zero
-    const zero_hash = [_]u8{0} ** 32;
+    const zero_hash: [32]u8 = @splat(0);
     try testing.expect(!std.mem.eql(u8, &root, &zero_hash));
 
     // Get proof for leaf 0

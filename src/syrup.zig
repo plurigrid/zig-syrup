@@ -291,9 +291,11 @@ pub const Value = union(enum) {
     pub fn deinitAll(self: Value, allocator: Allocator) void {
         switch (self) {
             .record => |r| {
+                r.label.deinitAll(allocator);
                 for (r.fields) |f| f.deinitAll(allocator);
                 allocator.free(r.fields);
-                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
+                const label_items: [*]Value = @ptrCast(@alignCast(@constCast(r.label)));
+                const label_slice: []Value = label_items[0..1];
                 allocator.free(label_slice);
             },
             .list => |items| {
@@ -313,12 +315,14 @@ pub const Value = union(enum) {
             },
             .tagged => |t| {
                 t.payload.deinitAll(allocator);
-                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
+                const payload_items: [*]Value = @ptrCast(@alignCast(@constCast(t.payload)));
+                const payload_slice: []Value = payload_items[0..1];
                 allocator.free(payload_slice);
             },
             .@"error" => |e| {
                 e.data.deinitAll(allocator);
-                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
+                const data_items: [*]Value = @ptrCast(@alignCast(@constCast(e.data)));
+                const data_slice: []Value = data_items[0..1];
                 allocator.free(data_slice);
             },
             .string => |s| allocator.free(s),
@@ -334,9 +338,11 @@ pub const Value = union(enum) {
     pub fn deinitContainers(self: Value, allocator: Allocator) void {
         switch (self) {
             .record => |r| {
+                r.label.deinitContainers(allocator);
                 for (r.fields) |f| f.deinitContainers(allocator);
                 allocator.free(r.fields);
-                const label_slice: *[1]Value = @ptrCast(@constCast(r.label));
+                const label_items: [*]Value = @ptrCast(@alignCast(@constCast(r.label)));
+                const label_slice: []Value = label_items[0..1];
                 allocator.free(label_slice);
             },
             .list => |items| {
@@ -355,11 +361,15 @@ pub const Value = union(enum) {
                 allocator.free(entries);
             },
             .tagged => |t| {
-                const payload_slice: *[1]Value = @ptrCast(@constCast(t.payload));
+                t.payload.deinitContainers(allocator);
+                const payload_items: [*]Value = @ptrCast(@alignCast(@constCast(t.payload)));
+                const payload_slice: []Value = payload_items[0..1];
                 allocator.free(payload_slice);
             },
             .@"error" => |e| {
-                const data_slice: *[1]Value = @ptrCast(@constCast(e.data));
+                e.data.deinitContainers(allocator);
+                const data_items: [*]Value = @ptrCast(@alignCast(@constCast(e.data)));
+                const data_slice: []Value = data_items[0..1];
                 allocator.free(data_slice);
             },
             else => {},
@@ -1014,6 +1024,9 @@ pub const ParseError = error{
     /// value — wire malleability, a bytes-identity hazard for CIDs / capability
     /// nullifiers. Canonical serialization must reject them.
     NonCanonical,
+    /// A single-value decode consumed one valid value but bytes remained.
+    /// Call `decodeStream` when multiple concatenated values are intended.
+    TrailingData,
     OutOfMemory,
     Overflow,
 };
@@ -1414,10 +1427,6 @@ pub const Parser = struct {
                     self.pos = saved_pos;
                     break :desc_error;
                 };
-                if (data_val != .dictionary) {
-                    self.pos = saved_pos;
-                    break :desc_error;
-                }
                 if (self.pos >= self.input.len or self.input[self.pos] != '>') {
                     self.pos = saved_pos;
                     break :desc_error;
@@ -1479,7 +1488,15 @@ pub const Parser = struct {
 /// Decode Syrup bytes into a Value
 pub fn decode(input: []const u8, allocator: Allocator) !Value {
     var parser = Parser.init(input, allocator);
-    return parser.parse();
+    const value = try parser.parse();
+    if (parser.hasMore()) {
+        // The value parsed cleanly but bytes remain. Free anything the parser
+        // allocated for `value` before surfacing the error, so a rejected
+        // whole-message decode never leaks its partial parse.
+        value.deinitContainers(allocator);
+        return error.TrailingData;
+    }
+    return value;
 }
 
 /// Decode with zero-copy string views (strings reference input buffer)
@@ -1686,9 +1703,9 @@ fn serializeImpl(comptime T: type, value: T, allocator: Allocator) Allocator.Err
                 const label_alloc = try allocator.alloc(Value, 1);
                 label_alloc[0] = string(label_str);
 
-                const fields_list = try allocator.alloc(Value, struct_info.fields.len);
-                inline for (struct_info.fields, 0..) |field, i| {
-                    fields_list[i] = try serializeImpl(field.type, @field(value, field.name), allocator);
+                const fields_list = try allocator.alloc(Value, struct_info.field_names.len);
+                inline for (struct_info.field_names, struct_info.field_types, 0..) |name, f_type, i| {
+                    fields_list[i] = try serializeImpl(f_type, @field(value, name), allocator);
                 }
 
                 break :blk Value{ .record = .{
@@ -1698,11 +1715,11 @@ fn serializeImpl(comptime T: type, value: T, allocator: Allocator) Allocator.Err
             }
 
             // Default: struct -> dictionary
-            const entries = try allocator.alloc(Value.DictEntry, struct_info.fields.len);
-            inline for (struct_info.fields, 0..) |field, i| {
+            const entries = try allocator.alloc(Value.DictEntry, struct_info.field_names.len);
+            inline for (struct_info.field_names, struct_info.field_types, 0..) |name, f_type, i| {
                 entries[i] = .{
-                    .key = string(field.name),
-                    .value = try serializeImpl(field.type, @field(value, field.name), allocator),
+                    .key = string(name),
+                    .value = try serializeImpl(f_type, @field(value, name), allocator),
                 };
             }
             // Sort for canonical ordering (by wire format bytes)
@@ -1829,17 +1846,17 @@ fn deserializeImpl(comptime T: type, value: Value, allocator: Allocator) !T {
         .@"enum" => |enum_info| blk: {
             switch (value) {
                 .symbol => |s| {
-                    inline for (enum_info.fields) |field| {
-                        if (std.mem.eql(u8, field.name, s)) {
-                            break :blk @enumFromInt(field.value);
+                    inline for (enum_info.field_names, enum_info.field_values) |name, val| {
+                        if (std.mem.eql(u8, name, s)) {
+                            break :blk @fromBackingInt(@intCast(val));
                         }
                     }
                     return error.TypeMismatch;
                 },
                 .string => |s| {
-                    inline for (enum_info.fields) |field| {
-                        if (std.mem.eql(u8, field.name, s)) {
-                            break :blk @enumFromInt(field.value);
+                    inline for (enum_info.field_names, enum_info.field_values) |name, val| {
+                        if (std.mem.eql(u8, name, s)) {
+                            break :blk @fromBackingInt(@intCast(val));
                         }
                     }
                     return error.TypeMismatch;
@@ -1854,9 +1871,9 @@ fn deserializeImpl(comptime T: type, value: Value, allocator: Allocator) !T {
                 switch (value) {
                     .record => |rec| {
                         var result: T = undefined;
-                        if (rec.fields.len != struct_info.fields.len) return error.TypeMismatch;
-                        inline for (struct_info.fields, 0..) |field, i| {
-                            @field(result, field.name) = try deserializeImpl(field.type, rec.fields[i], allocator);
+                        if (rec.fields.len != struct_info.field_names.len) return error.TypeMismatch;
+                        inline for (struct_info.field_names, struct_info.field_types, 0..) |name, f_type, i| {
+                            @field(result, name) = try deserializeImpl(f_type, rec.fields[i], allocator);
                         }
                         break :blk result;
                     },
@@ -1868,7 +1885,7 @@ fn deserializeImpl(comptime T: type, value: Value, allocator: Allocator) !T {
             switch (value) {
                 .dictionary => |entries| {
                     var result: T = undefined;
-                    inline for (struct_info.fields) |field| {
+                    inline for (struct_info.field_names, struct_info.field_types, struct_info.field_attrs) |name, f_type, attr| {
                         var found = false;
                         for (entries) |entry| {
                             const key_str = switch (entry.key) {
@@ -1876,16 +1893,16 @@ fn deserializeImpl(comptime T: type, value: Value, allocator: Allocator) !T {
                                 .symbol => |s| s,
                                 else => continue,
                             };
-                            if (std.mem.eql(u8, key_str, field.name)) {
-                                @field(result, field.name) = try deserializeImpl(field.type, entry.value, allocator);
+                            if (std.mem.eql(u8, key_str, name)) {
+                                @field(result, name) = try deserializeImpl(f_type, entry.value, allocator);
                                 found = true;
                                 break;
                             }
                         }
                         if (!found) {
                             // Check for default value
-                            if (field.default_value_ptr) |default_ptr| {
-                                @field(result, field.name) = @as(*const field.type, @ptrCast(@alignCast(default_ptr))).*;
+                            if (attr.default_value_ptr) |default_ptr| {
+                                @field(result, name) = @as(*const f_type, @ptrCast(@alignCast(default_ptr))).*;
                             } else {
                                 return error.MissingField;
                             }
@@ -2022,6 +2039,58 @@ test "encode error value" {
     const err_val = Value.fromError("oops", "aa", &data_struct);
     const enc = try err_val.encodeBuf(&buf);
     try std.testing.expectEqualSlices(u8, "<10'desc:error4\"oops2:aa{}>", enc);
+}
+
+test "decode error accepts arbitrary Syrup data" {
+    const allocator = std.testing.allocator;
+
+    const cases = [_]struct {
+        encoded: []const u8,
+        expected_tag: std.meta.Tag(Value),
+    }{
+        .{ .encoded = "<10'desc:error4\"oops2:aa<4'null>>", .expected_tag = .null },
+        .{ .encoded = "<10'desc:error4\"oops2:aa[1+2+]>", .expected_tag = .list },
+        .{ .encoded = "<10'desc:error4\"oops2:aa3\"raw>", .expected_tag = .string },
+    };
+
+    for (cases) |case| {
+        const value = try decode(case.encoded, allocator);
+        defer value.deinitContainers(allocator);
+        try std.testing.expect(value == .@"error");
+        try std.testing.expectEqual(case.expected_tag, std.meta.activeTag(value.@"error".data.*));
+
+        const canonical = try value.encodeAlloc(allocator);
+        defer allocator.free(canonical);
+        try std.testing.expectEqualSlices(u8, case.encoded, canonical);
+    }
+}
+
+test "single-value decode rejects trailing data" {
+    const allocator = std.testing.allocator;
+    try std.testing.expectError(error.TrailingData, decode("1+GARBAGE", allocator));
+    try std.testing.expectError(error.TrailingData, decode("1+2+", allocator));
+
+    // A container value parses (and allocates) before the trailing byte is seen.
+    // std.testing.allocator fails this test if the rejected parse leaks.
+    try std.testing.expectError(error.TrailingData, decode("[1+2+]X", allocator));
+    try std.testing.expectError(error.TrailingData, decode("{1\"a2+}Z", allocator));
+    try std.testing.expectError(error.TrailingData, decode("<3\"tag1+>Q", allocator));
+
+    const stream = try decodeStream("1+2+", allocator);
+    defer allocator.free(stream);
+    try std.testing.expectEqual(@as(usize, 2), stream.len);
+    try std.testing.expectEqual(@as(i64, 1), stream[0].integer);
+    try std.testing.expectEqual(@as(i64, 2), stream[1].integer);
+}
+
+test "deinitContainers recurses through record labels and tagged payloads" {
+    const allocator = std.testing.allocator;
+    const value = try decode("<<8'desc:tag3\"tag[1+2+]>>", allocator);
+    defer value.deinitContainers(allocator);
+
+    try std.testing.expect(value == .record);
+    try std.testing.expect(value.record.label.* == .tagged);
+    try std.testing.expect(value.record.label.tagged.payload.* == .list);
 }
 
 test "encode undefined and null" {

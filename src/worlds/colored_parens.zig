@@ -93,7 +93,7 @@ pub const ColoredParensWorld = struct {
             .variant = variant,
             .angle = angleForVariant(variant),
             .root_expr = null,
-            .output_buffer = .{},
+            .output_buffer = .empty,
         };
         return self;
     }
@@ -117,10 +117,9 @@ pub const ColoredParensWorld = struct {
     /// Render the expression with colored parentheses to internal buffer
     pub fn render(self: *ColoredParensWorld) !void {
         self.output_buffer.clearRetainingCapacity();
-        const writer = self.output_buffer.writer(self.allocator);
 
         if (self.root_expr) |expr| {
-            try self.renderExpr(expr, 0, writer);
+            try self.renderExpr(expr, 0);
         }
     }
 
@@ -133,13 +132,12 @@ pub const ColoredParensWorld = struct {
         self: *ColoredParensWorld,
         expr: Expr,
         depth: u16,
-        writer: anytype,
     ) !void {
         var ansi_buf: [19]u8 = undefined;
 
         switch (expr) {
             .atom => |name| {
-                try writer.print("{s}", .{name});
+                try self.output_buffer.print(self.allocator, "{s}", .{name});
             },
             .list => |list| {
                 const op_trit = lookupTrit(list.op);
@@ -147,20 +145,20 @@ pub const ColoredParensWorld = struct {
 
                 // Opening paren with color
                 const open_ansi = color.rgb.toAnsiFg(&ansi_buf);
-                try writer.print("{s}({s}", .{ open_ansi, "\x1b[0m" });
+                try self.output_buffer.print(self.allocator, "{s}({s}", .{ open_ansi, "\x1b[0m" });
 
                 // Operation name
-                try writer.print("{s}", .{list.op});
+                try self.output_buffer.print(self.allocator, "{s}", .{list.op});
 
                 // Recursive render args
                 for (list.args) |arg| {
-                    try writer.print(" ", .{});
-                    try self.renderExpr(arg, depth + 1, writer);
+                    try self.output_buffer.append(self.allocator, ' ');
+                    try self.renderExpr(arg, depth + 1);
                 }
 
                 // Closing paren with same color
                 const close_ansi = color.rgb.toAnsiFg(&ansi_buf);
-                try writer.print("{s}){s}", .{ close_ansi, "\x1b[0m" });
+                try self.output_buffer.print(self.allocator, "{s}){s}", .{ close_ansi, "\x1b[0m" });
             },
         }
     }
@@ -329,7 +327,9 @@ test "cross-world fingerprint: same expression same color" {
 
 test "fuzz: random expressions render without crash" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 3) return;
 
             const variant: WorldVariant = switch (input[0] % 3) {
@@ -361,10 +361,12 @@ test "fuzz: random expressions render without crash" {
 
 test "fuzz: trit lookup always returns valid trit" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             // Any arbitrary string as op name should return a valid trit
             const trit = lookupTrit(input);
-            const v = @intFromEnum(trit);
+            const v = @backingInt(trit);
             if (v < -1 or v > 1) return error.InvalidTrit;
         }
     }.testOne, .{});
@@ -372,7 +374,9 @@ test "fuzz: trit lookup always returns valid trit" {
 
 test "fuzz: computeColor produces valid RGB for any depth" {
     try std.testing.fuzz({}, struct {
-        fn testOne(_: void, input: []const u8) anyerror!void {
+        fn testOne(_: void, smith: *std.testing.Smith) anyerror!void {
+            var input_buf: [8192]u8 = undefined;
+            const input = input_buf[0..smith.slice(&input_buf)];
             if (input.len < 4) return;
 
             const variant: WorldVariant = switch (input[0] % 3) {

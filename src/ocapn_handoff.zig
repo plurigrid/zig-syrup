@@ -37,6 +37,14 @@ fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
     try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
 }
 
+fn fillRandom(out: []u8) void {
+    if (comptime @hasDecl(std.crypto, "random")) {
+        std.crypto.random.bytes(out);
+    } else {
+        std.c.arc4random_buf(out.ptr, out.len);
+    }
+}
+
 pub const GIFT_ID_LEN: usize = 32;
 
 pub const HandoffGive = struct {
@@ -195,7 +203,7 @@ pub fn verifyGive(
 /// Generate a fresh 32-byte gift-id.
 pub fn freshGiftId() [GIFT_ID_LEN]u8 {
     var out: [GIFT_ID_LEN]u8 = undefined;
-    std.crypto.random.bytes(&out);
+    fillRandom(&out);
     return out;
 }
 
@@ -264,7 +272,7 @@ test "Square C — corpus of 70 handoff-give envelopes all sign/verify" {
     // Recipient pubkey is fixed within the corpus (same B across all gifts);
     // only the gift-id varies. This isolates the gift-id channel.
     var rk: [32]u8 = undefined;
-    std.crypto.random.bytes(&rk);
+    fillRandom(&rk);
 
     // Use a printable string designator (Racket-aligned), not raw bytes,
     // since the encoder now emits Syrup string for designator.

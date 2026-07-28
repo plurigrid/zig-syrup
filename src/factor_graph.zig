@@ -39,7 +39,7 @@ const defaultMerge = propagator.defaultMerge;
 ///   synergy:    information that exists ONLY in the full combination
 pub const PIDAtom = struct {
     redundancy: f32 = 0,
-    unique: [max_factor_arity]f32 = [_]f32{0} ** max_factor_arity,
+    unique: [max_factor_arity]f32 = @splat(0),
     synergy: f32 = 0,
     arity: u32 = 0,
 
@@ -121,9 +121,9 @@ pub const FactorNode = struct {
     allocator: std.mem.Allocator,
 
     // Message buffers: var_to_factor[i] = message from variable i to this factor
-    var_to_factor: [max_factor_arity]Message = [_]Message{Message.uninformative()} ** max_factor_arity,
+    var_to_factor: [max_factor_arity]Message = @splat(Message.uninformative()),
     // factor_to_var[i] = message from this factor to variable i
-    factor_to_var: [max_factor_arity]Message = [_]Message{Message.uninformative()} ** max_factor_arity,
+    factor_to_var: [max_factor_arity]Message = @splat(Message.uninformative()),
 
     // Cached PID decomposition
     pid: PIDAtom = .{},
@@ -214,10 +214,10 @@ pub const FactorNode = struct {
         const full_has_value = full_result != null;
 
         // Evaluate each leave-one-out subset
-        var subset_results: [max_factor_arity]bool = [_]bool{false} ** max_factor_arity;
+        var subset_results: [max_factor_arity]bool = @splat(false);
         var any_subset_has_value = false;
         var all_subsets_have_value = true;
-        var subset_values: [max_factor_arity]?f32 = [_]?f32{null} ** max_factor_arity;
+        var subset_values: [max_factor_arity]?f32 = @splat(null);
 
         for (0..k) |leave_out| {
             // Create subset with one variable masked to Nothing
@@ -238,8 +238,8 @@ pub const FactorNode = struct {
         }
 
         // Evaluate individual variables alone
-        var individual_results: [max_factor_arity]bool = [_]bool{false} ** max_factor_arity;
-        var individual_values: [max_factor_arity]?f32 = [_]?f32{null} ** max_factor_arity;
+        var individual_results: [max_factor_arity]bool = @splat(false);
+        var individual_values: [max_factor_arity]?f32 = @splat(null);
 
         for (0..k) |solo| {
             var solo_input: [max_factor_arity]CellValue(f32) = undefined;

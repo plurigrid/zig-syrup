@@ -190,7 +190,7 @@ pub const CausalIncrement = struct {
                 .ke => 0.6, // moderate = standard
                 .ku => 0.8, // severe = vivid
             },
-            .l = switch (@intFromEnum(self.level)) {
+            .l = switch (@backingInt(self.level)) {
                 0...2 => 0.5, // lower levels darker
                 3...4 => 0.6, // middle levels standard
                 5...6 => 0.7, // upper levels lighter
@@ -243,16 +243,16 @@ pub const CausalChain = struct {
     pub fn activeLevels(self: CausalChain) u7 {
         var mask: u7 = 0;
         for (self.increments) |inc| {
-            mask |= @as(u7, 1) << @intFromEnum(inc.level);
+            mask |= @as(u7, 1) << @backingInt(inc.level);
         }
         return mask;
     }
 
     /// Count increments at each fractal level.
     pub fn levelHistogram(self: CausalChain) [7]u16 {
-        var hist = [_]u16{0} ** 7;
+        var hist: [7]u16 = @splat(0);
         for (self.increments) |inc| {
-            hist[@intFromEnum(inc.level)] += 1;
+            hist[@backingInt(inc.level)] += 1;
         }
         return hist;
     }
@@ -385,9 +385,9 @@ pub const Unworld = struct {
 
     /// Count worlds at each fractal level.
     pub fn levelCounts(self: *const Unworld) [7]u32 {
-        var counts = [_]u32{0} ** 7;
+        var counts: [7]u32 = @splat(0);
         for (self.roots.items) |node| {
-            counts[@intFromEnum(node.level)] += 1;
+            counts[@backingInt(node.level)] += 1;
         }
         return counts;
     }
@@ -404,7 +404,7 @@ pub const Unworld = struct {
             if (current_level == null or current_level.? != node.level) {
                 if (current_level != null) try writer.writeAll("\n");
                 current_level = node.level;
-                try writer.print("L{d} ", .{@intFromEnum(node.level)});
+                try writer.print("L{d} ", .{@backingInt(node.level)});
             }
 
             const color = node.compositeColor();

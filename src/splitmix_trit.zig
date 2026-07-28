@@ -59,7 +59,7 @@ pub const Trit = enum(i8) {
 
     /// Add two trits in GF(3)
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .ergodic,
             1 => .plus,
@@ -142,7 +142,7 @@ pub const ChaCha = struct {
     /// ChaCha state: 16 × u32
     state: [16]u32,
     /// Output buffer (64 bytes per block)
-    output: [16]u32 = [_]u32{0} ** 16,
+    output: [16]u32 = @splat(0),
     /// Position within output buffer
     pos: u8 = 64,
 
@@ -167,7 +167,7 @@ pub const ChaCha = struct {
         self.state[14] = @truncate(seed);
         self.state[15] = @truncate(seed >> 32);
         self.pos = 64; // force generation on first next()
-        self.output = [_]u32{0} ** 16;
+        self.output = @splat(0);
         return self;
     }
 
@@ -382,10 +382,10 @@ pub const SplitMixTrit = struct {
         const r = Trit.fromU64(self.rybka.next());
         const result = c.add(s).add(r);
 
-        self.component_sum += @as(i32, @intFromEnum(c));
-        self.component_sum += @as(i32, @intFromEnum(s));
-        self.component_sum += @as(i32, @intFromEnum(r));
-        self.trit_sum += @as(i32, @intFromEnum(result));
+        self.component_sum += @as(i32, @backingInt(c));
+        self.component_sum += @as(i32, @backingInt(s));
+        self.component_sum += @as(i32, @backingInt(r));
+        self.trit_sum += @as(i32, @backingInt(result));
         self.generation += 1;
         return result;
     }
@@ -628,7 +628,7 @@ export fn splitmix_trit_init(seed: u64) void {
 
 export fn splitmix_trit_next() i8 {
     if (global_gen) |*gen| {
-        return @intFromEnum(gen.trit_gen.next());
+        return @backingInt(gen.trit_gen.next());
     }
     return 0;
 }
@@ -644,7 +644,7 @@ export fn splitmix_rgb_next() u32 {
 export fn splitmix_triadic_next_trit() i8 {
     if (global_gen) |*gen| {
         const result = gen.next();
-        return @intFromEnum(result.trit);
+        return @backingInt(result.trit);
     }
     return 0;
 }
@@ -659,7 +659,7 @@ export fn splitmix_triadic_next_rgb() u32 {
 
 export fn splitmix_opine(seed: u64, prop_ptr: [*]const u8, prop_len: usize) i8 {
     const proposition = prop_ptr[0..prop_len];
-    return @intFromEnum(SplitMixTrit.opine(seed, proposition));
+    return @backingInt(SplitMixTrit.opine(seed, proposition));
 }
 
 export fn splitmix_opine_rgb(seed: u64, prop_ptr: [*]const u8, prop_len: usize) u32 {
@@ -712,7 +712,7 @@ test "SplitMixTrit additive combiner" {
     var counts = [3]u32{ 0, 0, 0 };
     for (0..300) |_| {
         const t = gen.next();
-        counts[@as(usize, @intCast(@as(i8, @intFromEnum(t)) + 1))] += 1;
+        counts[@as(usize, @intCast(@as(i8, @backingInt(t)) + 1))] += 1;
     }
     // All three trits should appear (roughly uniform)
     try testing.expect(counts[0] > 0); // minus

@@ -98,7 +98,7 @@ pub const QUICConnection = struct {
         return .{
             .connection_id = connection_id,
             .seed = seed,
-            .paths = [_]?QUICPath{null} ** MAX_PATHS,
+            .paths = @splat(null),
             .probe_history = .{},
             .color = connectionColor(connection_id, seed),
         };
@@ -223,15 +223,15 @@ pub const Trit = enum(i2) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         // Map sum in [-2,2] to trit in [-1,0,1]
         if (sum >= 2) return .minus; // 2 mod 3 = -1
         if (sum <= -2) return .plus; // -2 mod 3 = 1
-        return @enumFromInt(@as(i2, @intCast(sum)));
+        return @fromBackingInt(@intCast(@as(i2, @intCast(sum))));
     }
 
     pub fn negate(self: Trit) Trit {
-        return @enumFromInt(-@as(i2, @intFromEnum(self)));
+        return @fromBackingInt(@intCast(-@as(i2, @backingInt(self))));
     }
 };
 
@@ -250,7 +250,7 @@ pub const SignTriad = struct {
             .sign = sign,
             .object = object,
             .interpretant = interpretant,
-            .trit = @enumFromInt(trit_val),
+            .trit = @fromBackingInt(@intCast(trit_val)),
             .color = RGB.fromSeed(seed ^ combined),
         };
     }
@@ -259,7 +259,7 @@ pub const SignTriad = struct {
     pub fn conserved(triads: []const SignTriad) bool {
         var sum: i8 = 0;
         for (triads) |t| {
-            sum += @as(i8, @intFromEnum(t.trit));
+            sum += @as(i8, @backingInt(t.trit));
         }
         // Use wider type for mod to avoid overflow
         const wide: i32 = @as(i32, sum);
@@ -329,7 +329,7 @@ pub const ProtocolStateMachine = struct {
         if (next) |n| {
             self.state = n;
             self.transition_count += 1;
-            self.fingerprint ^= splitmix64(@as(u64, self.transition_count) ^ @intFromEnum(n));
+            self.fingerprint ^= splitmix64(@as(u64, self.transition_count) ^ @backingInt(n));
             self.color = RGB.fromSeed(self.fingerprint);
             return true;
         }

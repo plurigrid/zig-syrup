@@ -36,7 +36,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .ergodic,
             1 => .plus,
@@ -146,7 +146,7 @@ pub const Variety = enum(u8) {
     Transcend,
 
     pub fn index(self: Variety) u8 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     pub fn trit(self: Variety) Trit {
@@ -178,7 +178,7 @@ pub const Variety = enum(u8) {
     /// From raw index 0-68.
     pub fn fromIndex(idx: u8) !Variety {
         if (idx > 68) return error.InvalidVariety;
-        return @enumFromInt(idx);
+        return @fromBackingInt(@intCast(idx));
     }
 
     /// Opposite variety: same bucket offset, opposite trit bucket.
@@ -186,8 +186,8 @@ pub const Variety = enum(u8) {
     pub fn opposite(self: Variety) Variety {
         const offset = self.bucketOffset();
         return switch (self.trit()) {
-            .minus => @enumFromInt(46 + offset),
-            .plus => @enumFromInt(offset),
+            .minus => @fromBackingInt(@intCast(46 + offset)),
+            .plus => @fromBackingInt(@intCast(offset)),
             .ergodic => self,
         };
     }
@@ -202,7 +202,7 @@ pub const Variety = enum(u8) {
             .ergodic => 23,
             .plus => 46,
         };
-        return @enumFromInt(base + result_offset);
+        return @fromBackingInt(@intCast(base + result_offset));
     }
 };
 
@@ -397,7 +397,7 @@ pub fn bucketStats() BucketStats {
     var stats = BucketStats{};
     var i: u8 = 0;
     while (i < 69) : (i += 1) {
-        const v: Variety = @enumFromInt(i);
+        const v: Variety = @fromBackingInt(@intCast(i));
         switch (v.trit()) {
             .minus => stats.minus_count += 1,
             .ergodic => stats.ergodic_count += 1,
@@ -418,7 +418,7 @@ pub fn varietyAt(seed: u64, index: u64) Variety {
     z = (z ^ (z >> 30)) *% MIX1;
     z = (z ^ (z >> 27)) *% MIX2;
     z = z ^ (z >> 31);
-    return @enumFromInt(@as(u8, @intCast(z % 69)));
+    return @fromBackingInt(@intCast(@as(u8, @intCast(z % 69))));
 }
 
 /// Select a variety constrained to a specific trit bucket.
@@ -437,7 +437,7 @@ pub fn varietyInBucket(seed: u64, index: u64, bucket_trit: Trit) Variety {
         .ergodic => 23,
         .plus => 46,
     };
-    return @enumFromInt(base + offset);
+    return @fromBackingInt(@intCast(base + offset));
 }
 
 // ============================================================================
@@ -447,7 +447,7 @@ pub fn varietyInBucket(seed: u64, index: u64, bucket_trit: Trit) Variety {
 test "69 varieties exist" {
     var i: u8 = 0;
     while (i < 69) : (i += 1) {
-        const v: Variety = @enumFromInt(i);
+        const v: Variety = @fromBackingInt(@intCast(i));
         _ = v.name();
     }
 }
@@ -482,7 +482,7 @@ test "opposite morphisms" {
     // Opposite of opposite is self
     var i: u8 = 0;
     while (i < 69) : (i += 1) {
-        const v: Variety = @enumFromInt(i);
+        const v: Variety = @fromBackingInt(@intCast(i));
         try std.testing.expectEqual(v, v.opposite().opposite());
     }
 }
@@ -592,13 +592,13 @@ test "apply minus morphism nullifies value" {
 test "arrow composition" {
     const a1 = Arrow{
         .variety = .Create,
-        .source_hash = [_]u8{0} ** 32,
-        .target_hash = [_]u8{1} ** 32,
+        .source_hash = @splat(0),
+        .target_hash = @splat(1),
     };
     const a2 = Arrow{
         .variety = .Annihilate,
-        .source_hash = [_]u8{1} ** 32,
-        .target_hash = [_]u8{2} ** 32,
+        .source_hash = @splat(1),
+        .target_hash = @splat(2),
     };
     const composed = try a1.compose(a2);
     try std.testing.expectEqual(Trit.ergodic, composed.trit());
@@ -609,13 +609,13 @@ test "arrow composition" {
 test "arrow non-composable" {
     const a1 = Arrow{
         .variety = .Create,
-        .source_hash = [_]u8{0} ** 32,
-        .target_hash = [_]u8{1} ** 32,
+        .source_hash = @splat(0),
+        .target_hash = @splat(1),
     };
     const a2 = Arrow{
         .variety = .Annihilate,
-        .source_hash = [_]u8{99} ** 32,
-        .target_hash = [_]u8{2} ** 32,
+        .source_hash = @splat(99),
+        .target_hash = @splat(2),
     };
     try std.testing.expectError(error.NonComposable, a1.compose(a2));
 }
@@ -628,13 +628,13 @@ test "chain balance" {
     // PLUS → MINUS → ERGODIC net = PLUS + MINUS = ERGODIC
     try chain.append(.{
         .variety = .Create,
-        .source_hash = [_]u8{0} ** 32,
-        .target_hash = [_]u8{1} ** 32,
+        .source_hash = @splat(0),
+        .target_hash = @splat(1),
     });
     try chain.append(.{
         .variety = .Annihilate,
-        .source_hash = [_]u8{1} ** 32,
-        .target_hash = [_]u8{2} ** 32,
+        .source_hash = @splat(1),
+        .target_hash = @splat(2),
     });
 
     try std.testing.expect(chain.isBalanced());
@@ -651,13 +651,13 @@ test "chain rejects non-composable append" {
 
     try chain.append(.{
         .variety = .Create,
-        .source_hash = [_]u8{0} ** 32,
-        .target_hash = [_]u8{1} ** 32,
+        .source_hash = @splat(0),
+        .target_hash = @splat(1),
     });
     try std.testing.expectError(error.NonComposable, chain.append(.{
         .variety = .Annihilate,
-        .source_hash = [_]u8{99} ** 32,
-        .target_hash = [_]u8{2} ** 32,
+        .source_hash = @splat(99),
+        .target_hash = @splat(2),
     }));
 }
 
@@ -667,8 +667,8 @@ test "GF(3) trit arithmetic on varieties" {
     while (i < 69) : (i += 1) {
         var j: u8 = 0;
         while (j < 69) : (j += 1) {
-            const vi: Variety = @enumFromInt(i);
-            const vj: Variety = @enumFromInt(j);
+            const vi: Variety = @fromBackingInt(@intCast(i));
+            const vj: Variety = @fromBackingInt(@intCast(j));
             const composed = vi.compose(vj);
             const expected_trit = Trit.add(vi.trit(), vj.trit());
             try std.testing.expectEqual(expected_trit, composed.trit());
@@ -679,7 +679,7 @@ test "GF(3) trit arithmetic on varieties" {
 test "maximally oppositional: every MINUS has a PLUS opposite" {
     var i: u8 = 0;
     while (i < 23) : (i += 1) {
-        const minus_v: Variety = @enumFromInt(i);
+        const minus_v: Variety = @fromBackingInt(@intCast(i));
         const opp = minus_v.opposite();
         try std.testing.expectEqual(Trit.plus, opp.trit());
         try std.testing.expectEqual(minus_v.bucketOffset(), opp.bucketOffset());

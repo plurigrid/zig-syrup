@@ -46,7 +46,7 @@ const CacheEntry = struct {
     occupied: bool = false,
 };
 
-var runtime_cache: [CACHE_SIZE]CacheEntry = [_]CacheEntry{.{}} ** CACHE_SIZE;
+var runtime_cache: [CACHE_SIZE]CacheEntry = @splat(.{});
 
 fn cacheSlot(key: u64) usize {
     return @intCast(key & CACHE_MASK);
@@ -145,7 +145,7 @@ export fn gay_balanced(a: Color3, b: Color3, c: Color3) bool {
 }
 
 export fn gay_cache_clear() void {
-    runtime_cache = [_]CacheEntry{.{}} ** CACHE_SIZE;
+    runtime_cache = @splat(.{});
 }
 
 // ============================================================================

@@ -107,7 +107,7 @@ pub const ModalProposition = struct {
 
     pub fn init(frame: *const KripkeFrame, seed: u64) ModalProposition {
         var prop: ModalProposition = .{
-            .truth = [_]bool{false} ** MAX_WORLDS,
+            .truth = @splat(false),
             .len = @intCast(frame.worlds.len),
             .color = 0,
         };
@@ -128,7 +128,7 @@ pub const ModalProposition = struct {
     /// Box (necessity): true at w iff true at all accessible worlds.
     pub fn box(self: *const ModalProposition, frame: *const KripkeFrame) ModalProposition {
         var result: ModalProposition = .{
-            .truth = [_]bool{false} ** MAX_WORLDS,
+            .truth = @splat(false),
             .len = self.len,
             .color = 0,
         };
@@ -149,7 +149,7 @@ pub const ModalProposition = struct {
     /// Diamond (possibility): true at w iff true at some accessible world.
     pub fn diamond(self: *const ModalProposition, frame: *const KripkeFrame) ModalProposition {
         var result: ModalProposition = .{
-            .truth = [_]bool{false} ** MAX_WORLDS,
+            .truth = @splat(false),
             .len = self.len,
             .color = 0,
         };
@@ -170,7 +170,7 @@ pub const ModalProposition = struct {
     /// Negation.
     pub fn negate(self: *const ModalProposition) ModalProposition {
         var result: ModalProposition = .{
-            .truth = [_]bool{false} ** MAX_WORLDS,
+            .truth = @splat(false),
             .len = self.len,
             .color = self.color,
         };
@@ -183,7 +183,7 @@ pub const ModalProposition = struct {
     /// Conjunction.
     pub fn conjunction(self: *const ModalProposition, other: *const ModalProposition) ModalProposition {
         var result: ModalProposition = .{
-            .truth = [_]bool{false} ** MAX_WORLDS,
+            .truth = @splat(false),
             .len = self.len,
             .color = self.color ^ other.color,
         };
@@ -196,7 +196,7 @@ pub const ModalProposition = struct {
     /// Implication p -> q  (= !p or q).
     pub fn implies(self: *const ModalProposition, other: *const ModalProposition) ModalProposition {
         var result: ModalProposition = .{
-            .truth = [_]bool{false} ** MAX_WORLDS,
+            .truth = @splat(false),
             .len = self.len,
             .color = self.color ^ other.color,
         };
@@ -366,7 +366,7 @@ pub const DOCTRINES = [_]DynamicalDoctrine{
 
 fn makeDoctrine(comptime name: []const u8, layer: u8, fp: u64) DynamicalDoctrine {
     var d: DynamicalDoctrine = .{
-        .name = [_]u8{0} ** 24,
+        .name = @splat(0),
         .name_len = @intCast(name.len),
         .tower_layer = layer,
         .fingerprint = fp,

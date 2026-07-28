@@ -216,7 +216,7 @@ pub const EventLog = struct {
             .entries = std.ArrayList(LogEntry).empty,
             .merkle_tree = MerkleTree.init(allocator),
             .allocator = allocator,
-            .last_hash = [_]u8{0} ** 32,
+            .last_hash = @splat(0),
         };
     }
 
@@ -242,7 +242,7 @@ pub const EventLog = struct {
 
         // Compute entry hash
         var hasher = crypto.hash.Blake3.init(.{});
-        hasher.update(&[_]u8{@intFromEnum(entry_type)});
+        hasher.update(&[_]u8{@backingInt(entry_type)});
         hasher.update(std.mem.asBytes(&timestamp));
         hasher.update(std.mem.asBytes(&tick));
         hasher.update(std.mem.asBytes(&world_id));
@@ -278,7 +278,7 @@ pub const EventLog = struct {
 
     /// Verify log integrity
     pub fn verifyIntegrity(self: Self) bool {
-        var prev_hash = [_]u8{0} ** 32;
+        var prev_hash: [32]u8 = @splat(0);
 
         for (self.entries.items) |entry| {
             // Verify chain link
@@ -288,7 +288,7 @@ pub const EventLog = struct {
 
             // Recompute and verify hash
             var hasher = crypto.hash.Blake3.init(.{});
-            hasher.update(&[_]u8{@intFromEnum(entry.entry_type)});
+            hasher.update(&[_]u8{@backingInt(entry.entry_type)});
             hasher.update(std.mem.asBytes(&entry.timestamp));
             hasher.update(std.mem.asBytes(&entry.tick));
             hasher.update(std.mem.asBytes(&entry.world_id));
@@ -450,7 +450,7 @@ pub const FlatFileStorage = struct {
         var stream = std.io.fixedBufferStream(&buf);
         const w = stream.writer();
 
-        try w.writeByte(@intFromEnum(entry.entry_type));
+        try w.writeByte(@backingInt(entry.entry_type));
         try w.writeInt(i64, entry.timestamp, .little);
         try w.writeInt(u64, entry.tick, .little);
         try w.writeInt(u64, entry.world_id, .little);
@@ -986,8 +986,8 @@ test "FlatFileStorage" {
         .tick = 0,
         .world_id = 1,
         .data = "test",
-        .hash = [_]u8{1} ** 32,
-        .prev_hash = [_]u8{0} ** 32,
+        .hash = @splat(1),
+        .prev_hash = @splat(0),
     };
 
     try storage.writeEntry(entry);
@@ -1043,8 +1043,8 @@ test "Color coherence - entryColor from hash" {
         .tick = 0,
         .world_id = 1,
         .data = "test",
-        .hash = [_]u8{0xab} ** 32,
-        .prev_hash = [_]u8{0} ** 32,
+        .hash = @splat(0xab),
+        .prev_hash = @splat(0),
     };
 
     const c = entryColor(entry);

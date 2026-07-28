@@ -141,7 +141,7 @@ fn solveLayout(area: Rect, direction: Direction, constraints: []const Constraint
     };
 
     // First pass: calculate sizes
-    var sizes: [MAX_SPLITS]u16 = [_]u16{0} ** MAX_SPLITS;
+    var sizes: [MAX_SPLITS]u16 = @splat(0);
     var remaining: u16 = total;
     var fill_count: u16 = 0;
 
@@ -410,7 +410,7 @@ pub const MAX_BUF_ROWS: u16 = terminal.MAX_ROWS;
 const MAX_BUF_CELLS: usize = @as(usize, MAX_BUF_COLS) * MAX_BUF_ROWS;
 
 pub const Buffer = struct {
-    cells: [MAX_BUF_CELLS]Cell = [_]Cell{.{}} ** MAX_BUF_CELLS,
+    cells: [MAX_BUF_CELLS]Cell = @splat(.{}),
     area: Rect = .{},
 
     pub fn init(area: Rect) Buffer {

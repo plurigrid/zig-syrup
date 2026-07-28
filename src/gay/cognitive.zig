@@ -98,8 +98,8 @@ pub const CognitiveState = struct {
 
     pub fn init(dim: usize, grammar_type: GrammarType, seed: u64) CognitiveState {
         var self = CognitiveState{
-            .amplitudes = [_]Complex{Complex.zero} ** MAX_DIM,
-            .basis_colors = [_]Color{.{ .r = 0, .g = 0, .b = 0 }} ** MAX_DIM,
+            .amplitudes = @splat(Complex.zero),
+            .basis_colors = @splat(.{ .r = 0, .g = 0, .b = 0 }),
             .dim = dim,
             .fingerprint = 0,
             .grammar_type = grammar_type,
@@ -120,7 +120,7 @@ pub const CognitiveState = struct {
     pub fn collapse(self: *const CognitiveState) struct { index: usize, color: Color } {
         // Probability distribution
         var total: f64 = 0;
-        var probs: [MAX_DIM]f64 = [_]f64{0} ** MAX_DIM;
+        var probs: [MAX_DIM]f64 = @splat(0);
         for (0..self.dim) |i| {
             probs[i] = self.amplitudes[i].abs2();
             total += probs[i];
@@ -319,7 +319,7 @@ pub const ChromaticActiveInference = struct {
     pub fn init(seed: u64) ChromaticActiveInference {
         return .{
             .beliefs = undefined,
-            .belief_names = [_]u64{0} ** MAX_BELIEFS,
+            .belief_names = @splat(0),
             .n_beliefs = 0,
             .fingerprint = seed,
             .free_energy = 0,
@@ -439,7 +439,7 @@ pub const SheafifiedBrush = struct {
         self.seed = seed;
         self.n_opens = @min(n_opens, MAX_OPENS);
         self.total_size = total_size;
-        self.overlap_matrix = [_][MAX_OPENS]bool{[_]bool{false} ** MAX_OPENS} ** MAX_OPENS;
+        self.overlap_matrix = @splat(@as([MAX_OPENS]bool, @splat(false)));
 
         var rng = seed;
         for (0..self.n_opens) |i| {
@@ -558,7 +558,7 @@ pub const StackifiedBrush = struct {
     /// Find orbit of color c under group action
     pub fn equivalenceClass(self: *const StackifiedBrush, c: usize) OrbitResult {
         var result: OrbitResult = .{
-            .members = [_]usize{0} ** MAX_COLORS,
+            .members = @splat(0),
             .len = 0,
         };
         // Collect orbit

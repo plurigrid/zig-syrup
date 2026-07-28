@@ -80,8 +80,8 @@ pub const IxHttpServer = struct {
     mode: []const u8 = "idle",
 
     // Spatial colors cache (up to 64 nodes)
-    color_ids: [64]u32 = [_]u32{0} ** 64,
-    color_hexes: [64][7]u8 = [_][7]u8{[_]u8{0} ** 7} ** 64,
+    color_ids: [64]u32 = @splat(0),
+    color_hexes: [64][7]u8 = @splat(@as([7]u8, @splat(0))),
     color_count: u8 = 0,
 
     pub fn init(allocator: std.mem.Allocator, dispatcher: *CommandDispatcher) IxHttpServer {

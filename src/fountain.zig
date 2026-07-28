@@ -748,8 +748,8 @@ test "selectSources unique indices" {
 }
 
 test "xorBlocks SIMD" {
-    var a = [_]u8{ 0xFF, 0x00, 0xAA, 0x55 } ++ [_]u8{0} ** 28;
-    const b = [_]u8{ 0x0F, 0xF0, 0x55, 0xAA } ++ [_]u8{0} ** 28;
+    var a = [_]u8{ 0xFF, 0x00, 0xAA, 0x55 } ++ @as([28]u8, @splat(0));
+    const b = [_]u8{ 0x0F, 0xF0, 0x55, 0xAA } ++ @as([28]u8, @splat(0));
     xorBlocks(&a, &b);
     try std.testing.expectEqual(@as(u8, 0xF0), a[0]);
     try std.testing.expectEqual(@as(u8, 0xF0), a[1]);

@@ -152,7 +152,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -178,12 +178,12 @@ pub const Witness = struct {
     /// For institution witnesses: which institution attested
     institution: Institution = .extitute,
     /// Scope of what is being witnessed (e.g. "music/composition", "cs/systems")
-    scope: [64]u8 = [_]u8{0} ** 64,
+    scope: [64]u8 = @splat(0),
     scope_len: u8 = 0,
     /// SHA3-256 hash of the witness's signing key or identity
-    witness_key_hash: CredId = [_]u8{0} ** 32,
+    witness_key_hash: CredId = @splat(0),
     /// SHA3-256 hash of the evidence (email challenge response, artifact CID, etc.)
-    evidence_hash: CredId = [_]u8{0} ** 32,
+    evidence_hash: CredId = @splat(0),
     issued_at: u64,
     expires_at: u64 = 0,
     revoked: bool = false,
@@ -215,7 +215,7 @@ pub const MAX_WITNESSES_PER_CRED: usize = 16;
 pub const Credential = struct {
     cred_id: CredId,
     /// What this credential attests (e.g. "music_minor", "cs_capstone", "peer_review")
-    label: [64]u8 = [_]u8{0} ** 64,
+    label: [64]u8 = @splat(0),
     label_len: u8 = 0,
     /// Holder identity — SHA3-256 of their public key or email
     holder_hash: CredId,
@@ -237,9 +237,9 @@ pub const Credential = struct {
 
     /// Count distinct witness kinds attesting this credential
     pub fn distinctWitnessKinds(self: *const Credential) u8 {
-        var seen = [_]bool{false} ** 4; // 4 WitnessKind values
+        var seen: [4]bool = @splat(false); // 4 WitnessKind values
         for (self.witness_kinds[0..self.witness_count]) |k| {
-            seen[@intFromEnum(k)] = true;
+            seen[@backingInt(k)] = true;
         }
         var count: u8 = 0;
         for (seen) |s| {
@@ -373,12 +373,12 @@ pub const ManifoldStore = struct {
         if (cred.witness_count == 0) return .no_witnesses;
 
         // Check each witness is still valid
-        var valid_kinds = [_]bool{false} ** 4;
+        var valid_kinds: [4]bool = @splat(false);
         for (0..cred.witness_count) |i| {
             const w = self.lookupWitness(&cred.witness_ids[i]) orelse continue;
             if (self.isRevoked(&w.witness_id)) return .witness_revoked;
             if (!w.isValid(now_ms)) continue;
-            valid_kinds[@intFromEnum(w.kind)] = true;
+            valid_kinds[@backingInt(w.kind)] = true;
         }
 
         var distinct: u8 = 0;
@@ -519,9 +519,9 @@ pub fn serializeWitness(w: *const Witness, buf: []u8) usize {
 
     @memcpy(buf[pos..][0..32], &w.witness_id);
     pos += 32;
-    buf[pos] = @intFromEnum(w.kind);
+    buf[pos] = @backingInt(w.kind);
     pos += 1;
-    buf[pos] = @intFromEnum(w.institution);
+    buf[pos] = @backingInt(w.institution);
     pos += 1;
     buf[pos] = w.scope_len;
     pos += 1;
@@ -554,14 +554,14 @@ pub fn serializeCredential(c: *const Credential, buf: []u8) usize {
     pos += c.label_len;
     @memcpy(buf[pos..][0..32], &c.holder_hash);
     pos += 32;
-    buf[pos] = @bitCast(@intFromEnum(c.holder_trit));
+    buf[pos] = @bitCast(@backingInt(c.holder_trit));
     pos += 1;
     buf[pos] = c.witness_count;
     pos += 1;
     for (0..c.witness_count) |i| {
         @memcpy(buf[pos..][0..32], &c.witness_ids[i]);
         pos += 32;
-        buf[pos] = @intFromEnum(c.witness_kinds[i]);
+        buf[pos] = @backingInt(c.witness_kinds[i]);
         pos += 1;
     }
     @memcpy(buf[pos..][0..8], std.mem.asBytes(&c.issued_at));
@@ -579,7 +579,7 @@ pub fn serializeCredential(c: *const Credential, buf: []u8) usize {
 
 pub const PriorQuery = struct {
     cred_id: CredId,
-    topic: [128]u8 = [_]u8{0} ** 128,
+    topic: [128]u8 = @splat(0),
     topic_len: u8 = 0,
     limit: u16 = 10,
 
@@ -591,7 +591,7 @@ pub const PriorQuery = struct {
 pub const PriorResult = struct {
     status: ManifoldVerifyResult,
     triangulation_depth: u8 = 0,
-    topic: [128]u8 = [_]u8{0} ** 128,
+    topic: [128]u8 = @splat(0),
     topic_len: u8 = 0,
     count: u16 = 0,
     regret_cost: u64 = 0,
@@ -646,8 +646,8 @@ export fn openclaw_add_witness(
 ) bool {
     var store = getGlobalStore();
     const w = store.addWitness(
-        @enumFromInt(kind),
-        @enumFromInt(institution),
+        @fromBackingInt(@intCast(kind)),
+        @fromBackingInt(@intCast(institution)),
         scope_ptr[0..scope_len],
         witness_key_hash,
         evidence_hash,
@@ -671,7 +671,7 @@ export fn openclaw_create_credential(
     const c = store.createCredential(
         label_ptr[0..label_len],
         holder_hash,
-        @enumFromInt(holder_trit),
+        @fromBackingInt(@intCast(holder_trit)),
         now_ms,
         gay_color_seed,
     ) orelse return false;
@@ -694,7 +694,7 @@ export fn openclaw_verify(
     now_ms: u64,
 ) u8 {
     const store = getGlobalStore();
-    return @intFromEnum(store.verifyCredential(cred_id, now_ms));
+    return @backingInt(store.verifyCredential(cred_id, now_ms));
 }
 
 export fn openclaw_revoke(id: *const [32]u8) bool {
@@ -744,8 +744,8 @@ const SIGIL_EMAIL: u8 = 0xF8;
 
 fn computeWitnessId(w: *const Witness) CredId {
     var hasher = Sha3_256.init(.{});
-    hasher.update(std.mem.asBytes(&@intFromEnum(w.kind)));
-    hasher.update(std.mem.asBytes(&@intFromEnum(w.institution)));
+    hasher.update(std.mem.asBytes(&@backingInt(w.kind)));
+    hasher.update(std.mem.asBytes(&@backingInt(w.institution)));
     hasher.update(w.scope[0..w.scope_len]);
     hasher.update(&w.witness_key_hash);
     hasher.update(&w.evidence_hash);
@@ -761,7 +761,7 @@ fn computeCredId(c: *const Credential) CredId {
     var hasher = Sha3_256.init(.{});
     hasher.update(c.label[0..c.label_len]);
     hasher.update(&c.holder_hash);
-    hasher.update(std.mem.asBytes(&@intFromEnum(c.holder_trit)));
+    hasher.update(std.mem.asBytes(&@backingInt(c.holder_trit)));
     hasher.update(std.mem.asBytes(&c.issued_at));
     hasher.update(std.mem.asBytes(&c.gay_color_seed));
     hasher.update(&[_]u8{SIGIL_CREDENTIAL});
@@ -849,10 +849,10 @@ test "credential requires triangulation from 2+ witness kinds" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder_hash = [_]u8{0xAA} ** 32;
-    const key_hash = [_]u8{0xBB} ** 32;
-    const evidence1 = [_]u8{0xCC} ** 32;
-    const evidence2 = [_]u8{0xDD} ** 32;
+    const holder_hash: [32]u8 = @splat(0xAA);
+    const key_hash: [32]u8 = @splat(0xBB);
+    const evidence1: [32]u8 = @splat(0xCC);
+    const evidence2: [32]u8 = @splat(0xDD);
 
     // Create credential for a music minor
     const cred = store.createCredential("music_minor", &holder_hash, .zero, now, 1069) orelse
@@ -887,10 +887,10 @@ test "institution witness alone is insufficient" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder_hash = [_]u8{0xAA} ** 32;
-    const key_hash = [_]u8{0xBB} ** 32;
-    const ev1 = [_]u8{0x01} ** 32;
-    const ev2 = [_]u8{0x02} ** 32;
+    const holder_hash: [32]u8 = @splat(0xAA);
+    const key_hash: [32]u8 = @splat(0xBB);
+    const ev1: [32]u8 = @splat(0x01);
+    const ev2: [32]u8 = @splat(0x02);
 
     const cred = store.createCredential("cs_capstone", &holder_hash, .plus, now, 42) orelse
         return error.CreateFailed;
@@ -915,10 +915,10 @@ test "revoke witness invalidates credential" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder = [_]u8{0xAA} ** 32;
-    const key = [_]u8{0xBB} ** 32;
-    const ev1 = [_]u8{0x01} ** 32;
-    const ev2 = [_]u8{0x02} ** 32;
+    const holder: [32]u8 = @splat(0xAA);
+    const key: [32]u8 = @splat(0xBB);
+    const ev1: [32]u8 = @splat(0x01);
+    const ev2: [32]u8 = @splat(0x02);
 
     const cred = store.createCredential("self_designed_music", &holder, .zero, now, 1069) orelse
         return error.CreateFailed;
@@ -944,7 +944,7 @@ test "regret accumulation" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder = [_]u8{0xAA} ** 32;
+    const holder: [32]u8 = @splat(0xAA);
     const cred = store.createCredential("narya_bridge", &holder, .minus, now, 7) orelse
         return error.CreateFailed;
 
@@ -960,11 +960,11 @@ test "GF(3) witness balance" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder = [_]u8{0xAA} ** 32;
-    const key = [_]u8{0xBB} ** 32;
-    const ev1 = [_]u8{0x01} ** 32;
-    const ev2 = [_]u8{0x02} ** 32;
-    const ev3 = [_]u8{0x03} ** 32;
+    const holder: [32]u8 = @splat(0xAA);
+    const key: [32]u8 = @splat(0xBB);
+    const ev1: [32]u8 = @splat(0x01);
+    const ev2: [32]u8 = @splat(0x02);
+    const ev3: [32]u8 = @splat(0x03);
 
     const cred = store.createCredential("balanced_credential", &holder, .zero, now, 69) orelse
         return error.CreateFailed;
@@ -1029,11 +1029,11 @@ test "cross-institutional credential (energy + geometry)" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder = [_]u8{0xAA} ** 32;
-    const key = [_]u8{0xBB} ** 32;
-    const ev1 = [_]u8{0x01} ** 32;
-    const ev2 = [_]u8{0x02} ** 32;
-    const ev3 = [_]u8{0x03} ** 32;
+    const holder: [32]u8 = @splat(0xAA);
+    const key: [32]u8 = @splat(0xBB);
+    const ev1: [32]u8 = @splat(0x01);
+    const ev2: [32]u8 = @splat(0x02);
+    const ev3: [32]u8 = @splat(0x03);
 
     // Credential: "grid geometry" — spans PNNL energy + UCSB geometric ML
     const cred = store.createCredential("grid_geometry", &holder, .zero, now, 420) orelse
@@ -1065,10 +1065,10 @@ test "openpriors query requires triangulated credential" {
     var store = getGlobalStore();
     const now: u64 = 1_700_000_000_000;
 
-    const holder = [_]u8{0xAA} ** 32;
-    const key = [_]u8{0xBB} ** 32;
-    const ev1 = [_]u8{0x01} ** 32;
-    const ev2 = [_]u8{0x02} ** 32;
+    const holder: [32]u8 = @splat(0xAA);
+    const key: [32]u8 = @splat(0xBB);
+    const ev1: [32]u8 = @splat(0x01);
+    const ev2: [32]u8 = @splat(0x02);
 
     const cred = store.createCredential("cognitive_economy", &holder, .plus, now, 1069) orelse
         return error.CreateFailed;

@@ -138,7 +138,7 @@ test "shannonEntropyEvents: matches trit-slice version" {
     var events: [4]InteractionEvent = undefined;
     for (trits, 0..) |t, i| {
         events[i] = .{
-            .change_id = [_]u8{0} ** 32,
+            .change_id = @splat(0),
             .trit = t,
             .timestamp = i,
         };

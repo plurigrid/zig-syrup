@@ -498,7 +498,7 @@ pub const Unbounded = struct {
         len: u8,
 
         pub fn initEpoch3() PrimeBasis {
-            var b = PrimeBasis{ .primes = [_]u16{0} ** MAX_INLINE_PRIMES, .len = Extreme.N_PRIMES };
+            var b = PrimeBasis{ .primes = @splat(0), .len = Extreme.N_PRIMES };
             for (Extreme.PRIMES, 0..) |p, i| b.primes[i] = p;
             return b;
         }
@@ -539,7 +539,7 @@ pub const Unbounded = struct {
         n_active: u8,
 
         pub const ZERO = FactoredInstant{
-            .exponents = [_]i16{0} ** MAX_INLINE_PRIMES,
+            .exponents = @splat(0),
             .n_active = 0,
         };
 

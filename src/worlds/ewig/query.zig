@@ -864,8 +864,8 @@ test "expression evaluation" {
     const event = Event{
         .timestamp = 1000,
         .seq = 42,
-        .hash = [_]u8{0xAA} ** 32,
-        .parent = [_]u8{0} ** 32,
+        .hash = @splat(0xAA),
+        .parent = @splat(0),
         .world_uri = "a://world",
         .type = .PlayerAction,
         .payload = "{}",
@@ -944,8 +944,8 @@ test "query result to json" {
     events[0] = .{
         .timestamp = 1000,
         .seq = 1,
-        .hash = [_]u8{0xAA} ** 32,
-        .parent = [_]u8{0} ** 32,
+        .hash = @splat(0xAA),
+        .parent = @splat(0),
         .world_uri = "a://world",
         .type = .WorldCreated,
         .payload = "{}",
@@ -954,8 +954,8 @@ test "query result to json" {
     events[1] = .{
         .timestamp = 2000,
         .seq = 2,
-        .hash = [_]u8{0xBB} ** 32,
-        .parent = [_]u8{0xAA} ** 32,
+        .hash = @splat(0xBB),
+        .parent = @splat(0xAA),
         .world_uri = "a://world",
         .type = .StateChanged,
         .payload = "{}",

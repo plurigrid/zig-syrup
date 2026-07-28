@@ -66,7 +66,7 @@ pub const Polarity = enum(i8) {
     }
 
     pub fn toGF3(self: Polarity) i8 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     pub fn toRGB(self: Polarity) u24 {
@@ -240,7 +240,7 @@ pub const Port = struct {
 
 pub const Node = struct {
     kind: NodeKind = .wire,
-    ports: [MAX_PORTS]Port = [_]Port{.{ .polarity = .null }} ** MAX_PORTS,
+    ports: [MAX_PORTS]Port = @splat(.{ .polarity = .null }),
     num_ports: u8 = 0,
     /// Tile position in geometric layout
     pos: TilePos = .{},
@@ -312,9 +312,9 @@ pub const Token = struct {
 // ============================================================================
 
 pub const ProofNet = struct {
-    nodes: [MAX_NODES]Node = [_]Node{.{}} ** MAX_NODES,
+    nodes: [MAX_NODES]Node = @splat(.{}),
     node_count: u16 = 0,
-    tokens: [MAX_TOKENS]Token = [_]Token{.{}} ** MAX_TOKENS,
+    tokens: [MAX_TOKENS]Token = @splat(.{}),
     token_count: u8 = 0,
     /// Which REPL topology is this net for?
     topology: ReplTopology = .geiser,
@@ -738,7 +738,7 @@ pub const ProofNet = struct {
     pub fn isCorrect(self: *const ProofNet) bool {
         if (self.node_count == 0) return true;
         // BFS from first alive node, check all alive nodes are reachable
-        var visited = [_]bool{false} ** MAX_NODES;
+        var visited: [MAX_NODES]bool = @splat(false);
         var queue: [MAX_NODES]u16 = undefined;
         var head: u16 = 0;
         var tail: u16 = 0;
@@ -863,7 +863,7 @@ pub fn replHoleNet(repl: ReplTopology) ProofNet {
 var global_net: ProofNet = ProofNet.init(.geiser);
 
 export fn goi_init(topology: u8) void {
-    global_net = ProofNet.init(@enumFromInt(topology));
+    global_net = ProofNet.init(@fromBackingInt(@intCast(topology)));
 }
 
 export fn goi_add_axiom() u16 {
@@ -875,7 +875,7 @@ export fn goi_add_cut() u16 {
 }
 
 export fn goi_add_hole(repl: u8) u16 {
-    return global_net.addHole(@enumFromInt(repl));
+    return global_net.addHole(@fromBackingInt(@intCast(repl)));
 }
 
 export fn goi_fill_hole(idx: u16, color: u32) void {
@@ -928,7 +928,7 @@ export fn goi_node_color(idx: u16) u32 {
 }
 
 export fn goi_node_kind(idx: u16) u8 {
-    if (idx < global_net.node_count) return @intFromEnum(global_net.nodes[idx].kind);
+    if (idx < global_net.node_count) return @backingInt(global_net.nodes[idx].kind);
     return 0;
 }
 

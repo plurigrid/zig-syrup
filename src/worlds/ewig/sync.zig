@@ -245,7 +245,7 @@ pub const DeltaEncoder = struct {
 
                 if (changed & 0x01 != 0) try writer.writeInt(i64, event.timestamp, .little);
                 if (changed & 0x02 != 0) try writer.writeInt(u64, event.seq, .little);
-                if (changed & 0x04 != 0) try writer.writeByte(@intFromEnum(event.type));
+                if (changed & 0x04 != 0) try writer.writeByte(@backingInt(event.type));
                 if (changed & 0x08 != 0) {
                     try writer.writeInt(u32, @intCast(event.world_uri.len), .little);
                     try writer.writeAll(event.world_uri);
@@ -263,7 +263,7 @@ pub const DeltaEncoder = struct {
                 try writer.writeByte(0xFF); // All fields changed
                 try writer.writeInt(i64, event.timestamp, .little);
                 try writer.writeInt(u64, event.seq, .little);
-                try writer.writeByte(@intFromEnum(event.type));
+                try writer.writeByte(@backingInt(event.type));
                 try writer.writeInt(u32, @intCast(event.world_uri.len), .little);
                 try writer.writeAll(event.world_uri);
                 try writer.writeInt(u32, @intCast(event.payload.len), .little);
@@ -568,7 +568,7 @@ test "merkle sync" {
         .timestamp = 1000,
         .seq = 1,
         .hash = computeEventHash(1),
-        .parent = [_]u8{0} ** 32,
+        .parent = @splat(0),
         .world_uri = "a://world",
         .type = .WorldCreated,
         .payload = "{}",
@@ -579,7 +579,7 @@ test "merkle sync" {
     var tree = try merkle.buildTree(local_events.items);
     defer tree.deinit();
 
-    try testing.expect(!std.mem.eql(u8, &tree.root, &[_]u8{0} ** 32));
+    try testing.expect(!std.mem.eql(u8, &tree.root, &@as([32]u8, @splat(0))));
 }
 
 test "delta encoding" {
@@ -592,7 +592,7 @@ test "delta encoding" {
         .timestamp = 1000,
         .seq = 1,
         .hash = computeEventHash(1),
-        .parent = [_]u8{0} ** 32,
+        .parent = @splat(0),
         .world_uri = "a://world",
         .type = .WorldCreated,
         .payload = "{}",

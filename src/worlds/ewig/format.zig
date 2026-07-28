@@ -144,7 +144,7 @@ pub fn serializeHeader(header: EventHeader) [100]u8 {
     writer.writeAll(&header.magic) catch unreachable;
     writer.writeByte(header.version) catch unreachable;
     writer.writeByte(header.flags) catch unreachable;
-    writer.writeByte(@intFromEnum(header.type)) catch unreachable;
+    writer.writeByte(@backingInt(header.type)) catch unreachable;
     writer.writeByte(header.reserved) catch unreachable;
     writer.writeInt(i64, header.timestamp, .little) catch unreachable;
     writer.writeInt(u64, header.seq, .little) catch unreachable;
@@ -171,7 +171,7 @@ pub fn deserializeHeader(buf: [100]u8) !EventHeader {
 
     header.version = try reader.readByte();
     header.flags = try reader.readByte();
-    header.type = @enumFromInt(try reader.readByte());
+    header.type = @fromBackingInt(@intCast(try reader.readByte()));
     header.reserved = try reader.readByte();
 
     header.timestamp = try reader.readInt(i64, .little);
@@ -397,7 +397,7 @@ pub fn createDataBlock(
 
     var header: BlockHeader = .{
         .magic = MAGIC.*,
-        .block_type = @intFromEnum(BlockType.Data),
+        .block_type = @backingInt(BlockType.Data),
         .flags = 0,
         .sequence = sequence,
         .entry_count = @intCast(events.len),
@@ -451,8 +451,8 @@ test "header serialization" {
         .reserved = 0,
         .timestamp = 1699123456789,
         .seq = 42,
-        .hash = [_]u8{0xAB} ** HASH_SIZE,
-        .parent = [_]u8{0xCD} ** HASH_SIZE,
+        .hash = @splat(0xAB),
+        .parent = @splat(0xCD),
         .world_uri_len = 10,
         .payload_len = 100,
         .checksum = 0,

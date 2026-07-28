@@ -229,7 +229,7 @@ pub const MAX_DIRTY: usize = 4096;
 
 /// Terminal grid state
 pub const Grid = struct {
-    cells: [MAX_CELLS]Cell = [_]Cell{.{}} ** MAX_CELLS,
+    cells: [MAX_CELLS]Cell = @splat(.{}),
     dirty: [MAX_DIRTY]DirtyEntry = undefined,
     dirty_count: usize = 0,
     cols: u16 = 80,

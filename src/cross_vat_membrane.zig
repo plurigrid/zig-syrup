@@ -89,7 +89,7 @@ const CrossForwarder = struct {
 const testing = std.testing;
 
 const Recorder = struct {
-    log: *std.ArrayList(u8),
+    log: *std.ArrayListUnmanaged(u8),
     alloc: std.mem.Allocator,
     pub const SELECTORS: cap.SelectorMask = cap.maskOf(&.{ 0, 1 });
     pub fn handle(self: *Recorder, _: *vat.Vat, m: vat.Message) !vat.Become {
@@ -105,7 +105,7 @@ test "cross-vat membrane: send to outer in dest vat reaches inner in source vat"
     var dest = vat.Vat.init(alloc, 2);
     defer dest.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try source.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -131,7 +131,7 @@ test "cross-vat membrane: kill revokes outer caps and stops relay" {
     var dest = vat.Vat.init(alloc, 2);
     defer dest.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try source.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -158,7 +158,7 @@ test "cross-vat membrane: rejects inner that doesn't target source_vat" {
     var other = vat.Vat.init(alloc, 3);
     defer other.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const wrong_vat_inner = try other.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -174,7 +174,7 @@ test "cross-vat membrane: in-flight drop on kill (forwarder self-terminates)" {
     var dest = vat.Vat.init(alloc, 2);
     defer dest.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try source.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -197,7 +197,7 @@ test "cross-vat membrane: policy_facet narrows authority at boundary" {
     var dest = vat.Vat.init(alloc, 2);
     defer dest.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try source.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 

@@ -67,7 +67,7 @@ pub const Direction = enum(u4) {
 
     /// Opposite direction
     pub fn reverse(self: Direction) Direction {
-        return @enumFromInt((@intFromEnum(self) + 4) % 8);
+        return @fromBackingInt(@intCast((@backingInt(self) + 4) % 8));
     }
 
     pub fn toSymbol(self: Direction) []const u8 {
@@ -407,7 +407,7 @@ pub const SelfWalker = struct {
         x = (x ^ (x >> 27)) *% 0x94d049bb133111eb;
         x = x ^ (x >> 31);
 
-        const dir: Direction = @enumFromInt(@as(u4, @truncate(x % 8)));
+        const dir: Direction = @fromBackingInt(@intCast(@as(u4, @truncate(x % 8))));
         try self.step(dir);
     }
 
@@ -628,7 +628,7 @@ pub const DeviceRecord = struct {
 
     /// IP as dotted string
     pub fn ipStr(self: *const DeviceRecord) [15]u8 {
-        var buf: [15]u8 = .{' '} ** 15;
+        var buf: [15]u8 = @splat(' ');
         var pos: usize = 0;
         for (self.ip, 0..) |b, i| {
             if (b >= 100) {

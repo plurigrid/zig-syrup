@@ -48,8 +48,8 @@ pub const Trit = enum(i2) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
-        return @enumFromInt(@as(i2, @intCast(@mod(sum + 3, 3) - 1 + @as(i8, if (@mod(sum + 3, 3) == 0) 1 else 0))));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
+        return @fromBackingInt(@intCast(@as(i2, @intCast(@mod(sum + 3, 3) - 1 + @as(i8, if (@mod(sum + 3, 3) == 0) 1 else 0)))));
     }
 
     pub fn fromNote(n: u4) Trit {
@@ -150,7 +150,7 @@ pub const SPCWorld = struct {
 
     /// Number of unique pitch classes in chain
     pub fn coverage(self: *const SPCWorld) u4 {
-        var seen = [_]bool{false} ** 12;
+        var seen: [12]bool = @splat(false);
         for (self.notes) |n| seen[n] = true;
         var count: u4 = 0;
         for (seen) |s| if (s) {
@@ -235,7 +235,7 @@ pub fn analyzeObstructions(w: *SPCWorld) void {
     w.obstructions = ObstructionSet.empty();
 
     // 1. Interval closure
-    var iv_seen = [_]bool{false} ** 12;
+    var iv_seen: [12]bool = @splat(false);
     for (w.intervals) |iv| iv_seen[iv] = true;
     var missing_count: i32 = 0;
     for (1..12) |i| {
@@ -311,7 +311,7 @@ pub fn modalAnalysis(seed: u64, n_worlds: usize) ModalResult {
     // Intersect/union with nearby worlds
     for (1..n_worlds + 1) |delta| {
         const alt_seed = seed +% @as(u64, @intCast(delta));
-        var alt_present = [_]bool{false} ** 12;
+        var alt_present: [12]bool = @splat(false);
         for (0..CHAIN_LEN) |i| {
             const n = hueToPc(colorAt(@intCast(i + 1), alt_seed));
             alt_present[n] = true;
@@ -486,7 +486,7 @@ pub fn generateDerangement(seed: u64) DerangementResult {
     result.is_derangement = found;
 
     // Compute cycle structure
-    var visited = [_]bool{false} ** CHAIN_LEN;
+    var visited: [CHAIN_LEN]bool = @splat(false);
     result.n_cycles = 0;
     for (0..CHAIN_LEN) |i| {
         if (!visited[i]) {
@@ -573,7 +573,7 @@ pub fn solomonoffComplexity(notes: [CHAIN_LEN]u4, intervals: [CHAIN_LEN - 1]u4) 
     result.n_runs += 1;
 
     // Interval variety
-    var iv_seen = [_]bool{false} ** 12;
+    var iv_seen: [12]bool = @splat(false);
     for (intervals) |iv| iv_seen[iv] = true;
     result.interval_variety = 0;
     for (iv_seen) |s| if (s) {
@@ -601,7 +601,7 @@ pub fn fisherInformation(notes: [CHAIN_LEN]u4) FisherResult {
     var result: FisherResult = undefined;
 
     // Count
-    var counts = [_]u32{0} ** 12;
+    var counts: [12]u32 = @splat(0);
     for (notes) |n| counts[n] += 1;
 
     // Probabilities and Fisher diagonal
@@ -777,7 +777,7 @@ pub fn evaluate(seed: u64) EvalScore {
     }
 
     // Coverage
-    var seen = [_]bool{false} ** 12;
+    var seen: [12]bool = @splat(false);
     for (notes) |n| seen[n] = true;
     var cov: u4 = 0;
     for (seen) |s| if (s) {
@@ -785,7 +785,7 @@ pub fn evaluate(seed: u64) EvalScore {
     };
 
     // Interval variety
-    var iv_seen = [_]bool{false} ** 12;
+    var iv_seen: [12]bool = @splat(false);
     var trit: u4 = 0;
     for (0..CHAIN_LEN - 1) |i| {
         const iv: u4 = @intCast((@as(u32, notes[i + 1]) + 12 - @as(u32, notes[i])) % 12);
@@ -913,7 +913,7 @@ pub fn seekSeed(base_seed: u64, target: SeekTarget, max_iter: u64) ?u64 {
 
         switch (target) {
             .chromatic => {
-                var seen = [_]bool{false} ** 12;
+                var seen: [12]bool = @splat(false);
                 for (notes) |n| seen[n] = true;
                 var all = true;
                 for (seen) |s| if (!s) {
@@ -974,7 +974,7 @@ pub fn distill(w: *const SPCWorld, search_range: u64) DistillResult {
     };
 
     // Find missing intervals
-    var iv_seen = [_]bool{false} ** 12;
+    var iv_seen: [12]bool = @splat(false);
     for (w.intervals) |iv| iv_seen[iv] = true;
 
     for (1..search_range + 1) |delta| {
@@ -1008,7 +1008,7 @@ pub fn distill(w: *const SPCWorld, search_range: u64) DistillResult {
         }
 
         // Check coverage
-        var seen = [_]bool{false} ** 12;
+        var seen: [12]bool = @splat(false);
         for (notes) |n| seen[n] = true;
         var cov: u4 = 0;
         for (seen) |s| if (s) {
@@ -1393,7 +1393,7 @@ test "composeChains preserves mod 12" {
 test "derangement generation produces valid permutation" {
     const result = generateDerangement(GAY_SEED);
     // Check it is a permutation (each value appears once)
-    var seen = [_]bool{false} ** CHAIN_LEN;
+    var seen: [CHAIN_LEN]bool = @splat(false);
     for (result.perm) |p| {
         try std.testing.expect(p < CHAIN_LEN);
         seen[p] = true;

@@ -63,7 +63,7 @@ pub const RandomnessSource = enum(u8) {
 /// On-chain randomness seed with provenance
 pub const RandomnessSeed = struct {
     /// The seed value (256-bit, enough for any RNG)
-    value: [32]u8 = [_]u8{0} ** 32,
+    value: [32]u8 = @splat(0),
     /// Which source produced this seed
     source: RandomnessSource = .none,
     /// Block height / round number (Aptos) or drand round
@@ -236,7 +236,7 @@ pub const Transient = struct {
 
     // ---- Static buffers for rendering (no allocator) ----
     /// Column rects (computed during render)
-    col_rects: [MAX_COLUMNS]Rect = [_]Rect{.{}} ** MAX_COLUMNS,
+    col_rects: [MAX_COLUMNS]Rect = @splat(.{}),
 
     pub fn new(name: []const u8) Transient {
         return .{ .name = name };
@@ -752,7 +752,7 @@ export fn transient_init(id: u8, cols: u16, rows: u16) void {
     const area = Rect{ .x = 0, .y = 0, .width = cols, .height = rows };
     transient_buffer = Buffer.init(area);
 
-    active_transient = switch (@as(TransientId, @enumFromInt(id))) {
+    active_transient = switch (@as(TransientId, @fromBackingInt(@intCast(id)))) {
         .git => gitTransient(),
         .gf3 => gf3Transient(),
         .market => marketTransient(),
@@ -764,7 +764,7 @@ export fn transient_init(id: u8, cols: u16, rows: u16) void {
 export fn transient_set_seed(source: u8, seed_lo: u64, seed_hi: u64, round: u64) void {
     if (active_transient) |*t| {
         var seed = RandomnessSeed{
-            .source = @enumFromInt(source),
+            .source = @fromBackingInt(@intCast(source)),
             .round = round,
         };
         // Pack u128 seed

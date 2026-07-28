@@ -52,10 +52,10 @@ pub const LABELS_10_20 = [_][]const u8{
 
 pub const EDFHeader = struct {
     /// Patient info (80 bytes in EDF)
-    patient_info: [80]u8 = [_]u8{' '} ** 80,
+    patient_info: [80]u8 = @splat(' '),
 
     /// Recording info (80 bytes in EDF)
-    recording_info: [80]u8 = [_]u8{' '} ** 80,
+    recording_info: [80]u8 = @splat(' '),
 
     /// Start date DD.MM.YY (8 bytes)
     start_date: [8]u8 = "01.01.00".*,
@@ -70,28 +70,28 @@ pub const EDFHeader = struct {
     record_duration: f64 = DEFAULT_RECORD_DURATION,
 
     /// Per-channel labels (max 16 chars each in EDF)
-    labels: [MAX_EDF_CHANNELS][16]u8 = [_][16]u8{[_]u8{' '} ** 16} ** MAX_EDF_CHANNELS,
+    labels: [MAX_EDF_CHANNELS][16]u8 = @splat(@as([16]u8, @splat(' '))),
 
     /// Per-channel transducer type (max 80 chars)
-    transducer: [MAX_EDF_CHANNELS][80]u8 = [_][80]u8{[_]u8{' '} ** 80} ** MAX_EDF_CHANNELS,
+    transducer: [MAX_EDF_CHANNELS][80]u8 = @splat(@as([80]u8, @splat(' '))),
 
     /// Per-channel physical dimension/unit (max 8 chars, e.g., "uV")
-    physical_dim: [MAX_EDF_CHANNELS][8]u8 = [_][8]u8{[_]u8{' '} ** 8} ** MAX_EDF_CHANNELS,
+    physical_dim: [MAX_EDF_CHANNELS][8]u8 = @splat(@as([8]u8, @splat(' '))),
 
     /// Per-channel physical minimum
-    physical_min: [MAX_EDF_CHANNELS]f64 = [_]f64{-3200.0} ** MAX_EDF_CHANNELS,
+    physical_min: [MAX_EDF_CHANNELS]f64 = @splat(-3200.0),
 
     /// Per-channel physical maximum
-    physical_max: [MAX_EDF_CHANNELS]f64 = [_]f64{3200.0} ** MAX_EDF_CHANNELS,
+    physical_max: [MAX_EDF_CHANNELS]f64 = @splat(3200.0),
 
     /// Per-channel digital minimum
-    digital_min: [MAX_EDF_CHANNELS]i16 = [_]i16{-32768} ** MAX_EDF_CHANNELS,
+    digital_min: [MAX_EDF_CHANNELS]i16 = @splat(-32768),
 
     /// Per-channel digital maximum
-    digital_max: [MAX_EDF_CHANNELS]i16 = [_]i16{32767} ** MAX_EDF_CHANNELS,
+    digital_max: [MAX_EDF_CHANNELS]i16 = @splat(32767),
 
     /// Per-channel sample rate (samples per data record)
-    samples_per_record: [MAX_EDF_CHANNELS]u16 = [_]u16{250} ** MAX_EDF_CHANNELS,
+    samples_per_record: [MAX_EDF_CHANNELS]u16 = @splat(250),
 
     /// Set channel label from a string slice
     pub fn setLabel(self: *EDFHeader, channel: usize, label: []const u8) void {
@@ -207,7 +207,7 @@ pub const EDFWriter = struct {
         try appendFixedStr(&result, allocator, &self.header.start_date, 8); // date
         try appendFixedStr(&result, allocator, &self.header.start_time, 8); // time
         try appendFixedInt(&result, allocator, @as(i64, @intCast(hdr_size)), 8); // header bytes
-        try appendFixedStr(&result, allocator, "EDF+C" ++ "   " ** 11, 44); // reserved (EDF+C)
+        try appendFixedStr(&result, allocator, "EDF+C" ++ "                                 ", 44); // reserved (EDF+C)
         try appendFixedInt(&result, allocator, self.n_records, 8); // n_records
         try appendFixedFloat(&result, allocator, self.header.record_duration, 8); // duration
         try appendFixedInt(&result, allocator, self.header.n_channels, 4); // n_channels
@@ -230,11 +230,11 @@ pub const EDFWriter = struct {
         // Digital max (8 bytes each)
         for (0..n_ch) |i| try appendFixedInt(&result, allocator, self.header.digital_max[i], 8);
         // Prefiltering (80 bytes each)
-        for (0..n_ch) |_| try appendFixedStr(&result, allocator, &([_]u8{' '} ** 80), 80);
+        for (0..n_ch) |_| try appendFixedStr(&result, allocator, &@as([80]u8, @splat(' ')), 80);
         // Samples per record (8 bytes each)
         for (0..n_ch) |i| try appendFixedInt(&result, allocator, self.header.samples_per_record[i], 8);
         // Reserved (32 bytes each)
-        for (0..n_ch) |_| try appendFixedStr(&result, allocator, &([_]u8{' '} ** 32), 32);
+        for (0..n_ch) |_| try appendFixedStr(&result, allocator, &@as([32]u8, @splat(' ')), 32);
 
         // Append data records
         try result.appendSlice(allocator, data);

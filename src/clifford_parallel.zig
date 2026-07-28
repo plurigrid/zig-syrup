@@ -157,7 +157,7 @@ pub fn Batch(comptime p: u32, comptime q: u32, comptime r: u32, comptime N: usiz
         const Self = @This();
 
         pub fn fill(val: MV) Self {
-            return .{ .elements = [_]MV{val} ** N };
+            return .{ .elements = @splat(val) };
         }
 
         /// Parallel geometric product: result[i] = a[i] * b[i]. Zero cross-dependencies.
@@ -234,7 +234,7 @@ pub fn Batch(comptime p: u32, comptime q: u32, comptime r: u32, comptime N: usiz
         /// GF(3) conservation check over the batch.
         pub fn isConserved(trits: [N]Trit) bool {
             var sum: i32 = 0;
-            for (trits) |t| sum += @intFromEnum(t);
+            for (trits) |t| sum += @backingInt(t);
             return @mod(sum + @as(i32, @intCast(N)) * 3, 3) == 0;
         }
     };

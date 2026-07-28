@@ -219,7 +219,7 @@ pub const World = struct {
             else => unreachable,
         };
 
-        const action: Action = @enumFromInt(action_raw);
+        const action: Action = @fromBackingInt(@intCast(action_raw));
         const user = &self.users[actor_idx];
 
         // Record transcript entry
@@ -321,9 +321,9 @@ pub const World = struct {
 
     /// Count occurrences of each action type in transcript
     pub fn actionCounts(self: *const World) [8]usize {
-        var counts = [_]usize{0} ** 8;
+        var counts: [8]usize = @splat(0);
         for (0..self.transcript_len) |i| {
-            counts[@intFromEnum(self.transcript[i].action)] += 1;
+            counts[@backingInt(self.transcript[i].action)] += 1;
         }
         return counts;
     }

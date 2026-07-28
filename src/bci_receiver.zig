@@ -145,7 +145,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -179,7 +179,7 @@ pub const Trit = enum(i8) {
     }
 
     pub fn toSyrup(self: Trit) syrup.Value {
-        return .{ .int = @as(i64, @intFromEnum(self)) };
+        return .{ .int = @as(i64, @backingInt(self)) };
     }
 };
 
@@ -366,7 +366,7 @@ pub const BCIReading = struct {
     pub fn aggregateTrit(self: *const BCIReading) Trit {
         var sum: i32 = 0;
         for (self.channels[0..self.n_channels]) |t| {
-            sum += @intFromEnum(t);
+            sum += @backingInt(t);
         }
         // Map sum to trit via majority vote
         if (sum > 0) return .plus;
@@ -378,7 +378,7 @@ pub const BCIReading = struct {
     pub fn gf3Imbalance(self: *const BCIReading) i32 {
         var sum: i32 = 0;
         for (self.channels[0..self.n_channels]) |t| {
-            sum += @intFromEnum(t);
+            sum += @backingInt(t);
         }
         return sum;
     }
@@ -386,7 +386,7 @@ pub const BCIReading = struct {
     /// Pack trit stream for BLE characteristic 0xBCI1 (max 20 bytes)
     /// Format: [ts:u32][n:u8][trits:u8[n]][r:u8][g:u8][b:u8]
     pub fn packTritStream(self: *const BCIReading) [20]u8 {
-        var buf = [_]u8{0} ** 20;
+        var buf: [20]u8 = @splat(0);
         // Timestamp (lower 32 bits)
         const ts: u32 = @truncate(self.timestamp_ms);
         buf[0] = @truncate(ts);
@@ -398,7 +398,7 @@ pub const BCIReading = struct {
         buf[4] = n;
         // Trits (packed 1 byte each as signed)
         for (0..n) |i| {
-            buf[5 + i] = @bitCast(@intFromEnum(self.channels[i]));
+            buf[5 + i] = @bitCast(@backingInt(self.channels[i]));
         }
         // Color at end
         buf[17] = self.color.r;
@@ -576,21 +576,21 @@ pub const UniversalReceiver = struct {
 
     pub fn init(serial: u32) UniversalReceiver {
         var sensors: [9]SensorConfig = undefined;
-        sensors[@intFromEnum(Modality.eeg)] = SensorConfig.default(.eeg);
-        sensors[@intFromEnum(Modality.ultrasound)] = SensorConfig.default(.ultrasound);
-        sensors[@intFromEnum(Modality.emg)] = SensorConfig.default(.emg);
-        sensors[@intFromEnum(Modality.eng)] = SensorConfig.default(.eng);
-        sensors[@intFromEnum(Modality.ecog)] = SensorConfig.default(.ecog);
-        sensors[@intFromEnum(Modality.fnirs)] = SensorConfig.default(.fnirs);
-        sensors[@intFromEnum(Modality.eye_tracking)] = SensorConfig.default(.eye_tracking);
-        sensors[@intFromEnum(Modality.accelerometer)] = SensorConfig.default(.accelerometer);
-        sensors[@intFromEnum(Modality.bodytracking)] = SensorConfig.default(.bodytracking);
+        sensors[@backingInt(Modality.eeg)] = SensorConfig.default(.eeg);
+        sensors[@backingInt(Modality.ultrasound)] = SensorConfig.default(.ultrasound);
+        sensors[@backingInt(Modality.emg)] = SensorConfig.default(.emg);
+        sensors[@backingInt(Modality.eng)] = SensorConfig.default(.eng);
+        sensors[@backingInt(Modality.ecog)] = SensorConfig.default(.ecog);
+        sensors[@backingInt(Modality.fnirs)] = SensorConfig.default(.fnirs);
+        sensors[@backingInt(Modality.eye_tracking)] = SensorConfig.default(.eye_tracking);
+        sensors[@backingInt(Modality.accelerometer)] = SensorConfig.default(.accelerometer);
+        sensors[@backingInt(Modality.bodytracking)] = SensorConfig.default(.bodytracking);
 
         // Disable modalities not yet connected by default (fNIRS is active)
-        sensors[@intFromEnum(Modality.ecog)].enabled = false;
-        sensors[@intFromEnum(Modality.eye_tracking)].enabled = false;
-        sensors[@intFromEnum(Modality.accelerometer)].enabled = false;
-        sensors[@intFromEnum(Modality.bodytracking)].enabled = false;
+        sensors[@backingInt(Modality.ecog)].enabled = false;
+        sensors[@backingInt(Modality.eye_tracking)].enabled = false;
+        sensors[@backingInt(Modality.accelerometer)].enabled = false;
+        sensors[@backingInt(Modality.bodytracking)].enabled = false;
 
         return .{
             .sensors = sensors,
@@ -608,7 +608,7 @@ pub const UniversalReceiver = struct {
         var reading: BCIReading = .{
             .timestamp_ms = timestamp_ms,
             .n_channels = @intCast(@min(bands_per_channel.len, MAX_CHANNELS)),
-            .channels = [_]Trit{.zero} ** MAX_CHANNELS,
+            .channels = @splat(.zero),
             .band_powers = .{},
             .phenomenal_state = 0,
             .color = COLOR_ERGODIC,
@@ -695,7 +695,7 @@ pub const UniversalReceiver = struct {
 
     /// Serialize device info for BLE characteristic 0xBCI4
     pub fn packDeviceInfo(self: *const UniversalReceiver) [12]u8 {
-        var buf = [_]u8{0} ** 12;
+        var buf: [12]u8 = @splat(0);
         // FW version
         buf[0] = @truncate(FW_VERSION);
         buf[1] = @truncate(FW_VERSION >> 8);
@@ -719,7 +719,7 @@ pub const UniversalReceiver = struct {
         buf[8] = @truncate(self.serial >> 16);
         buf[9] = @truncate(self.serial >> 24);
         // State
-        buf[10] = @intFromEnum(self.state);
+        buf[10] = @backingInt(self.state);
         // Epoch count (lower 8 bits)
         buf[11] = @truncate(self.epoch_count);
         return buf;
@@ -806,7 +806,7 @@ test "BCIReading ring buffer" {
     var reading: BCIReading = .{
         .timestamp_ms = 1000,
         .n_channels = 3,
-        .channels = [_]Trit{.zero} ** MAX_CHANNELS,
+        .channels = @splat(.zero),
         .band_powers = .{},
         .phenomenal_state = 0,
         .color = COLOR_GENERATOR,
@@ -866,7 +866,7 @@ test "BLE trit stream packing" {
     var reading: BCIReading = .{
         .timestamp_ms = 0x12345678,
         .n_channels = 3,
-        .channels = [_]Trit{.zero} ** MAX_CHANNELS,
+        .channels = @splat(.zero),
         .band_powers = .{},
         .phenomenal_state = 0,
         .color = COLOR_GENERATOR,

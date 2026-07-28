@@ -408,7 +408,7 @@ test "allgather verification roundtrip" {
     // Create a small tensor, color it, then verify fingerprint matches expected
     const n_tokens: u32 = 4;
     const hidden_dim: u32 = 8;
-    var data: [32]f32 = [_]f32{0.0} ** 32;
+    var data: [32]f32 = @splat(0.0);
     const partition = TensorPartition.init(0, 1, 0, n_tokens);
     colorHiddenStates(&data, n_tokens, hidden_dim, 1, partition, GAY_SEED);
 
@@ -419,7 +419,7 @@ test "allgather verification roundtrip" {
 test "allgather verification detects corruption" {
     const n_tokens: u32 = 4;
     const hidden_dim: u32 = 8;
-    var data: [32]f32 = [_]f32{0.0} ** 32;
+    var data: [32]f32 = @splat(0.0);
     const partition = TensorPartition.init(0, 1, 0, n_tokens);
     colorHiddenStates(&data, n_tokens, hidden_dim, 1, partition, GAY_SEED);
 
@@ -432,7 +432,7 @@ test "allgather verification detects corruption" {
 test "pipeline handoff verification" {
     const n_tokens: u32 = 4;
     const hidden_dim: u32 = 8;
-    var data: [32]f32 = [_]f32{0.0} ** 32;
+    var data: [32]f32 = @splat(0.0);
     const partition = TensorPartition.init(0, 1, 0, n_tokens);
 
     // Color for layer 3

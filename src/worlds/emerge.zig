@@ -134,7 +134,7 @@ pub const CuriosityModule = struct {
 
     pub fn init(curiosity_weight: f64) CuriosityModule {
         return .{
-            .predictions = [_]u64{0} ** MAX_BACKENDS,
+            .predictions = @splat(0),
             .learning_rate = 0.01,
             .curiosity_weight = curiosity_weight,
             .total_error = 0,
@@ -148,12 +148,12 @@ pub const CuriosityModule = struct {
         const predicted = self.predictions[backend_idx];
         // XOR distance as prediction error proxy
         const xor = predicted ^ actual_hash;
-        const error = @as(f64, @floatFromInt(@popCount(xor))) / 64.0;
+        const prediction_error = @as(f64, @floatFromInt(@popCount(xor))) / 64.0;
         // Update prediction (simple EMA toward actual)
         self.predictions[backend_idx] = actual_hash;
-        self.total_error += error;
+        self.total_error += prediction_error;
         self.steps += 1;
-        return error * self.curiosity_weight;
+        return prediction_error * self.curiosity_weight;
     }
 
     pub fn meanError(self: *const CuriosityModule) f64 {
@@ -336,7 +336,7 @@ pub const ExplorationEngine = struct {
             if (spec.input_class == input_class) {
                 spec.generation = self.generation;
                 spec.reward = reward;
-                const new_backend: BackendKind = @enumFromInt(@as(u8, @intCast(backend_idx)));
+                const new_backend: BackendKind = @fromBackingInt(@intCast(@as(u8, @intCast(backend_idx))));
                 if (new_backend != spec.best_backend and reward > spec.confidence) {
                     spec.best_backend = new_backend;
                     spec.trit = 0; // revised
@@ -352,7 +352,7 @@ pub const ExplorationEngine = struct {
             self.specs[self.n_specs] = EmergentSpec.init(
                 @as(u64, self.generation) ^ input_class,
                 input_class,
-                @enumFromInt(@as(u8, @intCast(backend_idx))),
+                @fromBackingInt(@intCast(@as(u8, @intCast(backend_idx)))),
             );
             self.specs[self.n_specs].reward = reward;
             self.specs[self.n_specs].confidence = reward;
@@ -408,11 +408,11 @@ pub const ExplorationEngine = struct {
         // bonds: one per backend with non-zero pulls
         for (&self.backends) |*b| {
             if (b.pulls > 0) {
-                var bond: [BOND_LEN]u8 = [_]u8{0} ** BOND_LEN;
+                var bond: [BOND_LEN]u8 = @splat(0);
                 std.mem.writeInt(u64, bond[0..8], b.pulls, .big);
                 std.mem.writeInt(u64, bond[8..16], @bitCast(b.total_reward), .big);
                 std.mem.writeInt(u64, bond[16..24], @bitCast(b.prediction_error_sum), .big);
-                bond[24] = @intFromEnum(b.kind);
+                bond[24] = @backingInt(b.kind);
                 cert.addBond(bond);
             }
         }
@@ -457,7 +457,7 @@ test "nash cert csexp emission" {
     for (0..4) |i| {
         engine.observe(i, @as(u64, i) * 0xABC, 0.7, @as(u64, i) * 100);
     }
-    const game_id: [GAME_ID_LEN]u8 = [_]u8{0x42} ** GAME_ID_LEN;
+    const game_id: [GAME_ID_LEN]u8 = @splat(0x42);
     const cert = engine.certify(game_id);
     var buf: [2048]u8 = undefined;
     const len = cert.toCsexp(&buf);

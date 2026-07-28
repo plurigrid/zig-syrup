@@ -29,8 +29,8 @@ pub const Trit = enum(i8) {
 
     pub fn add(a: Trit, b: Trit) Trit {
         const table = [3]Trit{ .zero, .plus, .minus };
-        const av: u8 = @intCast(@mod(@as(i16, @intFromEnum(a)) + 3, 3));
-        const bv: u8 = @intCast(@mod(@as(i16, @intFromEnum(b)) + 3, 3));
+        const av: u8 = @intCast(@mod(@as(i16, @backingInt(a)) + 3, 3));
+        const bv: u8 = @intCast(@mod(@as(i16, @backingInt(b)) + 3, 3));
         return table[(av + bv) % 3];
     }
 
@@ -276,7 +276,7 @@ pub const Fiber = struct {
         var total: u64 = 0;
         for (self.trajectories.items) |traj| {
             for (traj.trits[0..traj.len]) |t| {
-                const idx: usize = @intCast(@mod(@as(i16, @intFromEnum(t)) + 3, 3));
+                const idx: usize = @intCast(@mod(@as(i16, @backingInt(t)) + 3, 3));
                 counts[idx] += 1;
                 total += 1;
             }
@@ -297,13 +297,13 @@ pub const Fiber = struct {
     /// Invariant 3: fundamental group proxy -- number of distinct trit bigrams.
     /// pi_1 approximation: counts distinct consecutive trit pairs (edge types in LTS).
     pub fn fundamentalGroupProxy(self: *const Fiber) u32 {
-        var seen = [_]bool{false} ** 9;
+        var seen: [9]bool = @splat(false);
         for (self.trajectories.items) |traj| {
             if (traj.len < 2) continue;
             var i: usize = 0;
             while (i + 1 < traj.len) : (i += 1) {
-                const a: usize = @intCast(@mod(@as(i16, @intFromEnum(traj.trits[i])) + 3, 3));
-                const bv: usize = @intCast(@mod(@as(i16, @intFromEnum(traj.trits[i + 1])) + 3, 3));
+                const a: usize = @intCast(@mod(@as(i16, @backingInt(traj.trits[i])) + 3, 3));
+                const bv: usize = @intCast(@mod(@as(i16, @backingInt(traj.trits[i + 1])) + 3, 3));
                 seen[a * 3 + bv] = true;
             }
         }
@@ -366,10 +366,10 @@ fn tritDistributionL1(a: TritTrajectory, b: TritTrajectory) f64 {
     var ca = [3]u64{ 0, 0, 0 };
     var cb = [3]u64{ 0, 0, 0 };
     for (a.trits[0..a.len]) |t| {
-        ca[@intCast(@mod(@as(i16, @intFromEnum(t)) + 3, 3))] += 1;
+        ca[@intCast(@mod(@as(i16, @backingInt(t)) + 3, 3))] += 1;
     }
     for (b.trits[0..b.len]) |t| {
-        cb[@intCast(@mod(@as(i16, @intFromEnum(t)) + 3, 3))] += 1;
+        cb[@intCast(@mod(@as(i16, @backingInt(t)) + 3, 3))] += 1;
     }
     const ta: f64 = @floatFromInt(a.len);
     const tb: f64 = @floatFromInt(b.len);
@@ -394,7 +394,7 @@ pub const TransferOperator = struct {
     matrix: [3][3]f64,
 
     pub fn init() TransferOperator {
-        return .{ .matrix = [_][3]f64{[_]f64{ 0, 0, 0 }} ** 3 };
+        return .{ .matrix = @splat(@as([3]f64, @splat(0))) };
     }
 
     /// Accumulate transitions from a fiber's trajectories.
@@ -402,8 +402,8 @@ pub const TransferOperator = struct {
         for (fiber.trajectories.items) |traj| {
             var i: usize = 0;
             while (i + 1 < traj.len) : (i += 1) {
-                const from: usize = @intCast(@mod(@as(i16, @intFromEnum(traj.trits[i])) + 3, 3));
-                const to: usize = @intCast(@mod(@as(i16, @intFromEnum(traj.trits[i + 1])) + 3, 3));
+                const from: usize = @intCast(@mod(@as(i16, @backingInt(traj.trits[i])) + 3, 3));
+                const to: usize = @intCast(@mod(@as(i16, @backingInt(traj.trits[i + 1])) + 3, 3));
                 self.matrix[from][to] += 1.0;
             }
         }
@@ -470,8 +470,8 @@ pub fn decoherenceFunctional(alpha: TritTrajectory, beta: TritTrajectory) Trit {
     var sum: Trit = .zero;
     for (0..min_len) |i| {
         // GF(3) multiplication: (a_int * b_int) mod 3
-        const av: i16 = @intFromEnum(alpha.trits[i]);
-        const bv: i16 = @intFromEnum(beta.trits[i]);
+        const av: i16 = @backingInt(alpha.trits[i]);
+        const bv: i16 = @backingInt(beta.trits[i]);
         const prod_val = @mod(av * bv + 9, 3); // +9 to stay positive
         const prod_trit: Trit = switch (@as(u2, @intCast(prod_val))) {
             0 => .zero,

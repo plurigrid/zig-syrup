@@ -76,7 +76,7 @@ pub fn semiringOne(kind: SemiringKind) TropicalValue {
 pub fn semiringSeed(kind: SemiringKind) u64 {
     const names = [_][]const u8{ "(min,+)", "(max,+)", "(min,max)", "(max,min)", "(or,and)", "(gcd,lcm)" };
     var h: u64 = 14695981039346656037;
-    for (names[@intFromEnum(kind)]) |c| {
+    for (names[@backingInt(kind)]) |c| {
         h = (h ^ @as(u64, c)) *% 1099511628211;
     }
     return h;
@@ -232,15 +232,15 @@ pub const GF3 = enum(u2) {
     two = 2,
 
     pub fn add(a: GF3, b: GF3) GF3 {
-        return @enumFromInt((@intFromEnum(a) + @intFromEnum(b)) % 3);
+        return @fromBackingInt(@intCast((@backingInt(a) + @backingInt(b)) % 3));
     }
 
     pub fn mul(a: GF3, b: GF3) GF3 {
-        return @enumFromInt((@intFromEnum(a) * @intFromEnum(b)) % 3);
+        return @fromBackingInt(@intCast((@backingInt(a) * @backingInt(b)) % 3));
     }
 
     pub fn neg(a: GF3) GF3 {
-        return @enumFromInt((3 - @intFromEnum(a)) % 3);
+        return @fromBackingInt(@intCast((3 - @backingInt(a)) % 3));
     }
 
     pub fn inv(a: GF3) ?GF3 {
@@ -295,7 +295,7 @@ pub const GF9 = struct {
     }
 
     pub fn toU8(self: GF9) u8 {
-        return @intFromEnum(self.a) * 3 + @intFromEnum(self.b);
+        return @backingInt(self.a) * 3 + @backingInt(self.b);
     }
 };
 
@@ -348,7 +348,7 @@ pub const GF27 = struct {
     }
 
     pub fn toU8(self: GF27) u8 {
-        return @intFromEnum(self.a) * 9 + @intFromEnum(self.b) * 3 + @intFromEnum(self.c);
+        return @backingInt(self.a) * 9 + @backingInt(self.b) * 3 + @backingInt(self.c);
     }
 };
 
@@ -381,7 +381,7 @@ pub fn projectGF27toGF3(x: GF27) GF3 {
 pub fn gf3Conservation(trits: []const GF3) bool {
     var sum: u8 = 0;
     for (trits) |t| {
-        sum = (sum + @intFromEnum(t)) % 3;
+        sum = (sum + @backingInt(t)) % 3;
     }
     return sum == 0;
 }
@@ -400,7 +400,7 @@ pub const TowerState = struct {
     pub fn init(seed: u64) TowerState {
         return .{
             .seed = seed,
-            .layer_fingerprints = [_]u64{0} ** 12,
+            .layer_fingerprints = @splat(0),
             .collective_fingerprint = 0,
             .current_layer = 0,
             .step_count = 0,

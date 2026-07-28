@@ -38,7 +38,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -56,7 +56,7 @@ pub const Trit = enum(i8) {
     }
 
     pub fn mul(a: Trit, b: Trit) Trit {
-        const prod = @as(i8, @intFromEnum(a)) * @as(i8, @intFromEnum(b));
+        const prod = @as(i8, @backingInt(a)) * @as(i8, @backingInt(b));
         return switch (@mod(prod + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -75,7 +75,7 @@ pub const Trit = enum(i8) {
     }
 
     pub fn toInt(self: Trit) i8 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 };
 
@@ -111,11 +111,11 @@ pub const Capability = packed struct {
     };
 
     pub fn init(domain: Domain, specificity: u11) Capability {
-        return .{ .domain = @intFromEnum(domain), .specificity = specificity };
+        return .{ .domain = @backingInt(domain), .specificity = specificity };
     }
 
     pub fn getDomain(self: Capability) Domain {
-        return @enumFromInt(self.domain);
+        return @fromBackingInt(@intCast(self.domain));
     }
 
     pub fn eql(a: Capability, b: Capability) bool {
@@ -219,7 +219,7 @@ pub const Virion = struct {
     }
 
     pub fn hasDomain(self: *const Virion, domain: Capability.Domain) bool {
-        const d = @intFromEnum(domain);
+        const d = @backingInt(domain);
         for (self.capabilities[0..self.cap_count]) |c| {
             if (c.domain == d) return true;
         }
@@ -271,9 +271,9 @@ pub const Virion = struct {
         var hasher = std.crypto.hash.Blake3.init(.{});
         hasher.update(self.name[0..self.name_len]);
         hasher.update(&[_]u8{
-            @bitCast(@as(i8, @intFromEnum(self.trit_role))),
-            @bitCast(@as(i8, @intFromEnum(self.trit_mode))),
-            @bitCast(@as(i8, @intFromEnum(self.trit_polarity))),
+            @bitCast(@as(i8, @backingInt(self.trit_role))),
+            @bitCast(@as(i8, @backingInt(self.trit_mode))),
+            @bitCast(@as(i8, @backingInt(self.trit_polarity))),
         });
         for (self.capabilities[0..self.cap_count]) |cap| {
             const bytes: [2]u8 = @bitCast(cap.asU16());
@@ -579,8 +579,8 @@ const MAX_EDGES = 1024;
 ///
 /// No coordination. No permission. Just propagation.
 pub const ViralNetwork = struct {
-    cells: [MAX_CELLS]VirionCell = [_]VirionCell{.{ .empty = {} }} ** MAX_CELLS,
-    trits: [MAX_CELLS]Trit = [_]Trit{.zero} ** MAX_CELLS,
+    cells: [MAX_CELLS]VirionCell = @splat(.{ .empty = {} }),
+    trits: [MAX_CELLS]Trit = @splat(.zero),
 
     /// Adjacency: edges[i] is a packed list of neighbor indices for cell i
     adj_targets: [MAX_EDGES]u8 = std.mem.zeroes([MAX_EDGES]u8),

@@ -48,7 +48,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i16, @intFromEnum(a)) + @as(i16, @intFromEnum(b));
+        const sum = @as(i16, @backingInt(a)) + @as(i16, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -251,7 +251,7 @@ pub fn conservationGame(color_a: CGA, color_b: CGA, sigma_order: i8) Conservatio
 
     const trit_a = extractTrit(color_a);
     const trit_b = extractTrit(color_b);
-    const sum = @as(i8, @intFromEnum(trit_a)) + @as(i8, @intFromEnum(trit_b));
+    const sum = @as(i8, @backingInt(trit_a)) + @as(i8, @backingInt(trit_b));
     const equilibrium = @mod(sum + 6, 3) == 0;
 
     const angle: f64 = @as(f64, @floatFromInt(sigma_order)) * 2.0 * math.pi / 3.0;
@@ -347,7 +347,7 @@ pub fn entropyWitness(elements: []const CGA, min_ratio: f64) EntropyResult {
     const total_grades: u32 = N + 1; // grades 0, 1, 2, 3
 
     // Accumulate energy per grade
-    var grade_energy: [total_grades]f64 = [_]f64{0} ** total_grades;
+    var grade_energy: [total_grades]f64 = @splat(0);
     var total_energy: f64 = 0;
 
     for (elements) |elem| {
@@ -546,7 +546,7 @@ pub fn derangementCycleGame(colors: []const CGA, sigma: []const u32) CycleResult
 
     while (length < max_steps) : (length += 1) {
         accumulated = accumulated.add(colors[current]);
-        trit_sum += @as(i16, @intFromEnum(extractTrit(colors[current])));
+        trit_sum += @as(i16, @backingInt(extractTrit(colors[current])));
         cycle_rotor = cycle_rotor.mul(r1);
         const next = sigma[current];
         if (next == 0 and length > 0) break; // returned to start
@@ -994,7 +994,7 @@ test "playground: seed 69, 7 players, all 6 games" {
 
     // GF(3) trit sum
     var trit_sum: i16 = 0;
-    for (0..N) |i| trit_sum += @intFromEnum(trits[i]);
+    for (0..N) |i| trit_sum += @backingInt(trits[i]);
     std.debug.print("\n  GF(3) trit sum: {d} (mod 3 = {d})\n", .{ trit_sum, @mod(trit_sum + 30, 3) });
 
     // Rich embedding entropy
@@ -1042,7 +1042,7 @@ test "tournament: seed 69, 69 players, prime offset 67" {
     std.debug.print("  Trit distribution: -={d} 0={d} +={d}\n", .{ trit_counts[0], trit_counts[1], trit_counts[2] });
 
     var trit_sum: i16 = 0;
-    for (0..N) |i| trit_sum += @intFromEnum(trits[i]);
+    for (0..N) |i| trit_sum += @backingInt(trits[i]);
     std.debug.print("  GF(3) sum: {d} (mod 3 = {d})\n", .{ trit_sum, @mod(trit_sum + 300, 3) });
 
     // Conservation
@@ -1123,7 +1123,7 @@ test "tournament: seed 69, 69 players, prime offset 67" {
 
             // Dynamic equilibrium: rotated trit of i + original trit of sigma(i)
             const tj = extractTrit(colors[j]);
-            const s = @as(i16, @intFromEnum(rot_trit)) + @as(i16, @intFromEnum(tj));
+            const s = @as(i16, @backingInt(rot_trit)) + @as(i16, @backingInt(tj));
             if (@mod(s + 6, 3) == 0) sweep_equil += 1;
 
             // Dynamic distinguishability: rotated i vs original sigma(i)

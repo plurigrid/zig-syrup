@@ -97,7 +97,7 @@ const Forwarder = struct {
 const testing = std.testing;
 
 const Recorder = struct {
-    log: *std.ArrayList(u8),
+    log: *std.ArrayListUnmanaged(u8),
     alloc: std.mem.Allocator,
     pub const SELECTORS: cap.SelectorMask = cap.maskOf(&.{ 0, 1 });
     pub fn handle(self: *Recorder, _: *vat.Vat, m: vat.Message) !vat.Become {
@@ -111,7 +111,7 @@ test "membrane: outer send relays to inner" {
     var v = vat.Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try v.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -133,7 +133,7 @@ test "membrane: kill revokes the outer cap" {
     var v = vat.Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try v.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -155,7 +155,7 @@ test "membrane: forwarder self-terminates if reached via raw CapId after kill" {
     var v = vat.Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try v.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -183,7 +183,7 @@ test "membrane: policy_facet narrows authority at the boundary" {
     var v = vat.Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try v.spawn(Recorder, .{ .log = &log, .alloc = alloc });
     // Recorder accepts selectors {0, 1}.
@@ -210,7 +210,7 @@ test "membrane: kill drops in-flight messages still in the forwarder's mailbox" 
     var v = vat.Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try v.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 
@@ -230,7 +230,7 @@ test "membrane: nested wraps share the revoker (transitive kill)" {
     var v = vat.Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const inner = try v.spawn(Recorder, .{ .log = &log, .alloc = alloc });
 

@@ -94,8 +94,8 @@ pub const Promise = struct {
             return items;
         }
         // Resolved to promise: only wants_partial listeners fire.
-        var eligible = std.ArrayListUnmanaged(Listener){};
-        var retained = std.ArrayListUnmanaged(Listener){};
+        var eligible: std.ArrayListUnmanaged(Listener) = .empty;
+        var retained: std.ArrayListUnmanaged(Listener) = .empty;
         for (self.listeners.items) |l| {
             if (l.wants_partial) {
                 try eligible.append(allocator, l);

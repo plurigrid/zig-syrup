@@ -89,7 +89,7 @@ test "integration: sealed sturdy + cross-vat membrane + epoch bridge compose" {
     // ========================================================================
     // 1. Service spawns Database actor.
     // ========================================================================
-    var rows: std.ArrayList(u8) = .{};
+    var rows: std.ArrayListUnmanaged(u8) = .empty;
     defer rows.deinit(alloc);
     const db_cap = try service.spawn(Database, .{ .rows = &rows, .alloc = alloc });
     try testing.expectEqual(cap.maskOf(&.{ 0, 1 }), db_cap.facet);
@@ -101,7 +101,7 @@ test "integration: sealed sturdy + cross-vat membrane + epoch bridge compose" {
     const rng = prng.random();
     const seal_pair = sealer.Pair.generate(rng);
 
-    const swiss: [sealed_sturdy.SWISS_LEN]u8 = .{0x42} ** sealed_sturdy.SWISS_LEN;
+    const swiss: [sealed_sturdy.SWISS_LEN]u8 = @splat(0x42);
     const issued_at = Clock.read();
     const expires_at = issued_at + 60_000; // valid for 60 seconds
     var env_buf: [sealed_sturdy.SEALED_SIZE]u8 = undefined;
@@ -193,7 +193,7 @@ test "integration: in-vat membrane + sealed sturdy + expiry compose" {
     defer v.deinit();
     v.now_ms_fn = Clock.read;
 
-    var rows: std.ArrayList(u8) = .{};
+    var rows: std.ArrayListUnmanaged(u8) = .empty;
     defer rows.deinit(alloc);
     const inner = try v.spawn(Database, .{ .rows = &rows, .alloc = alloc });
 

@@ -21,6 +21,12 @@ const Trit = splitmix.Trit;
 const jj = @import("zigbjj_jj.zig");
 const Allocator = std.mem.Allocator;
 
+fn appendFmt(buf: *std.ArrayList(u8), alloc: Allocator, comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [256]u8 = undefined;
+    const text = try std.fmt.bufPrint(&tmp, fmt, args);
+    try buf.appendSlice(alloc, text);
+}
+
 /// One parity test case in canonical form.
 pub const ParityCase = struct {
     change_id: [32]u8,
@@ -49,7 +55,7 @@ pub const ParityCase = struct {
 /// SplitMix64(seed_base, i) tiled to 32 bytes; seeds rotate through a
 /// small grid so we cover varied (id, seed) combinations.
 pub fn emitCasesJsonl(alloc: Allocator, n: usize, seed_base: u64) ![]u8 {
-    var buf = std.ArrayList(u8){};
+    var buf: std.ArrayList(u8) = .empty;
     errdefer buf.deinit(alloc);
 
     var i: usize = 0;
@@ -87,17 +93,17 @@ fn writeCaseJson(buf: *std.ArrayList(u8), alloc: Allocator, c: ParityCase) !void
     try buf.appendSlice(alloc, "{\"change_id\":\"");
     try buf.appendSlice(alloc, &hex);
     try buf.appendSlice(alloc, "\",\"seed\":");
-    try std.fmt.format(buf.writer(alloc), "{d}", .{c.seed});
+    try appendFmt(buf, alloc, "{d}", .{c.seed});
     try buf.appendSlice(alloc, ",\"hue\":");
-    try std.fmt.format(buf.writer(alloc), "{d:.9}", .{c.hue});
+    try appendFmt(buf, alloc, "{d:.9}", .{c.hue});
     try buf.appendSlice(alloc, ",\"r\":");
-    try std.fmt.format(buf.writer(alloc), "{d}", .{c.r});
+    try appendFmt(buf, alloc, "{d}", .{c.r});
     try buf.appendSlice(alloc, ",\"g\":");
-    try std.fmt.format(buf.writer(alloc), "{d}", .{c.g});
+    try appendFmt(buf, alloc, "{d}", .{c.g});
     try buf.appendSlice(alloc, ",\"b\":");
-    try std.fmt.format(buf.writer(alloc), "{d}", .{c.b});
+    try appendFmt(buf, alloc, "{d}", .{c.b});
     try buf.appendSlice(alloc, ",\"trit\":");
-    try std.fmt.format(buf.writer(alloc), "{d}", .{@as(i8, @intFromEnum(c.trit))});
+    try appendFmt(buf, alloc, "{d}", .{@as(i8, @backingInt(c.trit))});
     try buf.append(alloc, '}');
 }
 

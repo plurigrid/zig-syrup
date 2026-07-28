@@ -225,7 +225,7 @@ pub const StateReconstructor = struct {
         defer events_to_replay.deinit(self.allocator);
 
         var current = target_hash;
-        const zero_hash = [_]u8{0} ** 32;
+        const zero_hash: [32]u8 = @splat(0);
 
         while (!std.mem.eql(u8, &current, &zero_hash) and
             !std.mem.eql(u8, &current, &nearest.hash))
@@ -277,7 +277,7 @@ pub const StateReconstructor = struct {
     /// Find the nearest cached ancestor
     fn findNearestCachedAncestor(self: *Self, target_hash: Hash) !StateSnapshot {
         var current = target_hash;
-        const zero_hash = [_]u8{0} ** 32;
+        const zero_hash: [32]u8 = @splat(0);
 
         // Walk back until we find a cached snapshot or reach genesis
         while (!std.mem.eql(u8, &current, &zero_hash)) {
@@ -296,11 +296,11 @@ pub const StateReconstructor = struct {
 
         // Return genesis state
         return StateSnapshot{
-            .hash = [_]u8{0} ** 32,
+            .hash = @splat(0),
             .timestamp = 0,
             .seq = 0,
             .data = try self.allocator.dupe(u8, "{}"),
-            .event_hash = [_]u8{0} ** 32,
+            .event_hash = @splat(0),
         };
     }
 
@@ -434,7 +434,7 @@ pub const ParallelReconstructor = struct {
     fn distanceTo(self: Self, from: Hash, to: Hash) !usize {
         var count: usize = 0;
         var current = to;
-        const zero_hash = [_]u8{0} ** 32;
+        const zero_hash: [32]u8 = @splat(0);
 
         while (!std.mem.eql(u8, &current, &zero_hash)) {
             if (std.mem.eql(u8, &current, &from)) {
@@ -660,7 +660,7 @@ pub const StateVerifier = struct {
         _ = self;
 
         var current = head;
-        const zero_hash = [_]u8{0} ** 32;
+        const zero_hash: [32]u8 = @splat(0);
         var prev_hash = zero_hash;
 
         while (!std.mem.eql(u8, &current, &zero_hash)) {
@@ -697,11 +697,11 @@ test "snapshot cache" {
     defer cache.deinit();
 
     const snap = StateSnapshot{
-        .hash = [_]u8{0xAA} ** 32,
+        .hash = @splat(0xAA),
         .timestamp = 1000,
         .seq = 1,
         .data = "test state",
-        .event_hash = [_]u8{0xBB} ** 32,
+        .event_hash = @splat(0xBB),
     };
 
     // Put

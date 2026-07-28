@@ -331,7 +331,7 @@ pub const ChaosConfig = struct {
 
     /// Check if a fault class is enabled
     pub fn classEnabled(self: ChaosConfig, class: FaultClass) bool {
-        return (self.fault_classes >> @intFromEnum(class)) & 1 == 1;
+        return (self.fault_classes >> @backingInt(class)) & 1 == 1;
     }
 
     /// Default with all classes enabled
@@ -424,8 +424,8 @@ pub fn runChaosCampaign(config: ChaosConfig) ChaosVibe {
     var detected_faults: usize = 0;
     var recoverable: usize = 0;
 
-    var by_class = [_]ClassStats{.{ .total = 0, .detected = 0 }} ** 7;
-    var by_severity = [_]SeverityStats{.{ .total = 0, .detected = 0 }} ** 3;
+    var by_class: [7]ClassStats = @splat(.{ .total = 0, .detected = 0 });
+    var by_severity: [3]SeverityStats = @splat(.{ .total = 0, .detected = 0 });
 
     var rng_state = config.seed;
 
@@ -464,8 +464,8 @@ pub fn runChaosCampaign(config: ChaosConfig) ChaosVibe {
         for (0..n_faults) |fi| {
             if (fi >= MAX_FAULTS_PER_CHAIN) break;
             const f = fault_buf[fi];
-            const ci = @intFromEnum(f.class);
-            const si = @intFromEnum(f.severity);
+            const ci = @backingInt(f.class);
+            const si = @backingInt(f.severity);
             by_class[ci].total += 1;
             by_severity[si].total += 1;
             if (detected) {

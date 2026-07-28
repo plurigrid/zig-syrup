@@ -296,7 +296,7 @@ const tcp_transport = @import("tcp_transport.zig");
 /// Connection pool: up to 16 concurrent connections.
 /// Handle = index into pool. -1 = invalid.
 const MAX_CONNECTIONS = 16;
-var connection_pool: [MAX_CONNECTIONS]?tcp_transport.Connection = .{null} ** MAX_CONNECTIONS;
+var connection_pool: [MAX_CONNECTIONS]?tcp_transport.Connection = @splat(null);
 
 fn findFreeSlot() ?usize {
     for (0..MAX_CONNECTIONS) |i| {
@@ -416,7 +416,7 @@ const vat_mod = @import("vat.zig");
 const cap_mod = @import("cap.zig");
 
 const MAX_VATS = 8;
-var vat_pool: [MAX_VATS]?vat_mod.Vat = .{null} ** MAX_VATS;
+var vat_pool: [MAX_VATS]?vat_mod.Vat = @splat(null);
 
 fn findVatSlot() ?usize {
     for (0..MAX_VATS) |i| if (vat_pool[i] == null) return i;

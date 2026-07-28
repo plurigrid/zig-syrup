@@ -101,7 +101,7 @@ test "round-trip: seal then unseal recovers swiss + metadata" {
     const rng = prng.random();
     const pair = sealer.Pair.generate(rng);
 
-    const swiss: [SWISS_LEN]u8 = .{0x42} ** SWISS_LEN;
+    const swiss: [SWISS_LEN]u8 = @splat(0x42);
     const payload = SwissPayload{
         .swiss = swiss,
         .issued_at_ms = 1_000_000,
@@ -125,7 +125,7 @@ test "expired envelope returns error.Expired" {
     const rng = prng.random();
     const pair = sealer.Pair.generate(rng);
     const payload = SwissPayload{
-        .swiss = .{0} ** SWISS_LEN,
+        .swiss = @splat(0),
         .issued_at_ms = 1000,
         .expires_at_ms = 2000,
         .nonce = 1,
@@ -141,7 +141,7 @@ test "tampered envelope rejected by MAC" {
     const rng = prng.random();
     const pair = sealer.Pair.generate(rng);
     const payload = SwissPayload{
-        .swiss = .{0xAA} ** SWISS_LEN,
+        .swiss = @splat(0xAA),
         .issued_at_ms = 1000,
         .expires_at_ms = 9999,
         .nonce = 42,
@@ -158,7 +158,7 @@ test "wrong unsealer rejected" {
     const a = sealer.Pair.generate(rng);
     const b = sealer.Pair.generate(rng);
     const payload = SwissPayload{
-        .swiss = .{0xFF} ** SWISS_LEN,
+        .swiss = @splat(0xFF),
         .issued_at_ms = 0,
         .expires_at_ms = std.math.maxInt(i64),
         .nonce = 0,

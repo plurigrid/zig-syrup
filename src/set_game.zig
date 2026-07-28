@@ -154,7 +154,7 @@ pub const Board = struct {
 
     pub fn deal(rng: *Rng, n: u8) Board {
         var b = Board.init();
-        var used = [_]bool{false} ** DECK_SIZE;
+        var used: [DECK_SIZE]bool = @splat(false);
         var count: u8 = 0;
         while (count < n) {
             const idx = rng.bounded(DECK_SIZE);
@@ -265,7 +265,7 @@ const MemoEntry = struct {
     valid: bool = false,
 };
 
-var set_memo: [MEMO_SIZE]MemoEntry = [_]MemoEntry{.{}} ** MEMO_SIZE;
+var set_memo: [MEMO_SIZE]MemoEntry = @splat(.{});
 
 fn boardHash(board: *const Board) u64 {
     var h: u64 = 0xcbf29ce484222325;
@@ -323,14 +323,14 @@ const ScanOrder = enum(u2) { color_first, shape_first, number_first, shade_first
 
 pub const Strategy = struct {
     scan_order: ScanOrder,
-    group_threshold: u4,  // min group size to investigate
-    switch_after: u4,     // switch property focus after N failures
-    depth_limit: u4,      // max pairs to check before switching strategy
+    group_threshold: u4, // min group size to investigate
+    switch_after: u4, // switch property focus after N failures
+    depth_limit: u4, // max pairs to check before switching strategy
     fitness: f32,
 
     pub fn init(rng: *Rng) Strategy {
         return .{
-            .scan_order = @enumFromInt(@as(u2, @truncate(rng.bounded(4)))),
+            .scan_order = @fromBackingInt(@intCast(@as(u2, @truncate(rng.bounded(4))))),
             .group_threshold = @truncate(rng.bounded(4) + 1),
             .switch_after = @truncate(rng.bounded(8) + 1),
             .depth_limit = @truncate(rng.bounded(12) + 3),
@@ -340,7 +340,7 @@ pub const Strategy = struct {
 
     // Perceptual SET-finding: group by primary property, then check within groups
     pub fn findSet(self: *const Strategy, board: *const Board) ?SetTriple {
-        const primary: u2 = @intFromEnum(self.scan_order);
+        const primary: u2 = @backingInt(self.scan_order);
         // Group cards by primary property value
         var groups: [3][MAX_BOARD]u8 = undefined;
         var group_lens = [3]u8{ 0, 0, 0 };
@@ -400,7 +400,7 @@ pub const Strategy = struct {
         var child = self.*;
         const gene = rng.bounded(4);
         switch (gene) {
-            0 => child.scan_order = @enumFromInt(@as(u2, @truncate(rng.bounded(4)))),
+            0 => child.scan_order = @fromBackingInt(@intCast(@as(u2, @truncate(rng.bounded(4))))),
             1 => child.group_threshold = @truncate(rng.bounded(4) + 1),
             2 => child.switch_after = @truncate(rng.bounded(8) + 1),
             3 => child.depth_limit = @truncate(rng.bounded(12) + 3),
@@ -607,7 +607,7 @@ pub const CapSearch = struct {
 // ============================================================================
 
 test "deck has exactly 81 unique cards" {
-    var seen = [_]bool{false} ** 256;
+    var seen: [256]bool = @splat(false);
     for (DECK) |card| {
         try std.testing.expect(!seen[card.raw]);
         seen[card.raw] = true;
@@ -707,7 +707,7 @@ test "strategy mutation changes at least one gene" {
     var any_different = false;
     for (0..20) |_| {
         const child = parent.mutate(&rng);
-        if (@intFromEnum(child.scan_order) != @intFromEnum(parent.scan_order) or
+        if (@backingInt(child.scan_order) != @backingInt(parent.scan_order) or
             child.group_threshold != parent.group_threshold or
             child.switch_after != parent.switch_after or
             child.depth_limit != parent.depth_limit)
@@ -743,7 +743,7 @@ test "GF(3) exhaustive: all valid SETs are carry-free" {
 }
 
 test "memo cache works for board set counting" {
-    set_memo = [_]MemoEntry{.{}} ** MEMO_SIZE;
+    set_memo = @splat(.{});
     var rng = Rng.init(1069);
     const board = Board.deal(&rng, 12);
     const count1 = memoizedSetCount(&board);

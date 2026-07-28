@@ -34,7 +34,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -143,7 +143,7 @@ pub const GazeSample = struct {
     /// Pack into BLE-compatible 12-byte payload
     /// [gaze_x:f16][gaze_y:f16][pupil_l:f16][pupil_r:f16][confidence:f16][flags:u8][pad:u8]
     pub fn packBLE(self: GazeSample) [12]u8 {
-        var buf: [12]u8 = [_]u8{0} ** 12;
+        var buf: [12]u8 = @splat(0);
         const fields = [_]f32{ self.gaze_x, self.gaze_y, self.pupil_left, self.pupil_right, self.confidence };
         for (fields, 0..) |f, i| {
             const h: u16 = @bitCast(@as(f16, @floatCast(f)));
@@ -895,7 +895,7 @@ pub const EyeTracker = struct {
                 if (i + 1 < self.ring.count) {
                     if (self.ring.ago(i + 1)) |prev| {
                         const result = classifyIVT(s.*, prev.*, self.ivt_config);
-                        sum += @intFromEnum(result.event.toTrit());
+                        sum += @backingInt(result.event.toTrit());
                     }
                 }
             }
@@ -979,7 +979,7 @@ test "GF(3) trit conservation: saccade + fixation + blink" {
     const t1 = GazeEvent.saccade.toTrit();
     const t2 = GazeEvent.fixation.toTrit();
     const t3 = GazeEvent.blink.toTrit();
-    const sum = @as(i32, @intFromEnum(t1)) + @as(i32, @intFromEnum(t2)) + @as(i32, @intFromEnum(t3));
+    const sum = @as(i32, @backingInt(t1)) + @as(i32, @backingInt(t2)) + @as(i32, @backingInt(t3));
     try std.testing.expectEqual(@as(i32, 0), @mod(sum, 3));
 }
 

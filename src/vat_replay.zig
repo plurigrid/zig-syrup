@@ -15,10 +15,10 @@ const Allocator = std.mem.Allocator;
 
 pub const Log = struct {
     allocator: Allocator,
-    bytes: std.ArrayList(u8),
+    bytes: std.ArrayListUnmanaged(u8),
 
     pub fn init(allocator: Allocator) Log {
-        return .{ .allocator = allocator, .bytes = .{} };
+        return .{ .allocator = allocator, .bytes = .empty };
     }
 
     pub fn deinit(self: *Log) void {
@@ -40,10 +40,10 @@ pub const Log = struct {
             .terminate => "9'terminate",
         };
         const s = try std.fmt.bufPrint(&tmp, "{d}+{d}+{d}+{d}+{d}+{d}+{s}{d}+>", .{
-            rec.turn_seq,    rec.now_ms,
-            rec.sender,      rec.target,
-            rec.selector,    rec.payload_len,
-            became_sym,      rec.lagged_before,
+            rec.turn_seq, rec.now_ms,
+            rec.sender,   rec.target,
+            rec.selector, rec.payload_len,
+            became_sym,   rec.lagged_before,
         });
         try self.bytes.appendSlice(self.allocator, s);
     }
@@ -116,7 +116,7 @@ test "replay log: turn_seq is dense and now_ms tracks vat clock" {
 
     // Capture every record into a flat slice for inspection.
     const Capture = struct {
-        recs: std.ArrayList(vat.TurnRecord) = .{},
+        recs: std.ArrayListUnmanaged(vat.TurnRecord) = .empty,
 
         fn cb(ctx: *anyopaque, rec: vat.TurnRecord) void {
             const self: *@This() = @ptrCast(@alignCast(ctx));

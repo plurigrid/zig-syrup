@@ -509,22 +509,22 @@ test "timeline at query" {
     try timeline.add(.{
         .timestamp = 1000,
         .seq = 1,
-        .event_hash = [_]u8{0x01} ** 32,
-        .state_hash = [_]u8{0xA1} ** 32,
+        .event_hash = @splat(0x01),
+        .state_hash = @splat(0xA1),
     });
 
     try timeline.add(.{
         .timestamp = 2000,
         .seq = 2,
-        .event_hash = [_]u8{0x02} ** 32,
-        .state_hash = [_]u8{0xA2} ** 32,
+        .event_hash = @splat(0x02),
+        .state_hash = @splat(0xA2),
     });
 
     try timeline.add(.{
         .timestamp = 3000,
         .seq = 3,
-        .event_hash = [_]u8{0x03} ** 32,
-        .state_hash = [_]u8{0xA3} ** 32,
+        .event_hash = @splat(0x03),
+        .state_hash = @splat(0xA3),
     });
 
     // Query at various points
@@ -532,16 +532,16 @@ test "timeline at query" {
     try testing.expect(s0 == null);
 
     const s1 = try timeline.at(1000);
-    try testing.expect(std.mem.eql(u8, &s1.?, &[_]u8{0xA1} ** 32));
+    try testing.expect(std.mem.eql(u8, &s1.?, &@as([32]u8, @splat(0xA1))));
 
     const s2 = try timeline.at(1500);
-    try testing.expect(std.mem.eql(u8, &s2.?, &[_]u8{0xA1} ** 32));
+    try testing.expect(std.mem.eql(u8, &s2.?, &@as([32]u8, @splat(0xA1))));
 
     const s3 = try timeline.at(2500);
-    try testing.expect(std.mem.eql(u8, &s3.?, &[_]u8{0xA2} ** 32));
+    try testing.expect(std.mem.eql(u8, &s3.?, &@as([32]u8, @splat(0xA2))));
 
     const s4 = try timeline.at(5000);
-    try testing.expect(std.mem.eql(u8, &s4.?, &[_]u8{0xA3} ** 32));
+    try testing.expect(std.mem.eql(u8, &s4.?, &@as([32]u8, @splat(0xA3))));
 }
 
 test "timeline range query" {
@@ -551,22 +551,22 @@ test "timeline range query" {
     try timeline.add(.{
         .timestamp = 1000,
         .seq = 1,
-        .event_hash = [_]u8{0x01} ** 32,
-        .state_hash = [_]u8{0xA1} ** 32,
+        .event_hash = @splat(0x01),
+        .state_hash = @splat(0xA1),
     });
 
     try timeline.add(.{
         .timestamp = 2000,
         .seq = 2,
-        .event_hash = [_]u8{0x02} ** 32,
-        .state_hash = [_]u8{0xA2} ** 32,
+        .event_hash = @splat(0x02),
+        .state_hash = @splat(0xA2),
     });
 
     try timeline.add(.{
         .timestamp = 3000,
         .seq = 3,
-        .event_hash = [_]u8{0x03} ** 32,
-        .state_hash = [_]u8{0xA3} ** 32,
+        .event_hash = @splat(0x03),
+        .state_hash = @splat(0xA3),
     });
 
     var result = try timeline.range(1500, 2500);
@@ -579,15 +579,15 @@ test "timeline range query" {
 
 test "branch detector divergence" {
     const timeline_a = &[_]TimelineEntry{
-        .{ .timestamp = 100, .seq = 1, .event_hash = [_]u8{0x01} ** 32, .state_hash = [_]u8{0xA1} ** 32 },
-        .{ .timestamp = 200, .seq = 2, .event_hash = [_]u8{0x02} ** 32, .state_hash = [_]u8{0xA2} ** 32 },
-        .{ .timestamp = 300, .seq = 3, .event_hash = [_]u8{0x03} ** 32, .state_hash = [_]u8{0xA3} ** 32 },
+        .{ .timestamp = 100, .seq = 1, .event_hash = @splat(0x01), .state_hash = @splat(0xA1) },
+        .{ .timestamp = 200, .seq = 2, .event_hash = @splat(0x02), .state_hash = @splat(0xA2) },
+        .{ .timestamp = 300, .seq = 3, .event_hash = @splat(0x03), .state_hash = @splat(0xA3) },
     };
 
     const timeline_b = &[_]TimelineEntry{
-        .{ .timestamp = 100, .seq = 1, .event_hash = [_]u8{0x01} ** 32, .state_hash = [_]u8{0xA1} ** 32 },
-        .{ .timestamp = 200, .seq = 2, .event_hash = [_]u8{0x02} ** 32, .state_hash = [_]u8{0xB2} ** 32 }, // Diverged!
-        .{ .timestamp = 300, .seq = 3, .event_hash = [_]u8{0x03} ** 32, .state_hash = [_]u8{0xB3} ** 32 },
+        .{ .timestamp = 100, .seq = 1, .event_hash = @splat(0x01), .state_hash = @splat(0xA1) },
+        .{ .timestamp = 200, .seq = 2, .event_hash = @splat(0x02), .state_hash = @splat(0xB2) }, // Diverged!
+        .{ .timestamp = 300, .seq = 3, .event_hash = @splat(0x03), .state_hash = @splat(0xB3) },
     };
 
     const divergence = BranchDetector.findDivergencePoint(timeline_a, timeline_b);
@@ -604,15 +604,15 @@ test "timeline manager" {
     const event = Event{
         .timestamp = 1000,
         .seq = 1,
-        .hash = [_]u8{0x01} ** 32,
-        .parent = [_]u8{0} ** 32,
+        .hash = @splat(0x01),
+        .parent = @splat(0),
         .world_uri = "a://world1",
         .type = .WorldCreated,
         .payload = "{}",
     };
 
     // Record on timeline
-    try manager.record("a://world1", event, [_]u8{0xAA} ** 32);
+    try manager.record("a://world1", event, @as([32]u8, @splat(0xAA)));
 
     // Get timeline
     const timeline = manager.get("a://world1").?;

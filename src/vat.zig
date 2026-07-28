@@ -160,7 +160,9 @@ pub const TurnRecord = struct {
 /// Default wall-clock millisecond reader. Replace `Vat.now_ms_fn` with a
 /// virtual clock for deterministic replay or test-controlled expiry.
 fn defaultNowMs() i64 {
-    return std.time.milliTimestamp();
+    var ts: std.c.timespec = undefined;
+    _ = std.c.clock_gettime(.REALTIME, &ts);
+    return @intCast(ts.sec * std.time.ms_per_s + @divTrunc(ts.nsec, std.time.ns_per_ms));
 }
 
 // ---- Promise pipelining -----------------------------------------------------
@@ -209,7 +211,7 @@ pub const Promise = struct {
     /// `broken_reason` populated when state == .broken. Owned bytes.
     broken_reason: ?[]u8 = null,
     /// Queue of pipelined sends accumulated while pending.
-    queued: std.ArrayList(QueuedSend) = .{},
+    queued: std.ArrayListUnmanaged(QueuedSend) = .empty,
 };
 
 /// Capability-like handle the receiver of a `sendQ` request uses to resolve
@@ -234,8 +236,8 @@ pub const Resolver = struct {
 pub const Vat = struct {
     allocator: Allocator,
     id: cap.VatId,
-    slots: std.ArrayList(Slot),
-    children: std.ArrayList(*Vat) = .{},
+    slots: std.ArrayListUnmanaged(Slot) = .empty,
+    children: std.ArrayListUnmanaged(*Vat) = .empty,
     parent_vat: ?*Vat = null,
     parent_cap: ?cap.CapId = null,
     closed: bool = false,
@@ -253,13 +255,13 @@ pub const Vat = struct {
     /// slot index). Slots are append-only; promises live for the vat's
     /// lifetime so resolved caps remain reachable for late `sendToPromise`
     /// short-circuits.
-    promises: std.ArrayList(Promise) = .{},
+    promises: std.ArrayListUnmanaged(Promise) = .empty,
     /// Set by `turn()` when dispatching a `sendQ`-originated message; read
     /// by handlers via `currentResolver()`. Cleared after the turn.
     current_resolver: ?Resolver = null,
 
     pub fn init(allocator: Allocator, id: cap.VatId) Vat {
-        return .{ .allocator = allocator, .id = id, .slots = .{} };
+        return .{ .allocator = allocator, .id = id, .slots = .empty };
     }
 
     pub fn nowMs(self: *const Vat) i64 {
@@ -614,7 +616,7 @@ pub const Vat = struct {
 const testing = std.testing;
 
 const Echo = struct {
-    log: *std.ArrayList(u8),
+    log: *std.ArrayListUnmanaged(u8),
     alloc: Allocator,
     pub const TRIT: i8 = 0;
     pub const SELECTORS: cap.SelectorMask = cap.maskOf(&.{ 0, 1 });
@@ -629,7 +631,7 @@ test "mailbox drains in delivery order" {
     var v = Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
 
@@ -647,7 +649,7 @@ test "eventual send is fire-and-forget — sender returns before handle" {
     var v = Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
 
@@ -664,7 +666,7 @@ test "facet narrow: send with denied selector is rejected" {
     var v = Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
     const ro = c.narrow(cap.maskOf(&.{0})); // permit only selector 0
@@ -718,7 +720,7 @@ test "quiesce: bounded drain returns budget on empty" {
     const alloc = testing.allocator;
     var v = Vat.init(alloc, 1);
     defer v.deinit();
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
     const sender = cap.Capability{ .target = cap.pack(1, 0) };
@@ -733,7 +735,7 @@ test "backpressure: 257th send returns error.Backpressure, lagged increments" {
     const alloc = testing.allocator;
     var v = Vat.init(alloc, 1);
     defer v.deinit();
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
     const sender = cap.Capability{ .target = cap.pack(1, 0) };
@@ -774,7 +776,7 @@ test "expires_at_ms: send after deadline returns error.Expired" {
     defer v.deinit();
     v.now_ms_fn = VirtualClock.read;
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
 
@@ -797,7 +799,7 @@ test "Revoker: send before revoke succeeds; after revoke returns error.Revoked" 
     const alloc = testing.allocator;
     var v = Vat.init(alloc, 1);
     defer v.deinit();
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
     var rev = cap.Revoker{};
@@ -933,7 +935,7 @@ test "pipelining: sendToPromise queues, then flushes on resolveToCap in order" {
     var v = Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
 
     // The eventual resolver: an Echo actor that records what it receives.
@@ -966,7 +968,7 @@ test "pipelining: sendToPromise after resolveToCap short-circuits" {
     var v = Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
 
     const target_cap = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
@@ -1022,7 +1024,7 @@ test "sendQ + pipelining: chained sends queue before resolution and arrive after
     var v = Vat.init(alloc, 1);
     defer v.deinit();
 
-    var log: std.ArrayList(u8) = .{};
+    var log: std.ArrayListUnmanaged(u8) = .empty;
     defer log.deinit(alloc);
 
     const c_cap = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });

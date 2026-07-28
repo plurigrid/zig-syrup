@@ -17,12 +17,12 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const s = @mod(@as(i8, @intFromEnum(a)) + @intFromEnum(b) + 3, 3);
-        return @enumFromInt(s - 1);
+        const s = @mod(@as(i8, @backingInt(a)) + @backingInt(b) + 3, 3);
+        return @fromBackingInt(@intCast(s - 1));
     }
 
     pub fn fromSeed(seed: u64) Trit {
-        return @enumFromInt(@as(i8, @intCast(seed % 3)) - 1);
+        return @fromBackingInt(@intCast(@as(i8, @intCast(seed % 3)) - 1));
     }
 };
 
@@ -34,7 +34,7 @@ pub const GF3 = struct {
     }
 
     pub fn conserved(a: GF3, b: GF3, c: GF3) bool {
-        const sum = @as(i8, @intFromEnum(a.val)) + @intFromEnum(b.val) + @intFromEnum(c.val);
+        const sum = @as(i8, @backingInt(a.val)) + @backingInt(b.val) + @backingInt(c.val);
         return @mod(sum + 3, 3) == 0;
     }
 };
@@ -257,9 +257,9 @@ pub const MarkovBlanket = struct {
     pub fn init(seed: u64) MarkovBlanket {
         return .{
             .seed = seed,
-            .internal = .{0} ** 16,
-            .sensory = .{0} ** 16,
-            .active = .{0} ** 16,
+            .internal = @splat(0),
+            .sensory = @splat(0),
+            .active = @splat(0),
             .n_internal = 0,
             .n_sensory = 0,
             .n_active = 0,
@@ -350,7 +350,7 @@ pub const GayChunk = struct {
     seed: u64,
 
     pub fn init(seed: u64) GayChunk {
-        return .{ .data = .{0.0} ** 256, .len = 0, .seed = seed };
+        return .{ .data = @splat(0.0), .len = 0, .seed = seed };
     }
 
     pub fn reduce(self: GayChunk, kind: SemiringKind) f64 {
@@ -422,7 +422,7 @@ pub const GayChannel = struct {
     }
 
     pub fn flowFingerprint(self: GayChannel) u64 {
-        return mix64(self.id ^ @as(u64, @intFromEnum(self.direction)));
+        return mix64(self.id ^ @as(u64, @backingInt(self.direction)));
     }
 };
 
@@ -528,7 +528,7 @@ pub const ChromaticGroup = struct {
     seed: u64,
 
     pub fn fingerprint(self: ChromaticGroup) u64 {
-        return mix64(self.seed ^ @as(u64, @intFromEnum(self.channel)));
+        return mix64(self.seed ^ @as(u64, @backingInt(self.channel)));
     }
 };
 
@@ -743,11 +743,11 @@ pub const LearningRun = struct {
 
     pub fn init(seed: u64) LearningRun {
         return .{
-            .name = .{0} ** 64,
+            .name = @splat(0),
             .name_len = 0,
             .seed = seed,
             .steps = 0,
-            .metrics = .{0.0} ** 128,
+            .metrics = @splat(0.0),
             .metric_count = 0,
         };
     }

@@ -227,7 +227,7 @@ pub const VisitationLog = struct {
 
     /// Number of unique saddles visited
     pub fn uniqueSaddles(self: *const VisitationLog) usize {
-        var seen: [64]bool = .{false} ** 64; // max 64 saddles
+        var seen: [64]bool = @splat(false); // max 64 saddles
         for (self.saddles.items) |s| {
             if (s < 64) seen[s] = true;
         }

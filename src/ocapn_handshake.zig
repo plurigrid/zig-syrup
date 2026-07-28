@@ -21,6 +21,19 @@ const Sha256 = std.crypto.hash.sha2.Sha256;
 const Allocator = std.mem.Allocator;
 const ByteList = std.array_list.Managed(u8);
 
+fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [128]u8 = undefined;
+    try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
+}
+
+fn fillRandom(bytes: []u8) void {
+    if (comptime @hasDecl(std.crypto, "random")) {
+        std.crypto.random.bytes(bytes);
+    } else {
+        std.c.arc4random_buf(bytes.ptr, bytes.len);
+    }
+}
+
 pub const CAPTP_VERSION: []const u8 = "1.0";
 pub const SIG_DOMAIN: []const u8 = "captp-location-sig:";
 pub const SESSION_ID_PROTO: []const u8 = "prot0";
@@ -153,7 +166,7 @@ pub const Signature = struct {
         var out = ByteList.init(allocator);
         defer out.deinit();
         try out.appendSlice("<17'desc:sig-envelope");
-        try std.fmt.format(out.writer(), "{d}'", .{self.scheme.len});
+        try fmtAppend(&out, "{d}'", .{self.scheme.len});
         try out.appendSlice(self.scheme);
         try out.appendSlice(sig_sexp);
         try out.append('>');
@@ -166,7 +179,9 @@ pub const KeyPair = struct {
     secret: Ed25519.SecretKey,
 
     pub fn generate() !KeyPair {
-        const kp = Ed25519.KeyPair.generate();
+        var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
+        fillRandom(&seed);
+        const kp = try Ed25519.KeyPair.generateDeterministic(seed);
         return KeyPair{
             .pub_key = kp.public_key.toBytes(),
             .secret = kp.secret_key,
@@ -236,7 +251,7 @@ pub fn encodeStartSession(
     try out.appendSlice("<16'op:start-session");
 
     // captp-version as string
-    try std.fmt.format(out.writer(), "{d}\"", .{CAPTP_VERSION.len});
+    try fmtAppend(&out, "{d}\"", .{CAPTP_VERSION.len});
     try out.appendSlice(CAPTP_VERSION);
 
     // session-pubkey as gcrypt s-expression
@@ -349,17 +364,17 @@ test "derivePublicId is deterministic" {
 }
 
 test "deriveSessionId is symmetric (order-independent)" {
-    const id_a = [_]u8{0xAA} ** 32;
-    const id_b = [_]u8{0xBB} ** 32;
+    const id_a: [32]u8 = @splat(0xAA);
+    const id_b: [32]u8 = @splat(0xBB);
     const sid_ab = deriveSessionId(id_a, id_b);
     const sid_ba = deriveSessionId(id_b, id_a);
     try std.testing.expectEqualSlices(u8, &sid_ab, &sid_ba);
 }
 
 test "deriveSessionId differs for different peers" {
-    const id_a = [_]u8{0xAA} ** 32;
-    const id_b = [_]u8{0xBB} ** 32;
-    const id_c = [_]u8{0xCC} ** 32;
+    const id_a: [32]u8 = @splat(0xAA);
+    const id_b: [32]u8 = @splat(0xBB);
+    const id_c: [32]u8 = @splat(0xCC);
     const sid_ab = deriveSessionId(id_a, id_b);
     const sid_ac = deriveSessionId(id_a, id_c);
     try std.testing.expect(!std.mem.eql(u8, &sid_ab, &sid_ac));

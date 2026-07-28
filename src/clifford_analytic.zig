@@ -301,7 +301,7 @@ pub fn Analytic(comptime p: u32, comptime q: u32, comptime r: u32) type {
             target_metric: [MV.N]f64,
             t: f64,
         ) [MV.DIM]f64 {
-            var result = [_]f64{0.0} ** MV.DIM;
+            var result: [MV.DIM]f64 = @splat(0.0);
             const dim = MV.DIM;
 
             for (0..dim) |i| {
@@ -353,7 +353,7 @@ pub fn Analytic(comptime p: u32, comptime q: u32, comptime r: u32) type {
             pub fn fromReal(mv: MV) ComplexMV {
                 return .{
                     .re = mv.coeffs,
-                    .im = [_]f64{0.0} ** MV.DIM,
+                    .im = @splat(0.0),
                 };
             }
 

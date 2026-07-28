@@ -51,7 +51,7 @@ const BlockCell = propagator.CellValue(Block);
 pub const FountainNet = struct {
     /// Cell values for each source block
     cells: [fountain.MAX_SOURCE_BLOCKS]BlockCell =
-        [_]BlockCell{.{ .nothing = {} }} ** fountain.MAX_SOURCE_BLOCKS,
+        @splat(.{ .nothing = {} }),
     /// Number of source blocks expected
     num_blocks: usize = 0,
     /// Number of cells that hold values (not nothing, not contradiction)

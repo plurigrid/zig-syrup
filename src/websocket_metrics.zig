@@ -146,7 +146,7 @@ pub const ServerMetrics = struct {
 /// Histogram for tracking latency distributions
 pub const LatencyHistogram = struct {
     allocator: std.mem.Allocator,
-    buckets: [20]u64 = [_]u64{0} ** 20, // 0-1ms, 1-2ms, ..., 19-20ms
+    buckets: [20]u64 = @splat(0), // 0-1ms, 1-2ms, ..., 19-20ms
     overflow: u64 = 0,
 
     pub fn init(allocator: std.mem.Allocator) LatencyHistogram {

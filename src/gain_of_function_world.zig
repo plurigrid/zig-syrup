@@ -184,9 +184,9 @@ pub const GainOfFunctionWorld = struct {
     network: ViralNetwork = .{},
 
     /// Terminal grid state (fg colors track virion infection)
-    grid_fg: [MAX_GRID]u32 = [_]u32{0} ** MAX_GRID,
-    grid_bg: [MAX_GRID]u32 = [_]u32{0} ** MAX_GRID,
-    grid_cp: [MAX_GRID]u21 = [_]u21{' '} ** MAX_GRID,
+    grid_fg: [MAX_GRID]u32 = @splat(0),
+    grid_bg: [MAX_GRID]u32 = @splat(0),
+    grid_cp: [MAX_GRID]u21 = @splat(' '),
     grid_cols: u16 = 16,
     grid_rows: u16 = 16,
 
@@ -541,7 +541,7 @@ export fn gof_tidar_generation() u32 {
 /// Get network trit balance as i8 (-1, 0, +1)
 export fn gof_trit_balance() i8 {
     ensureWorld();
-    return @intFromEnum(world.tritBalance());
+    return @backingInt(world.tritBalance());
 }
 
 // Trit.fromInt is now defined in virion.zig

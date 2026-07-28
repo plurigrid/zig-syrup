@@ -360,7 +360,7 @@ pub fn assembleStiffness2D(
     comptime Element: type,
     nodes: [Element.n_nodes][2]f64,
 ) [Element.n_nodes][Element.n_nodes]f64 {
-    var K: [Element.n_nodes][Element.n_nodes]f64 = .{.{0} ** Element.n_nodes} ** Element.n_nodes;
+    var K: [Element.n_nodes][Element.n_nodes]f64 = @splat(@as([Element.n_nodes]f64, @splat(0)));
 
     // Quadrature loop — unrolled at comptime for known element types
     inline for (0..Element.quad.n_points) |q| {
@@ -395,7 +395,7 @@ pub fn assembleMass2D(
     comptime Element: type,
     nodes: [Element.n_nodes][2]f64,
 ) [Element.n_nodes][Element.n_nodes]f64 {
-    var M: [Element.n_nodes][Element.n_nodes]f64 = .{.{0} ** Element.n_nodes} ** Element.n_nodes;
+    var M: [Element.n_nodes][Element.n_nodes]f64 = @splat(@as([Element.n_nodes]f64, @splat(0)));
 
     inline for (0..Element.quad.n_points) |q| {
         const xi = Element.quad.points[q];

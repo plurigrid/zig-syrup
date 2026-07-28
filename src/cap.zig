@@ -133,10 +133,10 @@ pub const Capability = struct {
 /// bumps the generation so any stale CapId from that session fails lookup.
 pub const ExportTable = struct {
     const Slot = struct { strong: u32 = 0, generation: u32 = 0, alive: bool = false };
-    slots: std.ArrayList(Slot),
+    slots: std.ArrayListUnmanaged(Slot) = .empty,
 
     pub fn init() ExportTable {
-        return .{ .slots = .{} };
+        return .{ .slots = .empty };
     }
     pub fn deinit(self: *ExportTable, allocator: std.mem.Allocator) void {
         self.slots.deinit(allocator);

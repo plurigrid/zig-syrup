@@ -33,7 +33,7 @@ pub const CurriculumLevel = enum(u3) {
 // ============================================================================
 
 pub const WhaleStudent = struct {
-    id: [32]u8 = [_]u8{0} ** 32,
+    id: [32]u8 = @splat(0),
     id_len: u8 = 0,
     level: CurriculumLevel = .l1_seed_echo,
     current_seed: u64 = GAY_SEED,
@@ -145,7 +145,7 @@ pub fn rapidWalk(
 // ============================================================================
 
 pub const Whale = struct {
-    id: [8]u8 = [_]u8{0} ** 8,
+    id: [8]u8 = @splat(0),
     id_len: u8 = 0,
     seed: u64,
     chain: [12]sm.Color = undefined,
@@ -299,7 +299,7 @@ pub const WhaleWorld = struct {
 
 pub const CodaObservation = struct {
     n_clicks: u8,
-    icis: [8]f64 = [_]f64{0} ** 8, // inter-click intervals (seconds)
+    icis: [8]f64 = @splat(0), // inter-click intervals (seconds)
     ici_count: u8 = 0,
     tempo_type: u8 = 3, // 1-5
     has_ornament: bool = false,
@@ -417,7 +417,7 @@ pub const CoConeApex = struct {
 pub fn gzipability(data: []const u8) f64 {
     // Estimate compressibility as ratio of unique bytes
     if (data.len == 0) return 0.0;
-    var seen = [_]bool{false} ** 256;
+    var seen: [256]bool = @splat(false);
     var unique: u32 = 0;
     for (data) |b| {
         if (!seen[b]) {

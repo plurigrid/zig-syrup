@@ -217,7 +217,9 @@ pub fn fromSeed(allocator: Allocator, seed: [32]u8) !DidKey {
 
 /// Generate a random did:key.
 pub fn generate(allocator: Allocator) !DidKey {
-    const kp = Ed25519.KeyPair.generate();
+    var seed: [32]u8 = undefined;
+    std.crypto.random.bytes(&seed);
+    const kp = try Ed25519.KeyPair.generateDeterministic(seed);
     return fromPublicKey(allocator, kp.public_key.toBytes());
 }
 
@@ -322,7 +324,7 @@ pub fn gf3Balance(public_key: [32]u8) Trit {
     const traj = toTritTrajectory(public_key);
     var sum: i8 = 0;
     for (traj) |t| {
-        sum = @mod(sum + @as(i8, @intFromEnum(t)) + 3, 3);
+        sum = @mod(sum + @as(i8, @backingInt(t)) + 3, 3);
     }
     return switch (sum) {
         0 => .zero,
@@ -338,7 +340,7 @@ pub fn gf3Balance(public_key: [32]u8) Trit {
 
 test "did:key roundtrip" {
     const allocator = std.testing.allocator;
-    const seed = [_]u8{0x42} ** 32;
+    const seed: [32]u8 = @splat(0x42);
     const dk = try fromSeed(allocator, seed);
     defer dk.deinit();
 
@@ -355,7 +357,7 @@ test "did:key roundtrip" {
 
 test "did:key deterministic" {
     const allocator = std.testing.allocator;
-    const seed = [_]u8{0xAB} ** 32;
+    const seed: [32]u8 = @splat(0xAB);
 
     const dk1 = try fromSeed(allocator, seed);
     defer dk1.deinit();
@@ -366,20 +368,20 @@ test "did:key deterministic" {
 }
 
 test "did:key trit trajectory GF(3)" {
-    const seed = [_]u8{0x00} ** 32;
+    const seed: [32]u8 = @splat(0x00);
     const kp = try Ed25519.KeyPair.generateDeterministic(seed);
     const traj = toTritTrajectory(kp.public_key.toBytes());
 
     // All trits must be valid
     for (traj) |t| {
-        const v = @intFromEnum(t);
+        const v = @backingInt(t);
         try std.testing.expect(v >= -1 and v <= 1);
     }
 }
 
 test "did:key DID document generation" {
     const allocator = std.testing.allocator;
-    const seed = [_]u8{0xFF} ** 32;
+    const seed: [32]u8 = @splat(0xFF);
     const dk = try fromSeed(allocator, seed);
     defer dk.deinit();
 
@@ -424,7 +426,7 @@ test "resolve rejects invalid prefix" {
 
 test "did:key color derivation SPI" {
     const allocator = std.testing.allocator;
-    const seed = [_]u8{0x42} ** 32;
+    const seed: [32]u8 = @splat(0x42);
     const dk1 = try fromSeed(allocator, seed);
     defer dk1.deinit();
     const dk2 = try fromSeed(allocator, seed);
@@ -439,13 +441,13 @@ test "did:key color derivation SPI" {
     try std.testing.expect(dk1.color.b >= 0.0 and dk1.color.b <= 1.0);
 
     // Different seed → different color
-    const dk3 = try fromSeed(allocator, [_]u8{0xAB} ** 32);
+    const dk3 = try fromSeed(allocator, @as([32]u8, @splat(0xAB)));
     defer dk3.deinit();
     try std.testing.expect(!Color.eql(dk1.color, dk3.color));
 }
 
 test "gf3Balance is deterministic" {
-    const seed = [_]u8{0x69} ** 32;
+    const seed: [32]u8 = @splat(0x69);
     const kp = try Ed25519.KeyPair.generateDeterministic(seed);
     const pk = kp.public_key.toBytes();
     const b1 = gf3Balance(pk);

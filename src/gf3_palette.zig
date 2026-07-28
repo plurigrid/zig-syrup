@@ -45,7 +45,7 @@ pub const TritWord = struct {
     pub fn toIndex(self: TritWord) u8 {
         var idx: u16 = 0;
         inline for (0..5) |i| {
-            idx = idx * 3 + @as(u16, @intCast(@as(i16, @intFromEnum(self.trits[i])) + 1));
+            idx = idx * 3 + @as(u16, @intCast(@as(i16, @backingInt(self.trits[i])) + 1));
         }
         return @intCast(idx);
     }
@@ -59,7 +59,7 @@ pub const TritWord = struct {
         inline while (i > 0) {
             i -= 1;
             const r = remaining % 3;
-            word.trits[i] = @enumFromInt(@as(i8, @intCast(r)) - 1);
+            word.trits[i] = @fromBackingInt(@intCast(@as(i8, @intCast(r)) - 1));
             remaining /= 3;
         }
         return word;
@@ -90,15 +90,15 @@ pub const TritWord = struct {
 
     /// Hue as a pair of trits (positions 1,2) → 0..8 sector.
     pub fn hueSector(self: TritWord) u4 {
-        const h0: u8 = @intCast(@as(i16, @intFromEnum(self.trits[1])) + 1);
-        const h1: u8 = @intCast(@as(i16, @intFromEnum(self.trits[2])) + 1);
+        const h0: u8 = @intCast(@as(i16, @backingInt(self.trits[1])) + 1);
+        const h1: u8 = @intCast(@as(i16, @backingInt(self.trits[2])) + 1);
         return @intCast(h0 * 3 + h1);
     }
 
     /// Chroma as a pair of trits (positions 3,4) → 0..8 level.
     pub fn chromaLevel(self: TritWord) u4 {
-        const c0: u8 = @intCast(@as(i16, @intFromEnum(self.trits[3])) + 1);
-        const c1: u8 = @intCast(@as(i16, @intFromEnum(self.trits[4])) + 1);
+        const c0: u8 = @intCast(@as(i16, @backingInt(self.trits[3])) + 1);
+        const c1: u8 = @intCast(@as(i16, @backingInt(self.trits[4])) + 1);
         return @intCast(c0 * 3 + c1);
     }
 };
@@ -163,7 +163,7 @@ fn hslToRgb(h: f64, s: f64, l: f64) RGB {
 
 /// Generate the color for a given trit word.
 pub fn tritToRgb(word: TritWord) RGB {
-    const l_idx: usize = @intCast(@as(i16, @intFromEnum(word.luminosity())) + 1);
+    const l_idx: usize = @intCast(@as(i16, @backingInt(word.luminosity())) + 1);
     const lightness = LUMINOSITY_LEVELS[l_idx];
     const hue = HUE_SECTORS[word.hueSector()];
     const chroma = CHROMA_LEVELS[word.chromaLevel()];
@@ -288,7 +288,7 @@ test "trit word bounds" {
 }
 
 test "hue sectors cover 9 values" {
-    var seen = [_]bool{false} ** 9;
+    var seen: [9]bool = @splat(false);
     for (0..243) |i| {
         const word = TritWord.fromIndex(@intCast(i));
         seen[word.hueSector()] = true;
@@ -299,7 +299,7 @@ test "hue sectors cover 9 values" {
 }
 
 test "chroma levels cover 9 values" {
-    var seen = [_]bool{false} ** 9;
+    var seen: [9]bool = @splat(false);
     for (0..243) |i| {
         const word = TritWord.fromIndex(@intCast(i));
         seen[word.chromaLevel()] = true;

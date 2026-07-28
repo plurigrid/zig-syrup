@@ -65,14 +65,14 @@ pub const AbstractACSet = struct {
     }
 
     pub fn modalityIndex(self: AbstractACSet) u8 {
-        return @intFromEnum(self.glue);
+        return @backingInt(self.glue);
     }
 
     /// Self-reinterpretation: advance seed, potentially shift modality
     pub fn selfReinterpret(self: *AbstractACSet) void {
         self.seed = splitmix64(self.seed);
         const idx = self.seed % 10;
-        self.glue = @enumFromInt(@as(u8, @intCast(idx)));
+        self.glue = @fromBackingInt(@intCast(@as(u8, @intCast(idx))));
     }
 
     /// Agentive bind: compose two ACSets via seed mixing
@@ -113,7 +113,7 @@ pub const FreeGadget = struct {
             .kind = kind,
             .seed = seed,
             .arity = arity,
-            .connections = .{0} ** 8,
+            .connections = @splat(0),
             .degree = 0,
         };
     }
@@ -147,7 +147,7 @@ pub const TritWalkState = struct {
     pub fn step(self: *TritWalkState) void {
         self.position = splitmix64(self.position);
         const trit_val = self.position % 3;
-        self.direction = @enumFromInt(@as(i2, @intCast(trit_val)) - 1);
+        self.direction = @fromBackingInt(@intCast(@as(i2, @intCast(trit_val)) - 1));
         self.steps += 1;
     }
 
@@ -186,7 +186,7 @@ pub const GCounter = struct {
     replica_id: u8,
 
     pub fn init(replica_id: u8) GCounter {
-        return .{ .counts = .{0} ** 16, .replica_id = replica_id };
+        return .{ .counts = @splat(0), .replica_id = replica_id };
     }
 
     pub fn increment(self: *GCounter) void {
@@ -702,7 +702,7 @@ pub const ThreeMatchGadget = struct {
 
     pub fn decide(self: ThreeMatchGadget) u8 {
         // majority vote over GF(3)
-        var votes: [3]u8 = .{0} ** 3;
+        var votes: [3]u8 = @splat(0);
         for (self.edges) |e| votes[e % 3] += 1;
         var best: u8 = 0;
         for (1..3) |i| {

@@ -218,7 +218,7 @@ pub fn sampleToChannelArrays(
 // ============================================================================
 
 test "parse valid DSI-24 packet" {
-    var packet = [_]u8{0} ** DSI24_PACKET_LEN;
+    var packet: [DSI24_PACKET_LEN]u8 = @splat(0);
     packet[0] = DSI24_PACKET_TYPE_EEG;
     // Sample counter = 1
     packet[4] = 1;
@@ -232,7 +232,7 @@ test "parse valid DSI-24 packet" {
 }
 
 test "parse positive ADC value (channel 0)" {
-    var packet = [_]u8{0} ** DSI24_PACKET_LEN;
+    var packet: [DSI24_PACKET_LEN]u8 = @splat(0);
     packet[0] = DSI24_PACKET_TYPE_EEG;
     // Channel 0: 24 counts (0x000018)
     packet[9] = 0x00;
@@ -245,7 +245,7 @@ test "parse positive ADC value (channel 0)" {
 }
 
 test "parse negative ADC value (sign extension)" {
-    var packet = [_]u8{0} ** DSI24_PACKET_LEN;
+    var packet: [DSI24_PACKET_LEN]u8 = @splat(0);
     packet[0] = DSI24_PACKET_TYPE_EEG;
     // Channel 0: -1 (0xFFFFFF in 24-bit)
     packet[9] = 0xFF;
@@ -258,20 +258,20 @@ test "parse negative ADC value (sign extension)" {
 }
 
 test "reject invalid packet type" {
-    var packet = [_]u8{0} ** DSI24_PACKET_LEN;
+    var packet: [DSI24_PACKET_LEN]u8 = @splat(0);
     packet[0] = 0xFF;
     try std.testing.expectError(ParseError.InvalidPacketType, parseDSI24Packet(&packet));
 }
 
 test "reject short packet" {
-    const short = [_]u8{0x01} ** 10;
+    const short: [10]u8 = @splat(0x01);
     try std.testing.expectError(ParseError.InvalidLength, parseDSI24Packet(&short));
 }
 
 test "parse stream with two packets" {
     const allocator = std.testing.allocator;
 
-    var stream = [_]u8{0} ** (DSI24_PACKET_LEN * 2);
+    var stream: [DSI24_PACKET_LEN * 2]u8 = @splat(0);
     // Packet 1
     stream[0] = DSI24_PACKET_TYPE_EEG;
     stream[4] = 10;
@@ -295,7 +295,7 @@ test "channel labels count" {
 }
 
 test "metadata fields parsed" {
-    var packet = [_]u8{0} ** DSI24_PACKET_LEN;
+    var packet: [DSI24_PACKET_LEN]u8 = @splat(0);
     packet[0] = DSI24_PACKET_TYPE_EEG;
     packet[81] = 42; // trigger
     packet[82] = 85; // battery 85%

@@ -325,7 +325,7 @@ pub fn colorAdhesionGraph(d: *const StrDecomp, allocator: Allocator) !AdhesionCo
     var max_color: u32 = 0;
     for (0..n) |i| {
         // Find smallest color not used by any neighbor
-        var used = [_]bool{false} ** 64; // up to 64 colors (enough for any real decomposition)
+        var used: [64]bool = @splat(false); // up to 64 colors (enough for any real decomposition)
         for (0..n) |j| {
             if (adj[i * n + j] and colors[j] < 64) {
                 used[colors[j]] = true;

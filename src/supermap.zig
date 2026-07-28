@@ -47,9 +47,9 @@ pub const PhaseCell = struct {
 
     /// Linear index into the 27-element phase space: 0..26
     pub fn toIndex(self: PhaseCell) u5 {
-        const f: u8 = @intCast(@as(i16, @intFromEnum(self.freq)) + 1);
-        const p: u8 = @intCast(@as(i16, @intFromEnum(self.phase)) + 1);
-        const a: u8 = @intCast(@as(i16, @intFromEnum(self.amp)) + 1);
+        const f: u8 = @intCast(@as(i16, @backingInt(self.freq)) + 1);
+        const p: u8 = @intCast(@as(i16, @backingInt(self.phase)) + 1);
+        const a: u8 = @intCast(@as(i16, @backingInt(self.amp)) + 1);
         return @intCast(f * 9 + p * 3 + a);
     }
 
@@ -63,9 +63,9 @@ pub const PhaseCell = struct {
         r /= 3;
         const f: i8 = @as(i8, @intCast(r % 3)) - 1;
         return .{
-            .freq = @enumFromInt(f),
-            .phase = @enumFromInt(p),
-            .amp = @enumFromInt(a),
+            .freq = @fromBackingInt(@intCast(f)),
+            .phase = @fromBackingInt(@intCast(p)),
+            .amp = @fromBackingInt(@intCast(a)),
         };
     }
 
@@ -355,7 +355,7 @@ pub const Supermap = struct {
 ///   -1 (blocked):   conditions not met, supermap unavailable
 pub const Affordance = struct {
     /// Name (null-terminated within fixed buffer)
-    name: [32]u8 = .{0} ** 32,
+    name: [32]u8 = @splat(0),
     name_len: u8 = 0,
 
     /// 27-bit mask: which phase cells afford this action
@@ -378,9 +378,9 @@ pub const Affordance = struct {
         }
 
         // Check signal quality thresholds
-        const freq_ok = @intFromEnum(state.freq) >= @intFromEnum(self.min_freq);
-        const phase_ok = @intFromEnum(state.phase) >= @intFromEnum(self.min_phase);
-        const amp_ok = @intFromEnum(state.amp) >= @intFromEnum(self.min_amp);
+        const freq_ok = @backingInt(state.freq) >= @backingInt(self.min_freq);
+        const phase_ok = @backingInt(state.phase) >= @backingInt(self.min_phase);
+        const amp_ok = @backingInt(state.amp) >= @backingInt(self.min_amp);
 
         if (freq_ok and phase_ok and amp_ok) {
             return .plus; // available
@@ -404,7 +404,7 @@ pub const Affordance = struct {
         // All cells with moderate or strong amplitude
         for (0..27) |i| {
             const cell = PhaseCell.fromIndex(@intCast(i));
-            if (@intFromEnum(cell.amp) >= 0) {
+            if (@backingInt(cell.amp) >= 0) {
                 a.phase_mask |= @as(u27, 1) << @intCast(i);
             }
         }
@@ -423,7 +423,7 @@ pub const Affordance = struct {
         // All cells with non-negative phase coherence
         for (0..27) |i| {
             const cell = PhaseCell.fromIndex(@intCast(i));
-            if (@intFromEnum(cell.phase) >= 0) {
+            if (@backingInt(cell.phase) >= 0) {
                 a.phase_mask |= @as(u27, 1) << @intCast(i);
             }
         }
@@ -445,9 +445,9 @@ pub const Affordance = struct {
         // Only cells where all coordinates are non-negative
         for (0..27) |i| {
             const cell = PhaseCell.fromIndex(@intCast(i));
-            if (@intFromEnum(cell.freq) >= 0 and
-                @intFromEnum(cell.phase) >= 0 and
-                @intFromEnum(cell.amp) >= 0)
+            if (@backingInt(cell.freq) >= 0 and
+                @backingInt(cell.phase) >= 0 and
+                @backingInt(cell.amp) >= 0)
             {
                 a.phase_mask |= @as(u27, 1) << @intCast(i);
             }
@@ -501,7 +501,7 @@ pub const CyberPhysical = struct {
             .state = .{ .freq = .zero, .phase = .zero, .amp = .zero },
             .affordances = .{ Affordance.communicate(), Affordance.sense(), Affordance.actuate() },
             .channel = Channel.IDENTITY,
-            .history = .{.zero} ** 9,
+            .history = @splat(.zero),
             .history_idx = 0,
             .generation = 0,
         };
@@ -569,7 +569,7 @@ pub const CyberPhysical = struct {
         const aff = self.evaluateAffordances();
         var counts = [3]u8{ 0, 0, 0 };
         for (aff) |a| {
-            const idx: usize = @intCast(@as(i16, @intFromEnum(a)) + 1);
+            const idx: usize = @intCast(@as(i16, @backingInt(a)) + 1);
             counts[idx] += 1;
         }
         return counts;
@@ -597,16 +597,16 @@ export fn supermap_channel_apply(
 ) callconv(.c) u8 {
     const ch = Channel{
         .matrix = .{
-            .{ @enumFromInt(std.math.clamp(m00, -1, 1)), @enumFromInt(std.math.clamp(m01, -1, 1)), @enumFromInt(std.math.clamp(m02, -1, 1)) },
-            .{ @enumFromInt(std.math.clamp(m10, -1, 1)), @enumFromInt(std.math.clamp(m11, -1, 1)), @enumFromInt(std.math.clamp(m12, -1, 1)) },
-            .{ @enumFromInt(std.math.clamp(m20, -1, 1)), @enumFromInt(std.math.clamp(m21, -1, 1)), @enumFromInt(std.math.clamp(m22, -1, 1)) },
+            .{ @fromBackingInt(@intCast(std.math.clamp(m00, -1, 1))), @fromBackingInt(@intCast(std.math.clamp(m01, -1, 1))), @fromBackingInt(@intCast(std.math.clamp(m02, -1, 1))) },
+            .{ @fromBackingInt(@intCast(std.math.clamp(m10, -1, 1))), @fromBackingInt(@intCast(std.math.clamp(m11, -1, 1))), @fromBackingInt(@intCast(std.math.clamp(m12, -1, 1))) },
+            .{ @fromBackingInt(@intCast(std.math.clamp(m20, -1, 1))), @fromBackingInt(@intCast(std.math.clamp(m21, -1, 1))), @fromBackingInt(@intCast(std.math.clamp(m22, -1, 1))) },
         },
         .offset = .{ .zero, .zero, .zero },
     };
     const input = PhaseCell{
-        .freq = @enumFromInt(std.math.clamp(freq, -1, 1)),
-        .phase = @enumFromInt(std.math.clamp(phase, -1, 1)),
-        .amp = @enumFromInt(std.math.clamp(amp, -1, 1)),
+        .freq = @fromBackingInt(@intCast(std.math.clamp(freq, -1, 1))),
+        .phase = @fromBackingInt(@intCast(std.math.clamp(phase, -1, 1))),
+        .amp = @fromBackingInt(@intCast(std.math.clamp(amp, -1, 1))),
     };
     return ch.apply(input).toIndex();
 }
@@ -631,26 +631,26 @@ export fn supermap_quantum_switch(
 ) callconv(.c) u8 {
     const c1 = Channel{
         .matrix = .{
-            .{ @enumFromInt(std.math.clamp(c1_diag0, -1, 1)), .zero, .zero },
-            .{ .zero, @enumFromInt(std.math.clamp(c1_diag1, -1, 1)), .zero },
-            .{ .zero, .zero, @enumFromInt(std.math.clamp(c1_diag2, -1, 1)) },
+            .{ @fromBackingInt(@intCast(std.math.clamp(c1_diag0, -1, 1))), .zero, .zero },
+            .{ .zero, @fromBackingInt(@intCast(std.math.clamp(c1_diag1, -1, 1))), .zero },
+            .{ .zero, .zero, @fromBackingInt(@intCast(std.math.clamp(c1_diag2, -1, 1))) },
         },
         .offset = .{ .zero, .zero, .zero },
     };
     const c2 = Channel{
         .matrix = .{
-            .{ @enumFromInt(std.math.clamp(c2_diag0, -1, 1)), .zero, .zero },
-            .{ .zero, @enumFromInt(std.math.clamp(c2_diag1, -1, 1)), .zero },
-            .{ .zero, .zero, @enumFromInt(std.math.clamp(c2_diag2, -1, 1)) },
+            .{ @fromBackingInt(@intCast(std.math.clamp(c2_diag0, -1, 1))), .zero, .zero },
+            .{ .zero, @fromBackingInt(@intCast(std.math.clamp(c2_diag1, -1, 1))), .zero },
+            .{ .zero, .zero, @fromBackingInt(@intCast(std.math.clamp(c2_diag2, -1, 1))) },
         },
         .offset = .{ .zero, .zero, .zero },
     };
-    const ctrl: Trit = @enumFromInt(std.math.clamp(control, -1, 1));
+    const ctrl: Trit = @fromBackingInt(@intCast(std.math.clamp(control, -1, 1)));
     const switched = Supermap.quantumSwitch(c1, c2, ctrl);
     const input = PhaseCell{
-        .freq = @enumFromInt(std.math.clamp(freq, -1, 1)),
-        .phase = @enumFromInt(std.math.clamp(phase, -1, 1)),
-        .amp = @enumFromInt(std.math.clamp(amp, -1, 1)),
+        .freq = @fromBackingInt(@intCast(std.math.clamp(freq, -1, 1))),
+        .phase = @fromBackingInt(@intCast(std.math.clamp(phase, -1, 1))),
+        .amp = @fromBackingInt(@intCast(std.math.clamp(amp, -1, 1))),
     };
     return switched.apply(input).toIndex();
 }

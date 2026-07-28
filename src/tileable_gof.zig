@@ -274,7 +274,7 @@ pub const TileableGof = struct {
     network: ViralNetwork = .{},
 
     /// Tile storage (flat array, tree structure via SplitState)
-    tiles: [MAX_TILES]Tile = [_]Tile{.{}} ** MAX_TILES,
+    tiles: [MAX_TILES]Tile = @splat(.{}),
     tile_count: u16 = 0,
 
     /// Root tile index (the full terminal area)
@@ -293,9 +293,9 @@ pub const TileableGof = struct {
     /// Frame buffer: packed cell data for rendering
     /// Each cell: [codepoint:u21][fg:u24][bg:u24][attrs:u8] = 9 bytes
     /// Max 80×24 = 1920 cells
-    framebuf_fg: [1920]u32 = [_]u32{0x808080} ** 1920,
-    framebuf_bg: [1920]u32 = [_]u32{0x000000} ** 1920,
-    framebuf_cp: [1920]u21 = [_]u21{' '} ** 1920,
+    framebuf_fg: [1920]u32 = @splat(0x808080),
+    framebuf_bg: [1920]u32 = @splat(0x000000),
+    framebuf_cp: [1920]u21 = @splat(' '),
 
     // ----------------------------------------------------------------
     // Initialization
@@ -378,7 +378,7 @@ pub const TileableGof = struct {
                 var branch = &self.tiles[row_tile].split.branch;
                 for (0..n_cols) |ci| {
                     const bias = cellBias(self.network.cells[self.tiles[col_tiles[ci]].cell_idx]);
-                    branch.constraints[ci] = .{ .symmetric = .{ 1, @intCast(n_cols), @intFromEnum(bias) } };
+                    branch.constraints[ci] = .{ .symmetric = .{ 1, @intCast(n_cols), @backingInt(bias) } };
                 }
             }
         }
@@ -393,7 +393,7 @@ pub const TileableGof = struct {
         {
             var branch = &self.tiles[self.root].split.branch;
             for (0..n_rows) |ri| {
-                branch.constraints[ri] = .{ .symmetric = .{ 1, @intCast(n_rows), @intFromEnum(Bias.ergodic) } };
+                branch.constraints[ri] = .{ .symmetric = .{ 1, @intCast(n_rows), @backingInt(Bias.ergodic) } };
             }
         }
 

@@ -16,6 +16,25 @@ const Allocator = std.mem.Allocator;
 
 pub const ChangeId = [32]u8;
 
+fn appendFmt(buf: *std.ArrayList(u8), alloc: Allocator, comptime fmt: []const u8, args: anytype) !void {
+    var tmp: [256]u8 = undefined;
+    const text = try std.fmt.bufPrint(&tmp, fmt, args);
+    try buf.appendSlice(alloc, text);
+}
+
+const ListWriter = struct {
+    list: *std.ArrayList(u8),
+    alloc: Allocator,
+
+    pub fn writeAll(self: *@This(), bytes: []const u8) !void {
+        try self.list.appendSlice(self.alloc, bytes);
+    }
+
+    pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+        try appendFmt(self.list, self.alloc, fmt, args);
+    }
+};
+
 pub const NarrativeNode = struct {
     change_id: ChangeId,
     description: []const u8,
@@ -68,7 +87,7 @@ fn buildInner(
 
     var children: []NarrativeNode = &[_]NarrativeNode{};
     if (depth < max_depth and parents.len > 0) {
-        var list = std.ArrayList(NarrativeNode){};
+        var list: std.ArrayList(NarrativeNode) = .empty;
         errdefer {
             for (list.items) |*c| c.deinit(alloc);
             list.deinit(alloc);
@@ -164,7 +183,7 @@ fn renderInner(
 /// Walk the tree following the highest-scoring child at each step.
 /// Returns an owned slice of change_ids; first element is the root.
 pub fn criticalPath(alloc: Allocator, node: *const NarrativeNode) ![]ChangeId {
-    var list = std.ArrayList(ChangeId){};
+    var list: std.ArrayList(ChangeId) = .empty;
     errdefer list.deinit(alloc);
     var cur: *const NarrativeNode = node;
     try list.append(alloc, cur.change_id);
@@ -185,7 +204,7 @@ pub fn criticalPath(alloc: Allocator, node: *const NarrativeNode) ![]ChangeId {
 
 /// Simple JSON encoder for MCP exposure. Caller owns the returned slice.
 pub fn toJson(alloc: Allocator, node: *const NarrativeNode) ![]u8 {
-    var buf = std.ArrayList(u8){};
+    var buf: std.ArrayList(u8) = .empty;
     errdefer buf.deinit(alloc);
     try toJsonInner(node, &buf, alloc);
     return try buf.toOwnedSlice(alloc);
@@ -201,12 +220,12 @@ fn toJsonInner(
     try buf.appendSlice(alloc, "{\"change_id\":\"");
     try buf.appendSlice(alloc, &hex);
     try buf.appendSlice(alloc, "\",\"trit\":");
-    const trit_int: i8 = @intFromEnum(node.trit);
-    try std.fmt.format(buf.writer(alloc), "{d}", .{trit_int});
+    const trit_int: i8 = @backingInt(node.trit);
+    try appendFmt(buf, alloc, "{d}", .{trit_int});
     try buf.appendSlice(alloc, ",\"hue\":");
-    try std.fmt.format(buf.writer(alloc), "{d:.3}", .{node.color.hue});
+    try appendFmt(buf, alloc, "{d:.3}", .{node.color.hue});
     try buf.appendSlice(alloc, ",\"score\":");
-    try std.fmt.format(buf.writer(alloc), "{d:.6}", .{node.score});
+    try appendFmt(buf, alloc, "{d:.6}", .{node.score});
     try buf.appendSlice(alloc, ",\"description\":\"");
     for (node.description) |c| {
         if (c == '"' or c == '\\') try buf.append(alloc, '\\');
@@ -302,9 +321,10 @@ test "render: emits one line per node" {
     };
     var root = try build(std.testing.allocator, &entries, a, 1069, 8);
     defer root.deinit(std.testing.allocator);
-    var out = std.ArrayList(u8){};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(std.testing.allocator);
-    try render(&root, out.writer(std.testing.allocator));
+    var writer = ListWriter{ .list = &out, .alloc = std.testing.allocator };
+    try render(&root, &writer);
     // Expect 2 lines (one per node).
     var lines = std.mem.tokenizeScalar(u8, out.items, '\n');
     var n: usize = 0;

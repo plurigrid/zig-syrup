@@ -303,7 +303,7 @@ test "reject invalid EDF" {
     try std.testing.expectError(EDFError.FileTooShort, EDFFile.parse("short"));
 
     // Wrong version
-    var bad_version: [256]u8 = [_]u8{' '} ** 256;
+    var bad_version: [256]u8 = @splat(' ');
     bad_version[0] = '1';
     try std.testing.expectError(EDFError.InvalidVersion, EDFFile.parse(&bad_version));
 }

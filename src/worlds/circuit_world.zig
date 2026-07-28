@@ -71,7 +71,7 @@ pub const CircuitInput = struct {
             });
             try input_entries.append(allocator, .{
                 .key = syrup.Value.fromSymbol("action"),
-                .value = syrup.Value.fromInteger(@intFromEnum(input.action)),
+                .value = syrup.Value.fromInteger(@backingInt(input.action)),
             });
             try input_entries.append(allocator, .{
                 .key = syrup.Value.fromSymbol("data"),
@@ -347,7 +347,7 @@ pub const CircuitWorld = struct {
             const base = 2 + i * 3;
             if (base + 2 < self.num_public_inputs) {
                 self.wire_values.items[base] = pi.player_id;
-                self.wire_values.items[base + 1] = @intFromEnum(pi.action);
+                self.wire_values.items[base + 1] = @backingInt(pi.action);
                 self.wire_values.items[base + 2] = pi.data;
             }
         }
@@ -452,7 +452,7 @@ pub const CircuitWorld = struct {
         return ZKWorldProof{
             .proof_data = try self.allocator.dupe(u8, "mock_proof"),
             .public_inputs = try self.allocator.dupe(u64, &[_]u64{ 1, 2, 3 }),
-            .vk_hash = [_]u8{0} ** 32,
+            .vk_hash = @splat(0),
         };
     }
 

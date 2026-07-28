@@ -76,7 +76,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -230,11 +230,11 @@ pub const ReadingRing = struct {
         // If overwriting, subtract old trit from sum
         if (self.count == MAX_READINGS) {
             const old = self.buf[self.head];
-            self.trit_sum -= @intFromEnum(old.trit);
+            self.trit_sum -= @backingInt(old.trit);
         }
 
         self.buf[self.head] = reading;
-        self.trit_sum += @intFromEnum(reading.trit);
+        self.trit_sum += @backingInt(reading.trit);
         self.head = (self.head + 1) % MAX_READINGS;
         if (self.count < MAX_READINGS) self.count += 1;
     }
@@ -1013,13 +1013,13 @@ test "auth hash computation" {
 
 test "KLAP key derivation is deterministic" {
     var s1 = KlapSession.init("user@test.com", "pass");
-    s1.local_seed = [_]u8{0} ** KLAP_SEED_SIZE;
-    s1.remote_seed = [_]u8{1} ** KLAP_SEED_SIZE;
+    s1.local_seed = @splat(0);
+    s1.remote_seed = @splat(1);
     s1.deriveKeys();
 
     var s2 = KlapSession.init("user@test.com", "pass");
-    s2.local_seed = [_]u8{0} ** KLAP_SEED_SIZE;
-    s2.remote_seed = [_]u8{1} ** KLAP_SEED_SIZE;
+    s2.local_seed = @splat(0);
+    s2.remote_seed = @splat(1);
     s2.deriveKeys();
 
     try std.testing.expectEqualSlices(u8, &s1.cipher_key, &s2.cipher_key);
@@ -1027,8 +1027,8 @@ test "KLAP key derivation is deterministic" {
 }
 
 test "KLAP XOR cipher roundtrip" {
-    const key = [_]u8{0x42} ** 16;
-    const iv = [_]u8{0x13} ** 12;
+    const key: [16]u8 = @splat(0x42);
+    const iv: [12]u8 = @splat(0x13);
     const plaintext = "get_energy_usage";
 
     var encrypted: [256]u8 = undefined;

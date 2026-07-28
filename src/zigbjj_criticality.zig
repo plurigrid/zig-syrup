@@ -200,7 +200,7 @@ fn mkEvents(comptime n: usize, trits: [n]Trit) [n]entropy.InteractionEvent {
     var evs: [n]entropy.InteractionEvent = undefined;
     for (trits, 0..) |t, i| {
         evs[i] = .{
-            .change_id = [_]u8{0} ** 32,
+            .change_id = @splat(0),
             .trit = t,
             .timestamp = i,
         };

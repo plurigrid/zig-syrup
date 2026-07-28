@@ -17,7 +17,7 @@
 const std = @import("std");
 const syrup = @import("syrup");
 
-const THREADS = 10;
+const MAX_THREADS = 64;
 /// CI default. A soak run raises this; 30M/thread ran clean in ~20s locally.
 const ITERS_PER_THREAD: u64 = 250_000;
 const MAX_INPUT = 512;
@@ -27,6 +27,10 @@ var total_ok: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var total_err: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var total_rt: std.atomic.Value(u64) = std.atomic.Value(u64).init(0);
 var failed: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+fn workerCount() usize {
+    return @min(MAX_THREADS, @max(1, std.Thread.getCpuCount() catch 1));
+}
 
 /// Canonical byte-fixpoint round-trip check on a successfully-decoded value.
 /// `decode` rejects NotCanonicalOrder, so `v` is already canonical ⇒ encoding it
@@ -50,7 +54,7 @@ fn roundTripOk(v: syrup.Value, a: std.mem.Allocator, input: []const u8) bool {
 
 fn worker(tid: u64) void {
     // Deterministic per-thread seed → any crash is reproducible from (tid, iter).
-    var prng = std.Random.DefaultPrng.init(0xDEADBEEF ^ (tid *% 0x9E3779B97F4A7C15));
+    var prng = std.Random.DefaultPrng.init(0xDEADBEEF ^ @as(u64, std.testing.random_seed) ^ (tid *% 0x9E3779B97F4A7C15));
     const rnd = prng.random();
 
     const backing = std.heap.page_allocator.alloc(u8, ARENA_BYTES) catch return;
@@ -95,20 +99,22 @@ fn worker(tid: u64) void {
 }
 
 test "random fuzz: decode never crashes on arbitrary input" {
-    var threads: [THREADS]std.Thread = undefined;
-    for (&threads, 0..) |*t, k| t.* = try std.Thread.spawn(.{}, worker, .{@as(u64, k)});
-    for (&threads) |t| t.join();
+    const thread_count = workerCount();
+    const threads = try std.testing.allocator.alloc(std.Thread, thread_count);
+    defer std.testing.allocator.free(threads);
+    for (threads, 0..) |*t, k| t.* = try std.Thread.spawn(.{}, worker, .{@as(u64, k)});
+    for (threads) |t| t.join();
     const ok = total_ok.load(.monotonic);
     const er = total_err.load(.monotonic);
     const rt = total_rt.load(.monotonic);
     std.debug.print(
-        "\nrandom-fuzz: {d} inputs ({d} decoded, {d} rejected), {d} round-trip fixpoints verified, across {d} threads\n",
-        .{ ok + er, ok, er, rt, THREADS },
+        "\nrandom-fuzz: seed=0x{x} {d} inputs ({d} decoded, {d} rejected), {d} round-trip fixpoints verified, across {d} threads\n",
+        .{ std.testing.random_seed, ok + er, ok, er, rt, thread_count },
     );
     // A defect prints its reproduction in the worker and trips this flag.
     try std.testing.expect(!failed.load(.monotonic));
     // No defect ⇒ every input ran (a no-op body cannot satisfy this) and every
     // decoded value passed the round-trip fixpoint.
-    try std.testing.expect(ok + er == THREADS * ITERS_PER_THREAD);
+    try std.testing.expect(ok + er == thread_count * ITERS_PER_THREAD);
     try std.testing.expect(rt == ok);
 }

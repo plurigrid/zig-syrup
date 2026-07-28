@@ -74,18 +74,18 @@ const Rng = struct {
 const MAX_OPS = 32;
 
 const OpKind = enum(u4) {
-    compose,   // ergodic: neutral wiring
-    filter,    // minus: reduce/select
-    generate,  // plus: create/expand
-    fold,      // minus: collapse structure
-    unfold,    // plus: expand structure
-    map,       // ergodic: shape-preserving transform
-    zip,       // minus: merge two streams
-    split,     // plus: fork one stream
-    rotate,    // ergodic: reindex (golden angle)
-    mirror,    // minus: reflect (Möbius inversion)
-    amplify,   // plus: duplicate with variation
-    identity,  // ergodic: no-op (important for learning to do nothing)
+    compose, // ergodic: neutral wiring
+    filter, // minus: reduce/select
+    generate, // plus: create/expand
+    fold, // minus: collapse structure
+    unfold, // plus: expand structure
+    map, // ergodic: shape-preserving transform
+    zip, // minus: merge two streams
+    split, // plus: fork one stream
+    rotate, // ergodic: reindex (golden angle)
+    mirror, // minus: reflect (Möbius inversion)
+    amplify, // plus: duplicate with variation
+    identity, // ergodic: no-op (important for learning to do nothing)
 };
 
 fn opTrit(op: OpKind) Trit {
@@ -98,8 +98,8 @@ fn opTrit(op: OpKind) Trit {
 
 const Op = struct {
     kind: OpKind,
-    depth_target: u8,  // which curriculum depth this op targets
-    branch_slot: u8,   // which branch in the expression tree
+    depth_target: u8, // which curriculum depth this op targets
+    branch_slot: u8, // which branch in the expression tree
 };
 
 const Strategy = struct {
@@ -113,7 +113,7 @@ const Strategy = struct {
         s.generation = 0;
         for (0..s.len) |i| {
             s.ops[i] = .{
-                .kind = @enumFromInt(@as(u4, @intCast(rng.bounded(12)))),
+                .kind = @fromBackingInt(@intCast(@as(u4, @intCast(rng.bounded(12))))),
                 .depth_target = @intCast(rng.bounded(8)),
                 .branch_slot = @intCast(rng.bounded(4)),
             };
@@ -158,7 +158,7 @@ const Strategy = struct {
         var child = self.*;
         child.generation += 1;
         const idx = rng.bounded(self.len);
-        child.ops[idx].kind = @enumFromInt(@as(u4, @intCast(rng.bounded(12))));
+        child.ops[idx].kind = @fromBackingInt(@intCast(@as(u4, @intCast(rng.bounded(12)))));
         // With 30% chance, also mutate targeting
         if (rng.bounded(10) < 3) {
             child.ops[idx].depth_target = @intCast(rng.bounded(8));
@@ -183,7 +183,7 @@ const Strategy = struct {
     fn fingerprint(self: *const Strategy) u64 {
         var h: u64 = 0xcbf29ce484222325;
         for (0..self.len) |i| {
-            h ^= @intFromEnum(self.ops[i].kind);
+            h ^= @backingInt(self.ops[i].kind);
             h *%= 0x100000001b3;
             h ^= self.ops[i].depth_target;
             h *%= 0x100000001b3;
@@ -214,9 +214,9 @@ const ThreeMatch = struct {
     // is a SINGLE-DIGIT operation in base 3.
     // This is the algebraic reason color "behaves without carry always."
     fn carryFreeSum(self: ThreeMatch) i8 {
-        const raw = @as(i8, @intFromEnum(self.a)) +
-            @as(i8, @intFromEnum(self.b)) +
-            @as(i8, @intFromEnum(self.c));
+        const raw = @as(i8, @backingInt(self.a)) +
+            @as(i8, @backingInt(self.b)) +
+            @as(i8, @backingInt(self.c));
         // mod 3 in balanced form — NO CARRY PROPAGATION
         return @intCast(@mod(@as(i16, raw) + 3, 3));
     }
@@ -238,11 +238,11 @@ fn verifyAllTriads(seq: []const Trit) bool {
 // ============================================================================
 
 const RubricScore = struct {
-    conservation: f32,    // fraction of triads that are 3-MATCH conserved
-    completeness: f32,    // does total trit sum to ergodic? (1.0 = yes)
-    depth_coverage: f32,  // how many distinct depths are targeted
+    conservation: f32, // fraction of triads that are 3-MATCH conserved
+    completeness: f32, // does total trit sum to ergodic? (1.0 = yes)
+    depth_coverage: f32, // how many distinct depths are targeted
     branch_diversity: f32, // how many distinct branch slots used
-    trit_balance: f32,    // distribution evenness across {-1, 0, +1}
+    trit_balance: f32, // distribution evenness across {-1, 0, +1}
     memo_efficiency: f32, // fingerprint uniqueness (strategy isn't redundant)
     geodesic_length: f32, // shorter strategies score higher (Occam)
 
@@ -271,7 +271,7 @@ fn scoreStrategy(strat: *const Strategy) RubricScore {
     const completeness: f32 = if (strat.totalTrit() == .ergodic) 1.0 else 0.0;
 
     // Depth coverage
-    var depth_seen = [_]bool{false} ** 8;
+    var depth_seen: [8]bool = @splat(false);
     for (0..strat.len) |i| {
         depth_seen[strat.ops[i].depth_target] = true;
     }
@@ -282,7 +282,7 @@ fn scoreStrategy(strat: *const Strategy) RubricScore {
     const depth_coverage = @as(f32, @floatFromInt(depth_count)) / 8.0;
 
     // Branch diversity
-    var branch_seen = [_]bool{false} ** 4;
+    var branch_seen: [4]bool = @splat(false);
     for (0..strat.len) |i| {
         branch_seen[strat.ops[i].branch_slot] = true;
     }
@@ -295,7 +295,7 @@ fn scoreStrategy(strat: *const Strategy) RubricScore {
     // Trit balance: count {-1, 0, +1} and measure evenness
     var counts = [3]u32{ 0, 0, 0 };
     for (0..strat.len) |i| {
-        const t_idx: usize = @intCast(@as(u8, @bitCast(@as(i8, @intFromEnum(seq[i])))) % 3);
+        const t_idx: usize = @intCast(@as(u8, @bitCast(@as(i8, @backingInt(seq[i])))) % 3);
         counts[t_idx] += 1;
     }
     const expected = @as(f32, @floatFromInt(strat.len)) / 3.0;
@@ -330,12 +330,12 @@ fn scoreStrategy(strat: *const Strategy) RubricScore {
 
 const CurriculumLevel = struct {
     name: []const u8,
-    min_depth: u8,       // expression tree must be at least this deep
-    min_width: u8,       // at least this many branches
-    require_all_trits: bool,  // must use all 3 trit values
+    min_depth: u8, // expression tree must be at least this deep
+    min_width: u8, // at least this many branches
+    require_all_trits: bool, // must use all 3 trit values
     require_conservation: bool, // ALL triads must be conserved
-    min_ops: u8,         // minimum strategy length
-    max_ops: u8,         // maximum strategy length
+    min_ops: u8, // minimum strategy length
+    max_ops: u8, // maximum strategy length
 };
 
 const CURRICULUM = [_]CurriculumLevel{
@@ -371,7 +371,7 @@ fn passesLevel(strat: *const Strategy, level: *const CurriculumLevel) bool {
 
     // Depth/width check via strategy targeting metadata
     var max_depth: u8 = 0;
-    var branch_set = [_]bool{false} ** 4;
+    var branch_set: [4]bool = @splat(false);
     for (0..strat.len) |i| {
         max_depth = @max(max_depth, strat.ops[i].depth_target);
         branch_set[strat.ops[i].branch_slot] = true;
@@ -524,7 +524,7 @@ const MemoEntry = struct {
     occupied: bool = false,
 };
 
-var strategy_memo: [MEMO_CACHE_SIZE]MemoEntry = [_]MemoEntry{.{}} ** MEMO_CACHE_SIZE;
+var strategy_memo: [MEMO_CACHE_SIZE]MemoEntry = @splat(.{});
 
 fn memoScore(strat: *const Strategy) RubricScore {
     const fp = strat.fingerprint();
@@ -548,7 +548,7 @@ test "carry-free: GF(3) addition never carries" {
         for (trits) |b| {
             for (trits) |c| {
                 const m = ThreeMatch{ .a = a, .b = b, .c = c };
-                const raw = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b)) + @as(i8, @intFromEnum(c));
+                const raw = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b)) + @as(i8, @backingInt(c));
                 // Raw sum is in [-3, 3] — single digit in base 3. NO CARRY.
                 try std.testing.expect(raw >= -3 and raw <= 3);
                 // Carry-free sum matches conserved predicate
@@ -647,7 +647,7 @@ test "strategy crossover" {
 }
 
 test "memo cache hit" {
-    strategy_memo = [_]MemoEntry{.{}} ** MEMO_CACHE_SIZE;
+    strategy_memo = @splat(.{});
     var rng = Rng.init(1069);
     const s = Strategy.init(&rng);
     const score1 = memoScore(&s);
@@ -668,8 +668,9 @@ test "verifyAllTriads on perfect sequence" {
 
 test "op trit assignment covers all three" {
     var has = [3]bool{ false, false, false };
-    inline for (std.meta.fields(OpKind)) |f| {
-        const t = opTrit(@enumFromInt(f.value));
+    // 0.17-dev: std.meta.fields deprecated for enums; use fieldNames + @field.
+    inline for (comptime std.meta.fieldNames(OpKind)) |name| {
+        const t = opTrit(@field(OpKind, name));
         switch (t) {
             .minus => has[0] = true,
             .ergodic => has[1] = true,

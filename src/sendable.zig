@@ -62,7 +62,7 @@ test "ble packet" {
     const pkt = BlePacket{
         .seq = 1,
         .trit = -1,
-        .data = [_]u8{0} ** 16,
+        .data = @splat(0),
     };
     const bytes = pkt.toBytes();
     try std.testing.expect(bytes[0] == 0xA0);

@@ -287,7 +287,7 @@ pub const Bandit = struct {
 
     /// GF(3) trit for each arm: +1 best, 0 middle, -1 worst
     pub fn trits(self: *const Bandit) [MAX_ARMS]i2 {
-        var result: [MAX_ARMS]i2 = [_]i2{0} ** MAX_ARMS;
+        var result: [MAX_ARMS]i2 = @splat(0);
         if (self.n_arms < 2) return result;
 
         const b = self.bestArm();
@@ -412,12 +412,10 @@ pub const RLState = struct {
 
     pub fn init(n_states: u8) RLState {
         const rl = RLState{
-            .q_table = [_][MAX_ARMS]f64{[_]f64{0} ** MAX_ARMS} ** MAX_STATES,
+            .q_table = @splat(@as([MAX_ARMS]f64, @splat(0))),
             .current_state = 0,
             .n_states = n_states,
-            .transition_counts = [_][MAX_ARMS][MAX_STATES]u16{
-                [_][MAX_STATES]u16{[_]u16{0} ** MAX_STATES} ** MAX_ARMS,
-            } ** MAX_STATES,
+            .transition_counts = @splat(@as([MAX_ARMS][MAX_STATES]u16, @splat(@as([MAX_STATES]u16, @splat(0))))),
         };
         return rl;
     }

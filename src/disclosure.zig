@@ -241,7 +241,7 @@ pub fn disclosureAffordance(insurance: Trit) Affordance {
     // AND phase >= 0 (timing is right)
     for (0..27) |i| {
         const cell = PhaseCell.fromIndex(@intCast(i));
-        if (@intFromEnum(cell.amp) >= 0 and @intFromEnum(cell.phase) >= 0) {
+        if (@backingInt(cell.amp) >= 0 and @backingInt(cell.phase) >= 0) {
             a.phase_mask |= @as(u27, 1) << @intCast(i);
         }
     }
@@ -486,10 +486,10 @@ export fn disclosure_submit(
     hash_ptr: [*]const u8,
     insurance: i8,
 ) callconv(.c) i8 {
-    var content_hash: [32]u8 = .{0} ** 32;
+    var content_hash: [32]u8 = @splat(0);
     @memcpy(&content_hash, hash_ptr[0..32]);
 
-    const ins_trit: Trit = @enumFromInt(std.math.clamp(insurance, -1, 1));
+    const ins_trit: Trit = @fromBackingInt(@intCast(std.math.clamp(insurance, -1, 1)));
 
     // Default channels: reveal shifts amplitude up, withhold is identity
     const reveal = Channel{
@@ -502,15 +502,15 @@ export fn disclosure_submit(
     };
 
     const regret = proto.submit(content_hash, reveal, Channel.IDENTITY, ins_trit);
-    return @intFromEnum(regret);
+    return @backingInt(regret);
 }
 
 /// Execute one protocol cycle. Returns output phase cell index (0..26).
 export fn disclosure_execute(proto: *DisclosureProtocol, freq: i8, phase: i8, amp: i8) callconv(.c) u8 {
     const measurement = PhaseCell{
-        .freq = @enumFromInt(std.math.clamp(freq, -1, 1)),
-        .phase = @enumFromInt(std.math.clamp(phase, -1, 1)),
-        .amp = @enumFromInt(std.math.clamp(amp, -1, 1)),
+        .freq = @fromBackingInt(@intCast(std.math.clamp(freq, -1, 1))),
+        .phase = @fromBackingInt(@intCast(std.math.clamp(phase, -1, 1))),
+        .amp = @fromBackingInt(@intCast(std.math.clamp(amp, -1, 1))),
     };
     return proto.execute(measurement).toIndex();
 }
@@ -536,7 +536,7 @@ test "disclosure effective channel depends on insurance" {
     const withhold = Channel.PERMUTE;
 
     const insured = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = reveal,
         .withhold_channel = withhold,
         .regret = .zero,
@@ -545,7 +545,7 @@ test "disclosure effective channel depends on insurance" {
     };
 
     const uninsured = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = reveal,
         .withhold_channel = withhold,
         .regret = .zero,
@@ -568,7 +568,7 @@ test "disclosure regret computation" {
     const withhold = Channel.IDENTITY;
 
     const d = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = reveal,
         .withhold_channel = withhold,
         .regret = .zero,
@@ -587,7 +587,7 @@ test "disclosure regret computation" {
 
 test "disclosure regret is zero when channels agree" {
     const d = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = Channel.IDENTITY,
         .withhold_channel = Channel.IDENTITY,
         .regret = .zero,
@@ -601,7 +601,7 @@ test "disclosure regret is zero when channels agree" {
 
 test "disclosure safety check" {
     const d = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = Channel.PERMUTE,
         .withhold_channel = Channel.IDENTITY,
         .regret = .zero,
@@ -626,7 +626,7 @@ test "regret pool accumulates and externalizes" {
     var pool = RegretPool.init();
 
     const d = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = Channel.CNOT_FREQ_PHASE,
         .withhold_channel = Channel.IDENTITY,
         .regret = .zero,
@@ -700,7 +700,7 @@ test "full protocol lifecycle" {
     var proto = DisclosureProtocol.init();
 
     // 1. Submit a disclosure with insurance
-    const hash = [_]u8{0x42} ** 32;
+    const hash: [32]u8 = @splat(0x42);
     const regret = proto.submit(
         hash,
         Channel.CNOT_FREQ_PHASE,
@@ -767,7 +767,7 @@ test "regret externalization: withholding costs more than disclosing" {
     const withhold = Channel.IDENTITY;
 
     const insured_d = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = reveal,
         .withhold_channel = withhold,
         .regret = .zero,
@@ -776,7 +776,7 @@ test "regret externalization: withholding costs more than disclosing" {
     };
 
     const uninsured_d = Disclosure{
-        .content_hash = .{0} ** 32,
+        .content_hash = @splat(0),
         .reveal_channel = reveal,
         .withhold_channel = withhold,
         .regret = .zero,

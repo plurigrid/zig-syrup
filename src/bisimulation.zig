@@ -36,7 +36,7 @@ pub const Trit = enum(i8) {
     plus = 1,
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .zero,
             1 => .plus,
@@ -902,14 +902,14 @@ test "oracle non-equivalence across protocols" {
 
 test "did:key pubkey reflexivity via oracle" {
     const allocator = std.testing.allocator;
-    const pubkey = [_]u8{0x42} ** 32;
+    const pubkey: [32]u8 = @splat(0x42);
     const claim = IdentityClaim{ .did_key_pubkey = &pubkey };
     try std.testing.expect(try verifyReflexivity(allocator, claim));
 }
 
 test "did:key pubkey to LTS produces 32 states" {
     const allocator = std.testing.allocator;
-    const pubkey = [_]u8{0x69} ** 32;
+    const pubkey: [32]u8 = @splat(0x69);
     const lts = try localizeClaim(allocator, .{ .did_key_pubkey = &pubkey });
     defer lts.deinit(allocator);
     try std.testing.expectEqual(@as(usize, 32), lts.states.len);
@@ -917,8 +917,8 @@ test "did:key pubkey to LTS produces 32 states" {
 
 test "different did:key pubkeys are non-equivalent" {
     const allocator = std.testing.allocator;
-    const pk_a = [_]u8{0x00} ** 32;
-    const pk_b = [_]u8{0x01} ** 32;
+    const pk_a: [32]u8 = @splat(0x00);
+    const pk_b: [32]u8 = @splat(0x01);
     const result = try oracle(
         allocator,
         .{ .did_key_pubkey = &pk_a },

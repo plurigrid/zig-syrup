@@ -104,7 +104,7 @@ pub const BrainAction = struct {
 
         try entries.append(allocator, .{
             .key = syrup.Value.fromSymbol("role"),
-            .value = syrup.Value.fromInteger(@intFromEnum(self.role)),
+            .value = syrup.Value.fromInteger(@backingInt(self.role)),
         });
 
         try entries.append(allocator, .{
@@ -139,7 +139,7 @@ pub const BrainAction = struct {
         // Generator (+1) -> 2
         // Coordinator (0) -> 0
         // Validator (-1) -> 1
-        const stake_type = @intFromEnum(self.role);
+        const stake_type = @backingInt(self.role);
 
         // Amount scales with confidence (e.g. 100 * confidence)
         const amount = @as(u64, @intFromFloat(self.confidence * 100.0));
@@ -243,8 +243,8 @@ test "process state generates action" {
         .relaxation_level = 0.1,
         .engagement_level = 0.8,
         .fatigue_level = 0.0,
-        .band_powers = .{0} ** 5,
-        .signal_quality = .{0} ** 16,
+        .band_powers = @splat(0),
+        .signal_quality = @splat(0),
     };
 
     const action = try bridge.processState(focus_state);
@@ -259,8 +259,8 @@ test "process state generates action" {
         .relaxation_level = 0.2,
         .engagement_level = 0.1,
         .fatigue_level = 0.95,
-        .band_powers = .{0} ** 5,
-        .signal_quality = .{0} ** 16,
+        .band_powers = @splat(0),
+        .signal_quality = @splat(0),
     };
 
     const action2 = try bridge.processState(tired_state);
@@ -297,8 +297,8 @@ test "neurofeedback gates action" {
         .relaxation_level = 0.05,
         .engagement_level = 0.9,
         .fatigue_level = 0.0,
-        .band_powers = .{0} ** 5,
-        .signal_quality = .{0} ** 16,
+        .band_powers = @splat(0),
+        .signal_quality = @splat(0),
     };
 
     const action = try bridge.processState(focus_state);
@@ -312,8 +312,8 @@ test "neurofeedback gates action" {
         .relaxation_level = 0.3,
         .engagement_level = 0.4,
         .fatigue_level = 0.1,
-        .band_powers = .{0} ** 5,
-        .signal_quality = .{0} ** 16,
+        .band_powers = @splat(0),
+        .signal_quality = @splat(0),
     };
 
     const action2 = try bridge.processState(distracted_state);

@@ -63,7 +63,7 @@ pub const Trit = enum(i8) {
     plus = 1, // Generator: creation, production, minting
 
     pub fn add(a: Trit, b: Trit) Trit {
-        const sum = @as(i8, @intFromEnum(a)) + @as(i8, @intFromEnum(b));
+        const sum = @as(i8, @backingInt(a)) + @as(i8, @backingInt(b));
         return switch (@mod(sum + 3, 3)) {
             0 => .ergodic,
             1 => .plus,
@@ -196,7 +196,7 @@ pub const MoveType = struct {
     inner_type: ?*const MoveType = null, // For vector/reference
 
     pub fn is_primitive(self: MoveType) bool {
-        return @intFromEnum(self.tag) <= @intFromEnum(TypeTag.address_type);
+        return @backingInt(self.tag) <= @backingInt(TypeTag.address_type);
     }
 
     pub fn is_resource(self: MoveType) bool {
@@ -370,7 +370,7 @@ pub const Opcode = enum(u8) {
 /// Gas cost lookup — O(1) via comptime-built table
 pub fn gas_cost(op: Opcode) u16 {
     inline for (opcode_entries) |entry| {
-        if (@intFromEnum(op) == entry.value) return entry.gas_cost;
+        if (@backingInt(op) == entry.value) return entry.gas_cost;
     }
     return 100; // Unknown opcode: expensive
 }
@@ -531,8 +531,8 @@ pub const GlobalStorage = struct {
 pub const Frame = struct {
     function_index: u16,
     pc: u32 = 0, // Program counter
-    locals: [MAX_LOCALS]?Value = [_]?Value{null} ** MAX_LOCALS,
-    local_moved: [MAX_LOCALS]bool = [_]bool{false} ** MAX_LOCALS, // Track linear consumption
+    locals: [MAX_LOCALS]?Value = @splat(null),
+    local_moved: [MAX_LOCALS]bool = @splat(false), // Track linear consumption
 
     pub fn get_local(self: *const Frame, idx: u8) !Value {
         const val = self.locals[idx] orelse return error.UninitializedLocal;
@@ -578,7 +578,7 @@ pub const Function = struct {
 
 pub const Module = struct {
     name: []const u8,
-    address: [32]u8 = [_]u8{0} ** 32,
+    address: [32]u8 = @splat(0),
     functions: []const Function,
     struct_defs: []const StructDef,
 
@@ -883,7 +883,7 @@ pub const Vm = struct {
                     const s = try self.pop();
                     if (s != .u64_val or index != .u64_val) return error.TypeMismatch;
                     const t = tritFromU64(color_at(s.u64_val, index.u64_val));
-                    try self.push(.{ .u64_val = @as(u64, @intCast(@as(u8, @intCast(@as(i8, @intFromEnum(t)) + 1)))) });
+                    try self.push(.{ .u64_val = @as(u64, @intCast(@as(u8, @intCast(@as(i8, @backingInt(t)) + 1)))) });
                 },
                 .trit_add => {
                     const b = try self.pop();
@@ -965,7 +965,7 @@ pub fn verify_function(func: Function, struct_defs: []const StructDef) VerifyErr
 
     // Phase 3: Resource safety — verify linear resources consumed
     // Track which locals hold linear values and ensure they're all moved by ret
-    var linear_locals = [_]bool{false} ** MAX_LOCALS;
+    var linear_locals: [MAX_LOCALS]bool = @splat(false);
     for (func.instructions) |inst| {
         switch (inst.opcode) {
             .st_loc => {
@@ -1173,7 +1173,7 @@ test "vm spi determinism" {
 test "global storage move_to and move_from" {
     var storage = GlobalStorage{};
     const key = StorageKey{
-        .address = [_]u8{0x42} ** 32,
+        .address = @splat(0x42),
         .struct_index = 0,
     };
     const val = Value{ .u64_val = 1069 };

@@ -175,7 +175,7 @@ pub const EventLog = struct {
             .events = std.ArrayList(Event).init(allocator),
             .hash_index = std.HashMap(Hash, usize, HashContext, std.hash_map.default_max_load_percentage).init(allocator),
             .seq_index = std.HashMap(u64, usize, std.hash_map.default_context, std.hash_map.default_max_load_percentage).init(allocator),
-            .last_hash = [_]u8{0} ** 32,
+            .last_hash = @splat(0),
             .next_seq = 1,
             .mutex = .{},
         };
@@ -195,7 +195,7 @@ pub const EventLog = struct {
             .events = std.ArrayList(Event).empty,
             .hash_index = std.HashMap(Hash, usize, HashContext, std.hash_map.default_max_load_percentage).init(allocator),
             .seq_index = std.HashMap(u64, usize, std.hash_map.AutoContext(u64), std.hash_map.default_max_load_percentage).init(allocator),
-            .last_hash = [_]u8{0} ** 32,
+            .last_hash = @splat(0),
             .next_seq = 1,
             .mutex = .{},
         };
@@ -399,7 +399,7 @@ pub const EventLog = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        var prev_hash = [_]u8{0} ** 32;
+        var prev_hash: [32]u8 = @splat(0);
 
         for (self.events.items) |event| {
             // Verify hash chain
@@ -559,7 +559,7 @@ test "event hash verification" {
         .timestamp = 1699123456789,
         .seq = 1,
         .hash = undefined,
-        .parent = [_]u8{0} ** 32,
+        .parent = @splat(0),
         .world_uri = "a://test",
         .type = .WorldCreated,
         .payload = "{}",

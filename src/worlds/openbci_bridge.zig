@@ -291,8 +291,8 @@ pub const OpenBCIBridge = struct {
                 .relaxation_level = 0.5,
                 .engagement_level = 0.5,
                 .fatigue_level = 0.0,
-                .band_powers = .{0} ** 5,
-                .signal_quality = .{0} ** EEGChannel.COUNT,
+                .band_powers = @splat(0),
+                .signal_quality = @splat(0),
             },
             .active = false,
             .last_update = 0,
@@ -342,12 +342,12 @@ pub const OpenBCIBridge = struct {
         _ = self;
 
         // Simplified - would perform actual FFT and band power calculation
-        var band_powers = [_]f32{0} ** 5;
-        var signal_quality = [_]f32{0.5} ** EEGChannel.COUNT;
+        var band_powers: [5]f32 = @splat(0);
+        var signal_quality: [EEGChannel.COUNT]f32 = @splat(0.5);
 
         // Placeholder calculations
         for (channels) |ch| {
-            const idx = @intFromEnum(ch);
+            const idx = @backingInt(ch);
             if (idx < EEGChannel.COUNT) {
                 signal_quality[idx] = 0.8;
             }
@@ -407,8 +407,8 @@ pub const OpenBCIBridge = struct {
             .relaxation_level = 0,
             .engagement_level = 0,
             .fatigue_level = 0,
-            .band_powers = .{0} ** 5,
-            .signal_quality = .{0} ** EEGChannel.COUNT,
+            .band_powers = @splat(0),
+            .signal_quality = @splat(0),
         };
 
         for (self.sample_buffer.items) |sample| {
@@ -446,7 +446,7 @@ pub const OpenBCIBridge = struct {
     pub fn createSimulatedSample(self: *Self, focus_level: f32) !EEGSample {
         _ = self;
 
-        var channels = [_]f32{0} ** EEGChannel.COUNT;
+        var channels: [EEGChannel.COUNT]f32 = @splat(0);
 
         // Simulate channels based on focus level
         for (0..EEGChannel.CYTON_COUNT) |i| {
@@ -515,7 +515,7 @@ pub const OpenBCIParser = struct {
         // Standard OpenBCI packet: 0xA0 + sample + 8 channels (3 bytes each) + 3 accel
         if (data[0] != HEADER_BYTE) return BridgeError.InvalidEEGData;
 
-        var channels = [_]f32{0} ** EEGChannel.COUNT;
+        var channels: [EEGChannel.COUNT]f32 = @splat(0);
 
         // Parse 8 channels
         for (0..8) |i| {
@@ -529,7 +529,7 @@ pub const OpenBCIParser = struct {
 
         // Parse accelerometer (optional, last 6 bytes before stop byte)
         const accel: ?[3]f32 = if (data.len >= 32) blk: {
-            var a = [_]f32{0} ** 3;
+            var a: [3]f32 = @splat(0);
             for (0..3) |i| {
                 const offset = 26 + i * 2;
                 const raw: i16 = @as(i16, data[offset]) << 8 | data[offset + 1];
@@ -560,7 +560,7 @@ test "brain state serialization" {
         .engagement_level = 0.80,
         .fatigue_level = 0.20,
         .band_powers = .{ 0.1, 0.2, 0.3, 0.4, 0.0 },
-        .signal_quality = .{0.9} ** EEGChannel.COUNT,
+        .signal_quality = @splat(0.9),
     };
 
     const syrup_val = try state.toSyrup(allocator);
@@ -627,8 +627,8 @@ test "neurofeedback reward" {
         .relaxation_level = 0.6,
         .engagement_level = 0.8,
         .fatigue_level = 0.0,
-        .band_powers = .{0} ** 5,
-        .signal_quality = .{0} ** EEGChannel.COUNT,
+        .band_powers = @splat(0),
+        .signal_quality = @splat(0),
     };
 
     const reward = nf.calculateReward(state);
@@ -638,7 +638,7 @@ test "neurofeedback reward" {
 test "glimpse-stamped EEG sample" {
     const sample = EEGSample{
         .timestamp = 1000,
-        .channels = .{0} ** EEGChannel.COUNT,
+        .channels = @splat(0),
         .accel = null,
         .sample_num = 0,
         .glimpse_tick = 564_480, // Second sample at 250 Hz
@@ -648,11 +648,11 @@ test "glimpse-stamped EEG sample" {
 
 test "channel trit classification" {
     // Rail: saturated channel
-    try testing.expectEqual(@as(i2, -1), @intFromEnum(ChannelTrit.rail));
+    try testing.expectEqual(@as(i2, -1), @backingInt(ChannelTrit.rail));
     // Clean: normal
-    try testing.expectEqual(@as(i2, 0), @intFromEnum(ChannelTrit.clean));
+    try testing.expectEqual(@as(i2, 0), @backingInt(ChannelTrit.clean));
     // Flicker: high variance
-    try testing.expectEqual(@as(i2, 1), @intFromEnum(ChannelTrit.flicker));
+    try testing.expectEqual(@as(i2, 1), @backingInt(ChannelTrit.flicker));
 }
 
 test "epoch witness substrate agreement" {
@@ -670,7 +670,7 @@ test "epoch witness substrate agreement" {
     // When both agree
     const w2 = EpochWitness{
         .epoch_start_glimpse = 141_120_000,
-        .channel_trits = .{.clean} ** 8,
+        .channel_trits = @splat(.clean),
         .trit_sum = 0,
         .tree_walk_answer = true,
         .inet_answer = true,

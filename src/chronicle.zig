@@ -77,14 +77,14 @@ pub const Event = struct {
 
 /// Append-only capability event log with running BLAKE3 chain hash.
 pub const Chronicle = struct {
-    events: std.ArrayList(Event),
+    events: std.ArrayListUnmanaged(Event) = .empty,
     /// Hash of the previous event (or zero for genesis). Updated on every
     /// `record`. Verifiers re-compute and compare to detect tampering.
     head_hash: [HASH_LEN]u8 = std.mem.zeroes([HASH_LEN]u8),
     next_index: u64 = 0,
 
     pub fn init() Chronicle {
-        return .{ .events = .{} };
+        return .{ .events = .empty };
     }
 
     pub fn deinit(self: *Chronicle, allocator: Allocator) void {
@@ -236,7 +236,7 @@ fn computeHash(
     hasher.update(&buf8);
     std.mem.writeInt(i64, &buf8, now_ms, .big);
     hasher.update(&buf8);
-    hasher.update(&[_]u8{@intFromEnum(kind)});
+    hasher.update(&[_]u8{@backingInt(kind)});
     var buf4: [4]u8 = undefined;
     std.mem.writeInt(u32, &buf4, vat_id, .big);
     hasher.update(&buf4);

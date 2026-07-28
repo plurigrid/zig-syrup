@@ -30,7 +30,7 @@ const erc = @import("erc");
 
 test "integration: DSI-24 parse and scale" {
     // Construct a synthetic 84-byte DSI-24 packet
-    var packet: [dsi24.DSI24_PACKET_LEN]u8 = [_]u8{0} ** dsi24.DSI24_PACKET_LEN;
+    var packet: [dsi24.DSI24_PACKET_LEN]u8 = @splat(0);
     packet[0] = dsi24.DSI24_PACKET_TYPE_EEG; // packet type
 
     // Set sample counter = 1 (big-endian u32 at bytes 1-4)
@@ -264,12 +264,12 @@ test "integration: GF(3) conservation across pipeline" {
 
 test "integration: Trit types compatible across modules" {
     // All modules define Trit with same semantics (-1, 0, +1)
-    try std.testing.expectEqual(@as(i8, 1), @intFromEnum(fnirs.Trit.plus));
-    try std.testing.expectEqual(@as(i8, 1), @intFromEnum(eye.Trit.plus));
-    try std.testing.expectEqual(@as(i8, 1), @intFromEnum(bci.Trit.plus));
+    try std.testing.expectEqual(@as(i8, 1), @backingInt(fnirs.Trit.plus));
+    try std.testing.expectEqual(@as(i8, 1), @backingInt(eye.Trit.plus));
+    try std.testing.expectEqual(@as(i8, 1), @backingInt(bci.Trit.plus));
 
     // GF(3) addition across module trits: fnirs(+1) + eye(-1) + bci(0) = 0
-    const cross_sum = @intFromEnum(fnirs.Trit.plus) + @intFromEnum(eye.Trit.minus) + @intFromEnum(bci.Trit.zero);
+    const cross_sum = @backingInt(fnirs.Trit.plus) + @backingInt(eye.Trit.minus) + @backingInt(bci.Trit.zero);
     try std.testing.expectEqual(@as(i8, 0), @as(i8, @intCast(@mod(cross_sum + 3, 3))));
 }
 
@@ -505,9 +505,9 @@ test "integration: ERC 8-channel ensemble to propagator cell" {
     try std.testing.expectEqual(@as(?f32, 0.0), erc_cell.get_content()); // zero trit
 
     // GF(3) balance: erc(0) + fnirs(+1) + eye(-1) = 0
-    const erc_trit: i8 = @intFromEnum(result.trit);
-    const fnirs_trit: i8 = @intFromEnum(fnirs.Trit.plus);
-    const eye_trit_val: i8 = @intFromEnum(eye.Trit.minus);
+    const erc_trit: i8 = @backingInt(result.trit);
+    const fnirs_trit: i8 = @backingInt(fnirs.Trit.plus);
+    const eye_trit_val: i8 = @backingInt(eye.Trit.minus);
     const gf3_sum = erc_trit + fnirs_trit + eye_trit_val;
     try std.testing.expectEqual(@as(i8, 0), @as(i8, @intCast(@mod(gf3_sum + 3, 3))));
 }

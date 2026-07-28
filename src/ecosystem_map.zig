@@ -146,11 +146,11 @@ pub const mappings = [_]EcosystemMapping{
 
 /// Find ecosystems that use a given capability domain
 pub fn findByDomain(domain: CapDomain) [6]bool {
-    var result = [_]bool{false} ** 6;
+    var result: [6]bool = @splat(false);
     for (mappings) |m| {
         for (m.primary_domains) |d| {
             if (d == domain) {
-                result[@intFromEnum(m.ecosystem)] = true;
+                result[@backingInt(m.ecosystem)] = true;
                 break;
             }
         }
@@ -194,8 +194,8 @@ test "verify domain appears in multiple ecosystems" {
 
 test "generate domain appears in CRS and fuzz" {
     const hits = findByDomain(.generate);
-    try std.testing.expect(hits[@intFromEnum(Ecosystem.aixcc_crs)]);
-    try std.testing.expect(hits[@intFromEnum(Ecosystem.fuzz_harness)]);
+    try std.testing.expect(hits[@backingInt(Ecosystem.aixcc_crs)]);
+    try std.testing.expect(hits[@backingInt(Ecosystem.fuzz_harness)]);
 }
 
 test "co-occurrence of verify and generate" {

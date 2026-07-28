@@ -248,10 +248,10 @@ pub const OpenGame = struct {
 
     pub fn init(name: []const u8, n_strategies: u32, seed: u64) OpenGame {
         var game: OpenGame = .{
-            .name = [_]u8{0} ** 32,
+            .name = @splat(0),
             .name_len = @intCast(@min(name.len, 32)),
             .n_strategies = n_strategies,
-            .payoffs = [_]f64{0.0} ** 256,
+            .payoffs = @splat(0.0),
             .fingerprint = 0,
         };
         @memcpy(game.name[0..game.name_len], name[0..game.name_len]);
@@ -518,10 +518,10 @@ test "markov blanket verification" {
 test "open game nash equilibria" {
     // Prisoner's dilemma style
     var game: OpenGame = .{
-        .name = [_]u8{0} ** 32,
+        .name = @splat(0),
         .name_len = 2,
         .n_strategies = 2,
-        .payoffs = [_]f64{0.0} ** 256,
+        .payoffs = @splat(0.0),
         .fingerprint = 0,
     };
     game.name[0] = 'P';
