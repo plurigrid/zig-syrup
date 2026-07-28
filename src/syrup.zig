@@ -109,6 +109,104 @@ const FixedBufWriter = struct {
 // ============================================================================
 
 /// BigInt for arbitrary precision integers
+/// Largest integer magnitude accepted from the wire or written to it, in bytes.
+///
+/// The format puts no upper bound on integers, but an unbounded decimal run is
+/// an unbounded amount of work for the receiver, so a limit has to exist
+/// somewhere. 1024 bytes is 8192 bits — orders of magnitude past anything OCapN
+/// carries as an integer rather than a bytestring — and keeps the O(n^2)
+/// decimal conversions well under a millisecond.
+pub const MAX_BIGINT_BYTES: usize = 1024;
+
+/// Decimal digits in the largest permitted magnitude: 1024 * log10(256), + 1.
+const MAX_BIGINT_DIGITS: usize = 2467;
+
+/// Write a magnitude larger than u128 in the standard `<digits><sign>` form.
+///
+/// `noinline` on purpose: the scratch buffers are ~3.5 KiB, and Zig sizes a
+/// frame for the widest branch of a function whether or not that branch runs.
+/// Inlined into `encode` — which recurses once per nesting level, up to
+/// `Parser.MAX_DEPTH` — that would add megabytes of stack to every deep value.
+/// Kept out of line, the cost is one leaf frame.
+noinline fn writeBigintDecimal(b: BigInt, writer: anytype) !void {
+    if (b.magnitude.len > MAX_BIGINT_BYTES) return error.Overflow;
+
+    // Little-endian working copy; long division rewrites it in place.
+    var work: [MAX_BIGINT_BYTES]u8 = undefined;
+    var len: usize = 0;
+    {
+        var i = b.magnitude.len;
+        while (i > 0) {
+            i -= 1;
+            work[len] = b.magnitude[i];
+            len += 1;
+        }
+    }
+    while (len > 0 and work[len - 1] == 0) len -= 1;
+
+    if (len == 0) {
+        // Canonical zero is `0+` — a bigint zero must not become `0-`.
+        try writer.writeAll("0+");
+        return;
+    }
+
+    // Repeated division by 10 yields digits least-significant first.
+    var digits: [MAX_BIGINT_DIGITS]u8 = undefined;
+    var n: usize = 0;
+    while (len > 0) {
+        var rem: u16 = 0;
+        var i = len;
+        while (i > 0) {
+            i -= 1;
+            const cur: u16 = (rem << 8) | work[i];
+            work[i] = @intCast(cur / 10);
+            rem = cur % 10;
+        }
+        digits[n] = '0' + @as(u8, @intCast(rem));
+        n += 1;
+        while (len > 0 and work[len - 1] == 0) len -= 1;
+    }
+
+    while (n > 0) {
+        n -= 1;
+        try writer.writeByte(digits[n]);
+    }
+    try writer.writeByte(if (b.negative) '-' else '+');
+}
+
+/// Build a magnitude from a decimal digit run too large for u128.
+///
+/// `noinline` for the same reason as `writeBigintDecimal`; this one is reached
+/// from `parse`, which recurses per nesting level.
+noinline fn bigintMagnitudeFromDecimal(
+    digits: []const u8,
+    allocator: Allocator,
+) error{ OutOfMemory, Overflow }![]u8 {
+    var work: [MAX_BIGINT_BYTES]u8 = undefined; // little-endian
+    var len: usize = 0;
+
+    for (digits) |c| {
+        var carry: u16 = c - '0';
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const v: u16 = @as(u16, work[i]) * 10 + carry;
+            work[i] = @truncate(v);
+            carry = v >> 8;
+        }
+        while (carry != 0) {
+            if (len >= MAX_BIGINT_BYTES) return error.Overflow;
+            work[len] = @truncate(carry);
+            carry >>= 8;
+            len += 1;
+        }
+    }
+
+    const mag = try allocator.alloc(u8, len);
+    var i: usize = 0;
+    while (i < len) : (i += 1) mag[i] = work[len - 1 - i]; // to big-endian
+    return mag;
+}
+
 pub const BigInt = struct {
     const Self = @This();
 
@@ -677,10 +775,11 @@ pub const Value = union(enum) {
                     }
                     try writer.print("{d}{c}", .{ value, if (b.negative) @as(u8, '-') else @as(u8, '+') });
                 } else {
-                    try writer.writeByte('B');
-                    try writer.print("{d}:", .{b.magnitude.len + 1});
-                    try writer.writeByte(if (b.negative) '-' else '+');
-                    try writer.writeAll(b.magnitude);
+                    // Standard `<digits>+` form, never the `B<len>:` extension.
+                    // No other Syrup implementation implements `B`, so anything
+                    // written in it is unreadable everywhere else — this decoder
+                    // still ACCEPTS it, for data already written that way.
+                    try writeBigintDecimal(b, writer);
                 }
             },
             .float32 => |f| {
@@ -829,7 +928,12 @@ pub const Value = union(enum) {
             }
             return digitCount(value) + 1;
         }
-        return 1 + lengthPrefixSize(b.magnitude.len + 1) + 1 + b.magnitude.len;
+        // Written as decimal, so the size is the decimal digit count plus a
+        // sign. Computing it exactly would mean running the whole long
+        // division twice, so this is an upper bound: log10(256) < 2.41, and
+        // 241/100 keeps the arithmetic integral. Callers size buffers from
+        // this, and over-reserving is safe where under-reserving is not.
+        return (b.magnitude.len * 241) / 100 + 2;
     }
 
     fn lengthPrefixSize(len: usize) usize {
@@ -1270,15 +1374,26 @@ pub const Parser = struct {
         // encoder could emit decimal its own decoder could not read).
         var num: u128 = 0;
         var digit_count: usize = 0;
+        // The format puts no upper bound on integers, and 7 of the 9 live
+        // implementations emit arbitrary precision in this plain decimal form.
+        // So exceeding u128 is NOT an error here: the digit run keeps being
+        // consumed and the '+'/'-' branches below promote it to a bigint. Only
+        // a LENGTH prefix (':' '"' '\'') still has to fit, and those branches
+        // reject `too_big` themselves.
+        var too_big = false;
         while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
             const digit: u128 = self.input[self.pos] - '0';
-            // Check for overflow
-            if (num > (std.math.maxInt(u128) - digit) / 10) {
-                return error.Overflow;
+            if (!too_big) {
+                if (num > (std.math.maxInt(u128) - digit) / 10) {
+                    too_big = true;
+                } else {
+                    num = num * 10 + digit;
+                }
             }
-            num = num * 10 + digit;
             self.pos += 1;
             digit_count += 1;
+            // Bound the work a peer can ask for; see MAX_BIGINT_BYTES.
+            if (digit_count > MAX_BIGINT_DIGITS) return error.Overflow;
         }
 
         if (self.pos >= self.input.len) {
@@ -1302,14 +1417,24 @@ pub const Parser = struct {
             else => {},
         }
 
+        const digits = self.input[digit_start .. digit_start + digit_count];
+
         switch (marker) {
             '+' => {
+                if (too_big) {
+                    const mag = try bigintMagnitudeFromDecimal(digits, self.allocator);
+                    return Value{ .bigint = .{ .magnitude = mag, .negative = false } };
+                }
                 if (num > @as(u128, std.math.maxInt(i64))) {
                     return self.bigintFromU128(num, false);
                 }
                 return Value{ .integer = @intCast(num) };
             },
             '-' => {
+                if (too_big) {
+                    const mag = try bigintMagnitudeFromDecimal(digits, self.allocator);
+                    return Value{ .bigint = .{ .magnitude = mag, .negative = true } };
+                }
                 // Negative zero is non-canonical; zero is only ever `0+`.
                 if (num == 0) return error.NonCanonical;
                 if (num <= @as(u128, std.math.maxInt(i64))) {
@@ -1325,7 +1450,8 @@ pub const Parser = struct {
             ':' => {
                 // Guard the u128→usize cast: any length exceeding the remaining
                 // input is unsatisfiable, and this keeps @intCast in range.
-                if (num > self.input.len) return error.UnexpectedEOF;
+                // A run too large for u128 is unsatisfiable for the same reason.
+                if (too_big or num > self.input.len) return error.UnexpectedEOF;
                 const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
@@ -1337,7 +1463,8 @@ pub const Parser = struct {
             '"' => {
                 // Guard the u128→usize cast: any length exceeding the remaining
                 // input is unsatisfiable, and this keeps @intCast in range.
-                if (num > self.input.len) return error.UnexpectedEOF;
+                // A run too large for u128 is unsatisfiable for the same reason.
+                if (too_big or num > self.input.len) return error.UnexpectedEOF;
                 const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
@@ -1349,7 +1476,8 @@ pub const Parser = struct {
             '\'' => {
                 // Guard the u128→usize cast: any length exceeding the remaining
                 // input is unsatisfiable, and this keeps @intCast in range.
-                if (num > self.input.len) return error.UnexpectedEOF;
+                // A run too large for u128 is unsatisfiable for the same reason.
+                if (too_big or num > self.input.len) return error.UnexpectedEOF;
                 const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
@@ -3278,6 +3406,59 @@ test "parser: nesting depth is bounded against hostile input" {
 /// keep the caller's slice), so constructing this in a helper and returning it
 /// yields dangling stack pointers.
 const canonical_wire = "<12\"skill:invoke[7'gay-mcp7'palette{1\"n4+4\"seed1069+}0+]>";
+
+test "interop: arbitrary-precision integers round-trip in the standard form" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // The format puts no upper bound on integers and 7 of the 9 live
+    // implementations emit them in this plain decimal form. Everything here is
+    // past i128, i.e. exactly what used to come back as error.Overflow.
+    const cases = [_][]const u8{
+        "340282366920938463463374607431768211456+", // 2^128
+        "340282366920938463463374607431768211456-",
+        "1606938044258990275541962092341162602522202993782792835301376+", // 2^200
+        "115792089237316195423570985008687907853269984665640564039457584007913129639936+", // 2^256
+    };
+
+    for (cases) |wire| {
+        const v = try decode(wire, a);
+        try std.testing.expect(v == .bigint);
+        // Re-encoded in the SAME form it arrived in — not the `B<len>:`
+        // extension, which no other implementation can read.
+        var buf: [512]u8 = undefined;
+        try std.testing.expectEqualSlices(u8, wire, try v.encodeBuf(&buf));
+    }
+
+    // The `B<len>:` extension is still accepted, for data already written with
+    // it, but is never produced: this re-encodes to the standard form.
+    // 2^128 is 0x01 followed by 16 zero bytes, so the magnitude is 17 bytes and
+    // the length field counts the sign byte too.
+    var b_form: [5 + 17]u8 = undefined;
+    @memcpy(b_form[0..5], "B18:+");
+    @memset(b_form[5..], 0);
+    b_form[5] = 1;
+    const from_b = try decode(&b_form, a);
+    var buf2: [512]u8 = undefined;
+    try std.testing.expectEqualSlices(
+        u8,
+        "340282366920938463463374607431768211456+",
+        try from_b.encodeBuf(&buf2),
+    );
+
+    // Unbounded input is not unbounded work.
+    var huge: [MAX_BIGINT_DIGITS + 2]u8 = undefined;
+    @memset(huge[0 .. MAX_BIGINT_DIGITS + 1], '9');
+    huge[MAX_BIGINT_DIGITS + 1] = '+';
+    try std.testing.expectError(error.Overflow, decode(&huge, a));
+
+    // A length prefix still has to fit, and is not promoted to a bigint.
+    try std.testing.expectError(
+        error.UnexpectedEOF,
+        decode("340282366920938463463374607431768211456\"x", a),
+    );
+}
 
 test "canonical: the encoder never emits what its own strict decoder rejects" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
