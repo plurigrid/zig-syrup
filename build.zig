@@ -464,6 +464,25 @@ pub fn build(b: *std.Build) void {
     const parity_step = b.step("parity", "Run the parity check");
     parity_step.dependOn(&run_parity.step);
 
+    // Differential strictness check against an independent implementation.
+    // `parity` proves one hand-written vector; this feeds a whole corpus that
+    // ocapn-test-suite's contrib/syrup.py encoded, so the decoder tightening
+    // in 2bc815b is measured against a peer rather than against itself.
+    // Reads `<name>\t<hex>` on stdin:
+    //   python3 gen_corpus.py | zig build interop-strictness
+    const interop_mod = b.createModule(.{
+        .root_source_file = b.path("benchmarks/interop_strictness.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    interop_mod.addImport("syrup", syrup_mod);
+    const interop_exe = b.addExecutable(.{
+        .name = "interop-strictness",
+        .root_module = interop_mod,
+    });
+    const interop_step = b.step("interop-strictness", "Decode a peer-encoded Syrup corpus from stdin");
+    interop_step.dependOn(&b.addInstallArtifact(interop_exe, .{}).step);
+
     // Benchmark Tool
     const bench_mod = b.createModule(.{
         .root_source_file = b.path("benchmarks/bench_zig.zig"),
@@ -2420,6 +2439,14 @@ pub fn build(b: *std.Build) void {
     const run_color_memo_tests = b.addRunArtifact(color_memo_tests);
     const color_memo_test_step = b.step("test-color-memo", "Run color_memo.zig tests");
     color_memo_test_step.dependOn(&run_color_memo_tests.step);
+
+    // Just src/syrup.zig — the serializer everything else sits on. Separated
+    // from `test` so the core can be checked in seconds instead of running the
+    // whole 1500-test tree, and so a core regression is unmissable.
+    const core_tests = b.addTest(.{ .root_module = syrup_mod });
+    const run_core_tests = b.addRunArtifact(core_tests);
+    const core_test_step = b.step("test-core", "Run core Syrup serializer tests (src/syrup.zig)");
+    core_test_step.dependOn(&run_core_tests.step);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_tests.step);
