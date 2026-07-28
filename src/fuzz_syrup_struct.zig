@@ -89,8 +89,11 @@ fn genValue(rnd: std.Random, a: std.mem.Allocator, depth: u8) error{OutOfMemory}
             const n = rnd.uintLessThan(usize, 5);
             const items = try a.alloc(syrup.Value, n);
             for (items) |*it| it.* = try genValue(rnd, a, depth - 1);
+            // Dedupe with `compare` (a total order, fine for equality), then
+            // let setCanonical impose canonical ORDER — which is over encoded
+            // bytes, not `compare`. Sorting here with `compare` produced sets
+            // the decoder considers out of order whenever members span types.
             std.mem.sort(syrup.Value, items, {}, lessThanValue);
-            // Dedupe: canonical sets are strictly increasing.
             var w: usize = 0;
             for (items) |it| {
                 if (w == 0 or items[w - 1].compare(it) != .eq) {
@@ -98,7 +101,7 @@ fn genValue(rnd: std.Random, a: std.mem.Allocator, depth: u8) error{OutOfMemory}
                     w += 1;
                 }
             }
-            return .{ .set = items[0..w] };
+            return try syrup.setCanonical(a, items[0..w]);
         },
         13 => {
             const n = rnd.uintLessThan(usize, 5);
@@ -115,7 +118,7 @@ fn genValue(rnd: std.Random, a: std.mem.Allocator, depth: u8) error{OutOfMemory}
                     w += 1;
                 }
             }
-            return .{ .dictionary = entries[0..w] };
+            return try syrup.dictionaryCanonical(a, entries[0..w]);
         },
         14 => {
             const label = try a.create(syrup.Value);

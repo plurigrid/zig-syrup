@@ -44,20 +44,22 @@ pub fn main() !void {
     var buf: [1024]u8 = undefined;
     const encoded = try record.encodeBuf(&buf);
 
+    // Formatted into a fixed buffer and emitted in one go. `std.Io.File`'s
+    // writer() takes an `Io` instance as of 0.17-dev, and a parity check has
+    // no business standing up an I/O implementation just to print four lines.
     var out_buf: [2048]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&out_buf);
-    const stdout = fbs.writer();
+    var out: std.Io.Writer = .fixed(&out_buf);
 
-    try stdout.print("Zig Parity Check\n", .{});
-    try stdout.print("================\n", .{});
-    try stdout.print("Expected: {s}\n", .{expected});
-    try stdout.print("Actual:   {s}\n", .{encoded});
+    try out.print("Zig Parity Check\n", .{});
+    try out.print("================\n", .{});
+    try out.print("Expected: {s}\n", .{expected});
+    try out.print("Actual:   {s}\n", .{encoded});
 
-    if (std.mem.eql(u8, expected, encoded)) {
-        try stdout.print("RESULT: PASS\n", .{});
-    } else {
-        try stdout.print("RESULT: FAIL\n", .{});
-    }
+    const matched = std.mem.eql(u8, expected, encoded);
+    try out.print("RESULT: {s}\n", .{if (matched) "PASS" else "FAIL"});
+    std.debug.print("{s}", .{out.buffered()});
 
-    _ = try std.posix.write(std.posix.STDOUT_FILENO, fbs.getWritten());
+    // Report the mismatch through the exit code too. Printing "FAIL" and
+    // returning normally let `zig build parity` succeed on a broken encoder.
+    if (!matched) return error.ParityMismatch;
 }

@@ -109,6 +109,104 @@ const FixedBufWriter = struct {
 // ============================================================================
 
 /// BigInt for arbitrary precision integers
+/// Largest integer magnitude accepted from the wire or written to it, in bytes.
+///
+/// The format puts no upper bound on integers, but an unbounded decimal run is
+/// an unbounded amount of work for the receiver, so a limit has to exist
+/// somewhere. 1024 bytes is 8192 bits — orders of magnitude past anything OCapN
+/// carries as an integer rather than a bytestring — and keeps the O(n^2)
+/// decimal conversions well under a millisecond.
+pub const MAX_BIGINT_BYTES: usize = 1024;
+
+/// Decimal digits in the largest permitted magnitude: 1024 * log10(256), + 1.
+const MAX_BIGINT_DIGITS: usize = 2467;
+
+/// Write a magnitude larger than u128 in the standard `<digits><sign>` form.
+///
+/// `noinline` on purpose: the scratch buffers are ~3.5 KiB, and Zig sizes a
+/// frame for the widest branch of a function whether or not that branch runs.
+/// Inlined into `encode` — which recurses once per nesting level, up to
+/// `Parser.MAX_DEPTH` — that would add megabytes of stack to every deep value.
+/// Kept out of line, the cost is one leaf frame.
+noinline fn writeBigintDecimal(b: BigInt, writer: anytype) !void {
+    if (b.magnitude.len > MAX_BIGINT_BYTES) return error.Overflow;
+
+    // Little-endian working copy; long division rewrites it in place.
+    var work: [MAX_BIGINT_BYTES]u8 = undefined;
+    var len: usize = 0;
+    {
+        var i = b.magnitude.len;
+        while (i > 0) {
+            i -= 1;
+            work[len] = b.magnitude[i];
+            len += 1;
+        }
+    }
+    while (len > 0 and work[len - 1] == 0) len -= 1;
+
+    if (len == 0) {
+        // Canonical zero is `0+` — a bigint zero must not become `0-`.
+        try writer.writeAll("0+");
+        return;
+    }
+
+    // Repeated division by 10 yields digits least-significant first.
+    var digits: [MAX_BIGINT_DIGITS]u8 = undefined;
+    var n: usize = 0;
+    while (len > 0) {
+        var rem: u16 = 0;
+        var i = len;
+        while (i > 0) {
+            i -= 1;
+            const cur: u16 = (rem << 8) | work[i];
+            work[i] = @intCast(cur / 10);
+            rem = cur % 10;
+        }
+        digits[n] = '0' + @as(u8, @intCast(rem));
+        n += 1;
+        while (len > 0 and work[len - 1] == 0) len -= 1;
+    }
+
+    while (n > 0) {
+        n -= 1;
+        try writer.writeByte(digits[n]);
+    }
+    try writer.writeByte(if (b.negative) '-' else '+');
+}
+
+/// Build a magnitude from a decimal digit run too large for u128.
+///
+/// `noinline` for the same reason as `writeBigintDecimal`; this one is reached
+/// from `parse`, which recurses per nesting level.
+noinline fn bigintMagnitudeFromDecimal(
+    digits: []const u8,
+    allocator: Allocator,
+) error{ OutOfMemory, Overflow }![]u8 {
+    var work: [MAX_BIGINT_BYTES]u8 = undefined; // little-endian
+    var len: usize = 0;
+
+    for (digits) |c| {
+        var carry: u16 = c - '0';
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const v: u16 = @as(u16, work[i]) * 10 + carry;
+            work[i] = @truncate(v);
+            carry = v >> 8;
+        }
+        while (carry != 0) {
+            if (len >= MAX_BIGINT_BYTES) return error.Overflow;
+            work[len] = @truncate(carry);
+            carry >>= 8;
+            len += 1;
+        }
+    }
+
+    const mag = try allocator.alloc(u8, len);
+    var i: usize = 0;
+    while (i < len) : (i += 1) mag[i] = work[len - 1 - i]; // to big-endian
+    return mag;
+}
+
 pub const BigInt = struct {
     const Self = @This();
 
@@ -677,10 +775,11 @@ pub const Value = union(enum) {
                     }
                     try writer.print("{d}{c}", .{ value, if (b.negative) @as(u8, '-') else @as(u8, '+') });
                 } else {
-                    try writer.writeByte('B');
-                    try writer.print("{d}:", .{b.magnitude.len + 1});
-                    try writer.writeByte(if (b.negative) '-' else '+');
-                    try writer.writeAll(b.magnitude);
+                    // Standard `<digits>+` form, never the `B<len>:` extension.
+                    // No other Syrup implementation implements `B`, so anything
+                    // written in it is unreadable everywhere else — this decoder
+                    // still ACCEPTS it, for data already written that way.
+                    try writeBigintDecimal(b, writer);
                 }
             },
             .float32 => |f| {
@@ -829,7 +928,12 @@ pub const Value = union(enum) {
             }
             return digitCount(value) + 1;
         }
-        return 1 + lengthPrefixSize(b.magnitude.len + 1) + 1 + b.magnitude.len;
+        // Written as decimal, so the size is the decimal digit count plus a
+        // sign. Computing it exactly would mean running the whole long
+        // division twice, so this is an upper bound: log10(256) < 2.41, and
+        // 241/100 keeps the arithmetic integral. Callers size buffers from
+        // this, and over-reserving is safe where under-reserving is not.
+        return (b.magnitude.len * 241) / 100 + 2;
     }
 
     fn lengthPrefixSize(len: usize) usize {
@@ -906,6 +1010,99 @@ pub fn bigintFromU128(allocator: Allocator, value: u128) !Value {
 // ============================================================================
 
 /// Comparator for canonical Value ordering (for std.mem.sort)
+/// Sort `items` into canonical order: ascending by each member's FULLY ENCODED
+/// bytes, length prefix included. `keyOf` picks the sort key (a set's member is
+/// its own key; a dictionary entry's key is its key).
+///
+/// This exists because `Value.compare` is NOT canonical order and cannot be
+/// made into it. `compare` ranks by `typeOrder`, but on the wire a set opens
+/// with '#' (0x23) and `true` with 't' (0x74), so bools sort last and sets
+/// first — the reverse of `typeOrder`. Worse, integers, bytestrings, strings
+/// and symbols all open with a decimal length, so they interleave by that
+/// length and no per-type rank can separate them at all. The only faithful
+/// comparison is over the encoding itself.
+///
+/// The consequence of the old behaviour was self-inconsistency: with keys
+/// `true` and `#$`, `dictionaryCanonical` emitted `{t1+#$2+}`, which this
+/// library's own strict decoder rejected as `NotCanonicalOrder`.
+fn sortByEncodedBytes(
+    comptime T: type,
+    items: []T,
+    allocator: Allocator,
+    comptime keyOf: fn (T) Value,
+) error{OutOfMemory}!void {
+    if (items.len < 2) return;
+
+    const spans = try allocator.alloc(struct { start: usize, end: usize }, items.len);
+    defer allocator.free(spans);
+
+    // `encodedSize()` is the natural sizing hint, but it is only a hint: the
+    // structure fuzzer produces values for which it under-reports, so treating
+    // it as exact turned a library bug into a crash in this function. Grow and
+    // retry instead, which keeps the error set at OutOfMemory for callers like
+    // `setCanonical`.
+    var cap: usize = 0;
+    for (items) |it| cap += keyOf(it).encodedSize();
+    if (cap == 0) cap = 16;
+
+    var scratch = try allocator.alloc(u8, cap);
+    defer allocator.free(scratch);
+
+    while (true) {
+        var off: usize = 0;
+        var fits = true;
+        for (items, 0..) |it, i| {
+            const written = keyOf(it).encodeBuf(scratch[off..]) catch {
+                fits = false;
+                break;
+            };
+            spans[i] = .{ .start = off, .end = off + written.len };
+            off += written.len;
+        }
+        if (fits) break;
+
+        cap = cap * 2 + 16;
+        allocator.free(scratch);
+        scratch = try allocator.alloc(u8, cap);
+    }
+
+    const idx = try allocator.alloc(u32, items.len);
+    defer allocator.free(idx);
+    for (idx, 0..) |*p, i| p.* = @intCast(i);
+
+    const Ctx = struct {
+        spans: @TypeOf(spans),
+        scratch: []const u8,
+        fn lessThan(ctx: @This(), x: u32, y: u32) bool {
+            const sx = ctx.spans[x];
+            const sy = ctx.spans[y];
+            return std.mem.order(
+                u8,
+                ctx.scratch[sx.start..sx.end],
+                ctx.scratch[sy.start..sy.end],
+            ) == .lt;
+        }
+    };
+    std.mem.sort(u32, idx, Ctx{ .spans = spans, .scratch = scratch }, Ctx.lessThan);
+
+    const tmp = try allocator.alloc(T, items.len);
+    defer allocator.free(tmp);
+    for (idx, 0..) |src, dst| tmp[dst] = items[src];
+    @memcpy(items, tmp);
+}
+
+fn entryKey(e: Value.DictEntry) Value {
+    return e.key;
+}
+fn selfKey(v: Value) Value {
+    return v;
+}
+
+/// Comparator ordering by `Value.compare`.
+///
+/// NOTE: this is a total order over values, but it is NOT Syrup canonical
+/// order — see `sortByEncodedBytes`. Use it for deduplication or map keys,
+/// never to decide what goes on the wire.
 pub fn valueLessThan(_: void, a: Value, b: Value) bool {
     return a.compare(b) == .lt;
 }
@@ -919,21 +1116,11 @@ pub fn dictEntryLessThan(_: void, a: Value.DictEntry, b: Value.DictEntry) bool {
 pub fn dictionaryCanonical(allocator: Allocator, entries: []const Value.DictEntry) !Value {
     if (entries.len == 0) return .{ .dictionary = &[_]Value.DictEntry{} };
     const sorted = try allocator.alloc(Value.DictEntry, entries.len);
+    errdefer allocator.free(sorted);
     @memcpy(sorted, entries);
-    if (sorted.len <= 8) {
-        // Insertion sort for small dicts — lower overhead than pdqsort
-        for (1..sorted.len) |i| {
-            const key = sorted[i];
-            var j: usize = i;
-            while (j > 0 and sorted[j - 1].key.compare(key.key) == .gt) {
-                sorted[j] = sorted[j - 1];
-                j -= 1;
-            }
-            sorted[j] = key;
-        }
-    } else {
-        std.mem.sort(Value.DictEntry, sorted, {}, dictEntryLessThan);
-    }
+    // Ordered by encoded key bytes, not by `Value.compare` — the two disagree
+    // whenever keys span types, and only the former is canonical order.
+    try sortByEncodedBytes(Value.DictEntry, sorted, allocator, entryKey);
     return .{ .dictionary = sorted };
 }
 
@@ -941,21 +1128,9 @@ pub fn dictionaryCanonical(allocator: Allocator, entries: []const Value.DictEntr
 pub fn setCanonical(allocator: Allocator, items: []const Value) !Value {
     if (items.len == 0) return .{ .set = &[_]Value{} };
     const sorted = try allocator.alloc(Value, items.len);
+    errdefer allocator.free(sorted);
     @memcpy(sorted, items);
-    if (sorted.len <= 8) {
-        // Insertion sort for small sets — lower overhead than pdqsort
-        for (1..sorted.len) |i| {
-            const key = sorted[i];
-            var j: usize = i;
-            while (j > 0 and sorted[j - 1].compare(key) == .gt) {
-                sorted[j] = sorted[j - 1];
-                j -= 1;
-            }
-            sorted[j] = key;
-        }
-    } else {
-        std.mem.sort(Value, sorted, {}, valueLessThan);
-    }
+    try sortByEncodedBytes(Value, sorted, allocator, selfKey);
     return .{ .set = sorted };
 }
 
@@ -1043,6 +1218,10 @@ pub const Parser = struct {
     /// 5000 and 10000 on an 8 MiB stack). 256 is generous for real OCapN /
     /// CapTP messages (which nest a handful deep) and ~20-40x below the crash
     /// threshold. Mirrors serde_json's default recursion limit (128).
+    ///
+    /// The container *width* limits above (`ListTooLarge` and friends) do not
+    /// bound this: a few KiB of unbalanced '[' is enough, and needs no valid
+    /// structure at all, so it costs an attacker nothing to construct.
     pub const MAX_DEPTH: u16 = 256;
 
     input: []const u8,
@@ -1050,6 +1229,70 @@ pub const Parser = struct {
     allocator: Allocator,
     /// Live container-nesting depth, bounded by `MAX_DEPTH`.
     depth: u16 = 0,
+
+    /// Reject dictionaries and sets whose members arrive out of canonical
+    /// order, instead of accepting and normalizing them.
+    ///
+    /// Off by default, because the spec makes canonical form an obligation on
+    /// the WRITER and says nothing about readers, and because not one of the
+    /// other nine Syrup implementations enforces order on decode. Enforcing it
+    /// here means being unable to read dictionaries and sets emitted by
+    /// Racket (the reference implementation), Guile, Dart, Kotlin, Elixir or
+    /// either Rust — which is a far larger interop hole than the malleability
+    /// it closes.
+    ///
+    /// Nothing is given up by accepting them: out-of-order members are sorted
+    /// into canonical order as they are parsed (see `sortByInputOrder`), so
+    /// re-encoding a decoded value still emits canonical bytes and `computeCid`
+    /// still yields one digest per value rather than one per wire permutation.
+    /// Turn this on only where the received bytes themselves are the identity
+    /// — verifying a signature over an exact octet sequence, say.
+    require_canonical_order: bool = false,
+
+    /// A member's extent in `input`. Canonical order is defined over the fully
+    /// encoded bytes of a member, so its own encoding is the sort key; nothing
+    /// has to be re-encoded to compare two of them.
+    const Span = struct { start: usize, end: usize };
+
+    /// Permute `items` into canonical order, using each member's original
+    /// input bytes as its key. `spans` is parallel to `items` on entry.
+    ///
+    /// Sorted through an index array rather than by swapping in place: the
+    /// naive insertion sort is O(n^2), and a hostile peer choosing to send a
+    /// large reversed dictionary is exactly the case that has to stay cheap.
+    fn sortByInputOrder(
+        comptime T: type,
+        items: []T,
+        spans: []Span,
+        input: []const u8,
+        allocator: Allocator,
+    ) error{OutOfMemory}!void {
+        if (items.len < 2) return;
+
+        const idx = try allocator.alloc(u32, items.len);
+        defer allocator.free(idx);
+        for (idx, 0..) |*p, i| p.* = @intCast(i);
+
+        const Ctx = struct {
+            spans: []Span,
+            input: []const u8,
+            fn lessThan(ctx: @This(), a: u32, b: u32) bool {
+                const sa = ctx.spans[a];
+                const sb = ctx.spans[b];
+                return std.mem.order(
+                    u8,
+                    ctx.input[sa.start..sa.end],
+                    ctx.input[sb.start..sb.end],
+                ) == .lt;
+            }
+        };
+        std.mem.sort(u32, idx, Ctx{ .spans = spans, .input = input }, Ctx.lessThan);
+
+        const tmp = try allocator.alloc(T, items.len);
+        defer allocator.free(tmp);
+        for (idx, 0..) |src, dst| tmp[dst] = items[src];
+        @memcpy(items, tmp);
+    }
 
     /// Create a new parser
     pub fn init(input: []const u8, allocator: Allocator) Parser {
@@ -1131,15 +1374,26 @@ pub const Parser = struct {
         // encoder could emit decimal its own decoder could not read).
         var num: u128 = 0;
         var digit_count: usize = 0;
+        // The format puts no upper bound on integers, and 7 of the 9 live
+        // implementations emit arbitrary precision in this plain decimal form.
+        // So exceeding u128 is NOT an error here: the digit run keeps being
+        // consumed and the '+'/'-' branches below promote it to a bigint. Only
+        // a LENGTH prefix (':' '"' '\'') still has to fit, and those branches
+        // reject `too_big` themselves.
+        var too_big = false;
         while (self.pos < self.input.len and std.ascii.isDigit(self.input[self.pos])) {
             const digit: u128 = self.input[self.pos] - '0';
-            // Check for overflow
-            if (num > (std.math.maxInt(u128) - digit) / 10) {
-                return error.Overflow;
+            if (!too_big) {
+                if (num > (std.math.maxInt(u128) - digit) / 10) {
+                    too_big = true;
+                } else {
+                    num = num * 10 + digit;
+                }
             }
-            num = num * 10 + digit;
             self.pos += 1;
             digit_count += 1;
+            // Bound the work a peer can ask for; see MAX_BIGINT_BYTES.
+            if (digit_count > MAX_BIGINT_DIGITS) return error.Overflow;
         }
 
         if (self.pos >= self.input.len) {
@@ -1163,14 +1417,24 @@ pub const Parser = struct {
             else => {},
         }
 
+        const digits = self.input[digit_start .. digit_start + digit_count];
+
         switch (marker) {
             '+' => {
+                if (too_big) {
+                    const mag = try bigintMagnitudeFromDecimal(digits, self.allocator);
+                    return Value{ .bigint = .{ .magnitude = mag, .negative = false } };
+                }
                 if (num > @as(u128, std.math.maxInt(i64))) {
                     return self.bigintFromU128(num, false);
                 }
                 return Value{ .integer = @intCast(num) };
             },
             '-' => {
+                if (too_big) {
+                    const mag = try bigintMagnitudeFromDecimal(digits, self.allocator);
+                    return Value{ .bigint = .{ .magnitude = mag, .negative = true } };
+                }
                 // Negative zero is non-canonical; zero is only ever `0+`.
                 if (num == 0) return error.NonCanonical;
                 if (num <= @as(u128, std.math.maxInt(i64))) {
@@ -1186,7 +1450,8 @@ pub const Parser = struct {
             ':' => {
                 // Guard the u128→usize cast: any length exceeding the remaining
                 // input is unsatisfiable, and this keeps @intCast in range.
-                if (num > self.input.len) return error.UnexpectedEOF;
+                // A run too large for u128 is unsatisfiable for the same reason.
+                if (too_big or num > self.input.len) return error.UnexpectedEOF;
                 const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
@@ -1198,7 +1463,8 @@ pub const Parser = struct {
             '"' => {
                 // Guard the u128→usize cast: any length exceeding the remaining
                 // input is unsatisfiable, and this keeps @intCast in range.
-                if (num > self.input.len) return error.UnexpectedEOF;
+                // A run too large for u128 is unsatisfiable for the same reason.
+                if (too_big or num > self.input.len) return error.UnexpectedEOF;
                 const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
@@ -1210,7 +1476,8 @@ pub const Parser = struct {
             '\'' => {
                 // Guard the u128→usize cast: any length exceeding the remaining
                 // input is unsatisfiable, and this keeps @intCast in range.
-                if (num > self.input.len) return error.UnexpectedEOF;
+                // A run too large for u128 is unsatisfiable for the same reason.
+                if (too_big or num > self.input.len) return error.UnexpectedEOF;
                 const usize_len: usize = @intCast(num);
                 if (self.pos + usize_len > self.input.len) {
                     return error.UnexpectedEOF;
@@ -1312,30 +1579,43 @@ pub const Parser = struct {
         var items = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
         errdefer items.deinit(self.allocator);
 
+        // Spans are only needed when order matters, i.e. for sets, never lists.
+        var spans = std.ArrayListUnmanaged(Span){ .items = &.{}, .capacity = 0 };
+        defer spans.deinit(self.allocator);
+
         var last_start: usize = 0;
         var last_end: usize = 0;
+        var out_of_order = false;
 
         while (self.pos < self.input.len and self.input[self.pos] != terminator) {
             const item_start = self.pos;
             const item = try self.parse();
             const item_end = self.pos;
 
-            if (check_order and items.items.len > 0) {
-                // Compare using original input bytes - O(1) lookup, O(min(m,n)) compare
-                const prev_bytes = self.input[last_start..last_end];
-                const curr_bytes = self.input[item_start..item_end];
-                if (std.mem.order(u8, curr_bytes, prev_bytes) == .lt) {
-                    return error.NotCanonicalOrder;
+            if (check_order) {
+                if (items.items.len > 0) {
+                    // Compare using original input bytes - O(1) lookup, O(min(m,n)) compare
+                    const prev_bytes = self.input[last_start..last_end];
+                    const curr_bytes = self.input[item_start..item_end];
+                    if (std.mem.order(u8, curr_bytes, prev_bytes) == .lt) {
+                        if (self.require_canonical_order) return error.NotCanonicalOrder;
+                        out_of_order = true;
+                    }
                 }
+                last_start = item_start;
+                last_end = item_end;
+                try spans.append(self.allocator, .{ .start = item_start, .end = item_end });
             }
-            last_start = item_start;
-            last_end = item_end;
 
             try items.append(self.allocator, item);
         }
 
         if (self.pos >= self.input.len) return error.UnexpectedEOF;
         self.pos += 1;
+
+        if (out_of_order) {
+            try sortByInputOrder(Value, items.items, spans.items, self.input, self.allocator);
+        }
 
         return items.toOwnedSlice(self.allocator);
     }
@@ -1352,8 +1632,12 @@ pub const Parser = struct {
         var entries = std.ArrayListUnmanaged(Value.DictEntry){ .items = &.{}, .capacity = 0 };
         errdefer entries.deinit(self.allocator);
 
+        var spans = std.ArrayListUnmanaged(Span){ .items = &.{}, .capacity = 0 };
+        defer spans.deinit(self.allocator);
+
         var last_key_start: usize = 0;
         var last_key_end: usize = 0;
+        var out_of_order = false;
 
         while (self.pos < self.input.len and self.input[self.pos] != '}') {
             const key_start = self.pos;
@@ -1361,22 +1645,36 @@ pub const Parser = struct {
             const key_end = self.pos;
             const val = try self.parse();
 
-            // Verify canonical ordering using original input bytes
+            // Canonical order is checked over the original input bytes. Out of
+            // order is accepted and normalized below unless the caller asked
+            // for the received octets to be authoritative.
             if (entries.items.len > 0) {
                 const prev_bytes = self.input[last_key_start..last_key_end];
                 const curr_bytes = self.input[key_start..key_end];
                 if (std.mem.order(u8, curr_bytes, prev_bytes) == .lt) {
-                    return error.NotCanonicalOrder;
+                    if (self.require_canonical_order) return error.NotCanonicalOrder;
+                    out_of_order = true;
                 }
             }
             last_key_start = key_start;
             last_key_end = key_end;
+            try spans.append(self.allocator, .{ .start = key_start, .end = key_end });
 
             try entries.append(self.allocator, .{ .key = key, .value = val });
         }
 
         if (self.pos >= self.input.len) return error.UnexpectedEOF;
         self.pos += 1;
+
+        if (out_of_order) {
+            try sortByInputOrder(
+                Value.DictEntry,
+                entries.items,
+                spans.items,
+                self.input,
+                self.allocator,
+            );
+        }
 
         return .{ .dictionary = try entries.toOwnedSlice(self.allocator) };
     }
@@ -1493,6 +1791,24 @@ pub fn decode(input: []const u8, allocator: Allocator) !Value {
         // The value parsed cleanly but bytes remain. Free anything the parser
         // allocated for `value` before surfacing the error, so a rejected
         // whole-message decode never leaks its partial parse.
+        value.deinitContainers(allocator);
+        return error.TrailingData;
+    }
+    return value;
+}
+
+/// Decode, rejecting any dictionary or set whose members arrive out of
+/// canonical order rather than normalizing them.
+///
+/// `decode` is the right default for talking to other implementations; this is
+/// for the narrower case where the received octets are themselves the identity
+/// — checking a signature over an exact byte sequence, or asserting that a
+/// peer wrote canonical form. See `Parser.require_canonical_order`.
+pub fn decodeCanonical(input: []const u8, allocator: Allocator) !Value {
+    var parser = Parser.init(input, allocator);
+    parser.require_canonical_order = true;
+    const value = try parser.parse();
+    if (parser.hasMore()) {
         value.deinitContainers(allocator);
         return error.TrailingData;
     }
@@ -3045,4 +3361,206 @@ test "SWAR fast decimal parsing for 8+ digit numbers" {
     const r6 = parseDecimalFast("1234abc+");
     try std.testing.expectEqual(@as(u64, 1234), r6.value);
     try std.testing.expectEqual(@as(usize, 4), r6.len);
+}
+
+test "parser: nesting depth is bounded against hostile input" {
+    const limit: usize = Parser.MAX_DEPTH;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // At the limit the value still parses.
+    {
+        const buf = try allocator.alloc(u8, limit * 2);
+        @memset(buf[0..limit], '[');
+        @memset(buf[limit..], ']');
+        var parser = Parser.init(buf, allocator);
+        _ = try parser.parse();
+    }
+
+    // One past the limit is rejected rather than recursing.
+    {
+        const over = limit + 1;
+        const buf = try allocator.alloc(u8, over * 2);
+        @memset(buf[0..over], '[');
+        @memset(buf[over..], ']');
+        var parser = Parser.init(buf, allocator);
+        try std.testing.expectError(error.MaxDepth, parser.parse());
+    }
+
+    // Unbalanced input is the cheap form of the attack: no closing bytes and
+    // no valid structure, so the width limits never engage. It must not recurse.
+    {
+        const deep = 12_000;
+        const buf = try allocator.alloc(u8, deep);
+        @memset(buf, '[');
+        var parser = Parser.init(buf, allocator);
+        try std.testing.expectError(error.MaxDepth, parser.parse());
+    }
+}
+
+/// The `skill:invoke` record that docs/status/SYRUP-IMPLEMENTATIONS-VERIFIED.md
+/// pins across Zig, Rust, Clojure, JavaScript, Python, ClojureScript and
+/// TypeScript. Every value is built in the test scope on purpose: `Value` is
+/// non-owning (`fromRecord` keeps a `*const Value`, `fromList`/`fromDictionary`
+/// keep the caller's slice), so constructing this in a helper and returning it
+/// yields dangling stack pointers.
+const canonical_wire = "<12\"skill:invoke[7'gay-mcp7'palette{1\"n4+4\"seed1069+}0+]>";
+
+test "interop: arbitrary-precision integers round-trip in the standard form" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // The format puts no upper bound on integers and 7 of the 9 live
+    // implementations emit them in this plain decimal form. Everything here is
+    // past i128, i.e. exactly what used to come back as error.Overflow.
+    const cases = [_][]const u8{
+        "340282366920938463463374607431768211456+", // 2^128
+        "340282366920938463463374607431768211456-",
+        "1606938044258990275541962092341162602522202993782792835301376+", // 2^200
+        "115792089237316195423570985008687907853269984665640564039457584007913129639936+", // 2^256
+    };
+
+    for (cases) |wire| {
+        const v = try decode(wire, a);
+        try std.testing.expect(v == .bigint);
+        // Re-encoded in the SAME form it arrived in — not the `B<len>:`
+        // extension, which no other implementation can read.
+        var buf: [512]u8 = undefined;
+        try std.testing.expectEqualSlices(u8, wire, try v.encodeBuf(&buf));
+    }
+
+    // The `B<len>:` extension is still accepted, for data already written with
+    // it, but is never produced: this re-encodes to the standard form.
+    // 2^128 is 0x01 followed by 16 zero bytes, so the magnitude is 17 bytes and
+    // the length field counts the sign byte too.
+    var b_form: [5 + 17]u8 = undefined;
+    @memcpy(b_form[0..5], "B18:+");
+    @memset(b_form[5..], 0);
+    b_form[5] = 1;
+    const from_b = try decode(&b_form, a);
+    var buf2: [512]u8 = undefined;
+    try std.testing.expectEqualSlices(
+        u8,
+        "340282366920938463463374607431768211456+",
+        try from_b.encodeBuf(&buf2),
+    );
+
+    // Unbounded input is not unbounded work.
+    var huge: [MAX_BIGINT_DIGITS + 2]u8 = undefined;
+    @memset(huge[0 .. MAX_BIGINT_DIGITS + 1], '9');
+    huge[MAX_BIGINT_DIGITS + 1] = '+';
+    try std.testing.expectError(error.Overflow, decode(&huge, a));
+
+    // A length prefix still has to fit, and is not promoted to a bigint.
+    try std.testing.expectError(
+        error.UnexpectedEOF,
+        decode("340282366920938463463374607431768211456\"x", a),
+    );
+}
+
+test "canonical: the encoder never emits what its own strict decoder rejects" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Keys where `typeOrder` and wire-byte order disagree maximally: a set
+    // opens with '#' (0x23, first on the wire, typeOrder 9) and `true` with
+    // 't' (0x74, last on the wire, typeOrder 0). Sorting by `Value.compare`
+    // emitted `{t1+#$2+}` here, which decodeCanonical rejected.
+    const entries = [_]Value.DictEntry{
+        .{ .key = .{ .bool = true }, .value = integer(1) },
+        .{ .key = .{ .set = &[_]Value{} }, .value = integer(2) },
+    };
+    const d = try dictionaryCanonical(a, &entries);
+    var buf: [256]u8 = undefined;
+    const enc = try d.encodeBuf(&buf);
+    try std.testing.expectEqualSlices(u8, "{#$2+t1+}", enc);
+    _ = try decodeCanonical(enc, a);
+
+    // Same for sets, and across the digit-prefixed types, where no per-type
+    // rank could work at all: string `1"a`, symbol `1'a` and integer `1+` all
+    // open with '1' and separate only on their second byte — '"' 0x22, then
+    // '\'' 0x27, then '+' 0x2b. `false` is 'f' (0x66) and sorts after all of them.
+    const items = [_]Value{
+        .{ .bool = false },
+        symbol("a"),
+        string("a"),
+        integer(1),
+    };
+    const s = try setCanonical(a, &items);
+    var buf2: [256]u8 = undefined;
+    const enc2 = try s.encodeBuf(&buf2);
+    try std.testing.expectEqualSlices(u8, "#1\"a1'a1+f$", enc2);
+    _ = try decodeCanonical(enc2, a);
+}
+
+test "interop: out-of-order dicts and sets decode, and re-encode canonically" {
+    // Not one of the other nine Syrup implementations enforces canonical order
+    // on decode, and the reference implementation (Racket) is among them. These
+    // are the byte sequences a peer may legitimately put on the wire.
+    const cases = [_]struct { wire: []const u8, canonical: []const u8 }{
+        .{ .wire = "{1\"b2+1\"a1+}", .canonical = "{1\"a1+1\"b2+}" },
+        .{ .wire = "#3+2+1+$", .canonical = "#1+2+3+$" },
+        // Ordering is over the FULLY ENCODED member, length prefix included,
+        // so 1"2 precedes 2"12 even though "12" < "2" would not.
+        .{ .wire = "{2\"121+1\"22+}", .canonical = "{1\"22+2\"121+}" },
+        // Nested: the inner dictionary must be normalized too.
+        .{ .wire = "{1\"k{1\"z1+1\"y2+}}", .canonical = "{1\"k{1\"y2+1\"z1+}}" },
+    };
+
+    for (cases) |c| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+
+        // Accepted rather than rejected — this is the interop half.
+        const value = try decode(c.wire, arena.allocator());
+
+        // And normalized, not merely tolerated. If decoding only relaxed the
+        // check, this would emit `c.wire` back and Zig would have started
+        // WRITING non-canonical bytes, which is the obligation the spec
+        // actually imposes. It is also what keeps computeCid one-digest-per-
+        // value instead of one-per-wire-permutation.
+        var buf: [512]u8 = undefined;
+        try std.testing.expectEqualSlices(u8, c.canonical, try value.encodeBuf(&buf));
+
+        // Already-canonical input must round-trip untouched.
+        var buf2: [512]u8 = undefined;
+        const again = try decode(c.canonical, arena.allocator());
+        try std.testing.expectEqualSlices(u8, c.canonical, try again.encodeBuf(&buf2));
+
+        // The strict door is still there for callers who need it.
+        try std.testing.expectError(
+            error.NotCanonicalOrder,
+            decodeCanonical(c.wire, arena.allocator()),
+        );
+        _ = try decodeCanonical(c.canonical, arena.allocator());
+    }
+}
+
+test "interop: canonical skill:invoke wire format" {
+    const label = string("skill:invoke");
+
+    const dict_entries = [_]Value.DictEntry{
+        .{ .key = string("n"), .value = integer(4) },
+        .{ .key = string("seed"), .value = integer(1069) },
+    };
+
+    const fields_inner = [_]Value{
+        symbol("gay-mcp"),
+        symbol("palette"),
+        dictionary(&dict_entries),
+        integer(0),
+    };
+
+    const fields = [_]Value{list(&fields_inner)};
+    const r = record(&label, &fields);
+
+    var buf: [4096]u8 = undefined;
+    const enc = try r.encodeBuf(&buf);
+
+    // The wire format IS the interop contract. If this line fails, this
+    // implementation has stopped speaking Syrup with the other six.
+    try std.testing.expectEqualSlices(u8, canonical_wire, enc);
 }
