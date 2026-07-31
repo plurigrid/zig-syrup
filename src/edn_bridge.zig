@@ -151,6 +151,22 @@ fn reabsorbSyrupTag(a: std.mem.Allocator, tag: []const u8, payload: syrup.Value)
             else => BridgeError.ParseError,
         };
     }
+    if (std.mem.eql(u8, kind, "f64-bits")) {
+        const hex = switch (payload) {
+            .string => |s| s,
+            else => return BridgeError.ParseError,
+        };
+        const bits = std.fmt.parseInt(u64, hex, 16) catch return BridgeError.ParseError;
+        return .{ .float = @bitCast(bits) };
+    }
+    if (std.mem.eql(u8, kind, "f32-bits")) {
+        const hex = switch (payload) {
+            .string => |s| s,
+            else => return BridgeError.ParseError,
+        };
+        const bits = std.fmt.parseInt(u32, hex, 16) catch return BridgeError.ParseError;
+        return .{ .float32 = @bitCast(bits) };
+    }
     if (std.mem.eql(u8, kind, "f32")) {
         return switch (payload) {
             .float => |f| .{ .float32 = @floatCast(f) },
@@ -423,10 +439,27 @@ fn isValidEdnKeywordBody(s: []const u8) bool {
 // Emission: syrup.Value -> EDN text (inverse of the mapping above)
 // ---------------------------------------------------------------------------
 
+/// The one NaN bit pattern that `##NaN` reads back as. Any other NaN payload
+/// (signaling NaNs, sign-bit-set NaNs, diagnostic payloads) must take the
+/// bit-exact escape or the wire is silently rewritten — syrup compares and
+/// orders floats *by bits*, and the decoder accepts arbitrary payloads from
+/// untrusted input, so payload loss is reachable and signature-relevant.
+/// Found by cross-implementation probing, not by laws 1/2.
+const canonical_quiet_nan_bits: u64 = @bitCast(@as(f64, std.math.nan(f64)));
+
 /// Floats must re-read as floats: force a '.'/'e' marker, and map the IEEE
 /// specials to EDN symbolic values (##Inf / ##-Inf / ##NaN).
 fn emitFloat(f: f64, writer: anytype) !void {
-    if (std.math.isNan(f)) return writer.writeAll("##NaN");
+    if (std.math.isNan(f)) {
+        const bits: u64 = @bitCast(f);
+        if (bits != canonical_quiet_nan_bits) {
+            try writer.writeAll("#syrup/f64-bits \"");
+            try writer.print("{x:0>16}", .{bits});
+            try writer.writeByte('"');
+            return;
+        }
+        return writer.writeAll("##NaN");
+    }
     if (std.math.isInf(f)) return writer.writeAll(if (f > 0) "##Inf" else "##-Inf");
     var buf: [400]u8 = undefined;
     const s = std.fmt.bufPrint(&buf, "{d}", .{f}) catch unreachable;
@@ -518,8 +551,15 @@ pub fn emit(value: syrup.Value, writer: anytype) anyerror!void {
         .integer => |i| try writer.print("{d}", .{i}),
         .float => |f| try emitFloat(f, writer),
         .float32 => |f| {
-            try writer.writeAll("#syrup/f32 ");
-            try emitFloat(f, writer);
+            const bits: u32 = @bitCast(f);
+            if (std.math.isNan(f) and bits != @as(u32, @bitCast(@as(f32, std.math.nan(f32))))) {
+                try writer.writeAll("#syrup/f32-bits \"");
+                try writer.print("{x:0>8}", .{bits});
+                try writer.writeByte('"');
+            } else {
+                try writer.writeAll("#syrup/f32 ");
+                try emitFloat(f, writer);
+            }
         },
         .string => |s| try emitString(s, writer),
         .symbol => |s| {
@@ -799,6 +839,39 @@ test "law 2: records, errors, and invalid-tag tagged values" {
     const payload: syrup.Value = .{ .integer = 7 };
     try expectSyrupRoundTrip(.{ .tagged = .{ .tag = "not a symbol!", .payload = &payload } });
     try expectSyrupRoundTrip(.{ .tagged = .{ .tag = "my/tag", .payload = &payload } });
+}
+
+test "law 2: float bit patterns survive exactly (NaN payloads, randomized)" {
+    // Hand-picked adversarial patterns first — the three that the
+    // cross-implementation matrix showed collapsing to ##NaN.
+    const f64_bits = [_]u64{
+        0x7ff8000000000001, // NaN with payload
+        0x7ff0000000000001, // signaling NaN
+        0xfff8000000000000, // negative NaN
+        0x7ff8000000000000, // canonical quiet NaN -> ##NaN
+        0x7ff0000000000000, // +Inf
+        0xfff0000000000000, // -Inf
+        0x8000000000000000, // -0.0
+        0x0000000000000000, // +0.0
+        0x0000000000000001, // smallest subnormal
+        0x4020666666666666, // 8.2
+    };
+    for (f64_bits) |bits| {
+        try expectSyrupRoundTrip(.{ .float = @bitCast(bits) });
+    }
+
+    const f32_bits = [_]u32{ 0x7fc00001, 0x7f800001, 0xffc00000, 0x7fc00000, 0x80000000, 0x00000001 };
+    for (f32_bits) |bits| {
+        try expectSyrupRoundTrip(.{ .float32 = @bitCast(bits) });
+    }
+
+    // Randomized sweep: every f64/f32 bit pattern must survive the text form.
+    var prng = std.Random.DefaultPrng.init(0x5171_09ac_8762_a354);
+    const rand = prng.random();
+    for (0..2000) |_| {
+        try expectSyrupRoundTrip(.{ .float = @bitCast(rand.int(u64)) });
+        try expectSyrupRoundTrip(.{ .float32 = @bitCast(rand.int(u32)) });
+    }
 }
 
 test "law 2: bigint magnitude travels exactly" {

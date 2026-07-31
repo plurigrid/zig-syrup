@@ -36,7 +36,9 @@ law-checked. Both project the same canonical binary.
 | integer (i64)    | `42`                                    | |
 | bigint           | `#syrup/bigint [neg? #syrup/bytes "…"]` | sign + exact magnitude bytes |
 | float (f64)      | `2.5`, `1.5e10`, `##Inf ##-Inf ##NaN`   | always carries `.`/`e` marker |
+| float non-canon. | `#syrup/f64-bits "7ff8000000000001"`    | any NaN whose bits ≠ `##NaN`'s |
 | float32          | `#syrup/f32 1.5`                        | f64-only in every EDN reader surveyed |
+| float32 non-can. | `#syrup/f32-bits "7fc00001"`            | same, 32-bit |
 | string           | `"…"`                                   | `\" \\ \n \t \r` escapes |
 | bytes            | `#syrup/bytes "<base64>"`               | |
 | symbol           | `name` or `ns/name`                     | bare only if valid EDN identifier |
@@ -63,6 +65,18 @@ wire: EDN list `(…)` → `tagged{"edn:list"}`, char → `edn:char` codepoint,
 - The keyword/symbol distinction is quotiented into the `:` sigil on syrup
   symbols; a genuine syrup symbol beginning with `:` re-emits as a keyword.
 
+## Float bit-exactness
+
+Syrup orders and compares floats **by bits**, and readers accept arbitrary
+NaN payloads from untrusted input, so a text projection that renders every
+NaN as `##NaN` silently rewrites the wire. esyrup emits `##NaN` only for the
+one payload `##NaN` reads back as; every other NaN takes `#syrup/f64-bits` /
+`#syrup/f32-bits` (hex, exact). All other finite doubles survive via
+shortest-round-trippable printing + correctly-rounded parsing — verified over
+4000 randomized bit patterns plus the subnormal/±0/±Inf edges. Laws 1 and 2
+as originally written did not cover NaN payloads; the gap was found by
+cross-implementation probing (see below).
+
 ## Float correctness note
 
 Text→double must be correctly rounded. Law 1 alone cannot detect a stable
@@ -72,6 +86,26 @@ oracle can, and did: vendored edn.c rounds `"8.2"` to `0x…667` (nearest is
 spans with a correctly-rounded parser (`std.fmt.parseFloat`); implementers
 must use a correctly-rounded decimal→binary conversion (Eisel-Lemire,
 Ryū-compatible strtod, …).
+
+## Mutual behaviors (measured against vivicat/zig-syrup, n=5 impl study)
+
+Acceptance sets of the two Zig syrup readers are **incomparable** — neither
+contains the other, so interop hazards run in both directions:
+
+| wire | plurigrid | vivicat |
+|---|---|---|
+| dict/set in non-memcmp order | reject `NotCanonicalOrder` | accept |
+| `07+`, `0-`, trailing bytes | reject | accept |
+| string/symbol with invalid UTF-8 | accept | reject `InvalidUtf8` |
+| bare `+`, int > u128 | reject | reject |
+| canonical core, records, NaN payloads, −0.0 | accept | accept |
+
+Both **writers** agree: canonical order is memcmp of the *encoded* key/element
+bytes (plurigrid's decoder check and `Value.compare` agree by construction —
+it compares the decimal length *strings*, so `"9"` > `"10"`), and each impl's
+writer output is accepted by the other's reader. The hazard is entirely at the
+edges, and the safe interop fragment is exactly `accept(plurigrid) ∩
+accept(vivicat)` = canonical order **and** valid UTF-8 in strings/symbols.
 
 ## Reference implementation
 
