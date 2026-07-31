@@ -1,0 +1,29 @@
+.{
+    .name = "The Grand Menagerie",
+    .animals = .{
+        .{
+            .species = "cat",
+            .name = "Tabatha",
+            .age = 12,
+            .weight = 8.2,
+            .@"alive?" = true,
+            .eats = .{ "mice", "fish", "kibble" },
+        },
+        .{
+            .species = "monkey",
+            .name = "George",
+            .age = 6,
+            .weight = 17.24,
+            .@"alive?" = false,
+            .eats = .{ "bananas", "insects" },
+        },
+        .{
+            .species = "ghost",
+            .name = "Casper",
+            .age = -12,
+            .weight = -34.5,
+            .@"alive?" = false,
+            .eats = .{},
+        },
+    },
+}

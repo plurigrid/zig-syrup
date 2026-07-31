@@ -83,7 +83,7 @@ pub fn parse(base_allocator: std.mem.Allocator, input: []const u8) BridgeError!P
 
     var arena = std.heap.ArenaAllocator.init(base_allocator);
     errdefer arena.deinit();
-    const value = try convert(arena.allocator(), res.value);
+    const value = try convert(arena.allocator(), input, res.value);
     return .{ .arena = arena, .value = value };
 }
 
@@ -244,7 +244,7 @@ fn reabsorbSyrupTag(a: std.mem.Allocator, tag: []const u8, payload: syrup.Value)
     return null;
 }
 
-fn convert(a: std.mem.Allocator, v: ?*c.edn_value_t) BridgeError!syrup.Value {
+fn convert(a: std.mem.Allocator, input: []const u8, v: ?*c.edn_value_t) BridgeError!syrup.Value {
     const t = c.edn_type(v);
     switch (t) {
         c.EDN_TYPE_NIL => return .null,
@@ -261,6 +261,24 @@ fn convert(a: std.mem.Allocator, v: ?*c.edn_value_t) BridgeError!syrup.Value {
         c.EDN_TYPE_FLOAT => {
             var out: f64 = undefined;
             _ = c.edn_double_get(v, &out);
+            // edn.c's decimal->double conversion mis-rounds by 1 ulp on some
+            // inputs ("8.2" -> ...667, "17.24" -> ...a3e; nearest are ...666 /
+            // ...a3d — found by cross-checking vivicat/zig-syrup's zoo.bin as
+            // a ground-truth oracle; parse∘emit∘parse is blind to this since
+            // the wrong double is *stable*). Re-parse the source text with
+            // Zig's correctly-rounded parseFloat when the span is available
+            // and numeric (##Inf/##-Inf/##NaN also arrive as FLOAT — their
+            // spans start with '#', keep edn.c's value for those).
+            var start: usize = 0;
+            var end: usize = 0;
+            if (c.edn_source_position(v, &start, &end) and end <= input.len and start < end) {
+                const text = input[start..end];
+                if (text[0] != '#') {
+                    if (std.fmt.parseFloat(f64, text)) |exact| {
+                        out = exact;
+                    } else |_| {}
+                }
+            }
             return .{ .float = out };
         },
         c.EDN_TYPE_STRING => {
@@ -284,19 +302,19 @@ fn convert(a: std.mem.Allocator, v: ?*c.edn_value_t) BridgeError!syrup.Value {
         c.EDN_TYPE_VECTOR => {
             const n = c.edn_vector_count(v);
             const items = try a.alloc(syrup.Value, n);
-            for (items, 0..) |*slot, i| slot.* = try convert(a, c.edn_vector_get(v, i));
+            for (items, 0..) |*slot, i| slot.* = try convert(a, input, c.edn_vector_get(v, i));
             return .{ .list = items };
         },
         c.EDN_TYPE_LIST => {
             const n = c.edn_list_count(v);
             const items = try a.alloc(syrup.Value, n);
-            for (items, 0..) |*slot, i| slot.* = try convert(a, c.edn_list_get(v, i));
+            for (items, 0..) |*slot, i| slot.* = try convert(a, input, c.edn_list_get(v, i));
             return taggedVal(a, "edn:list", .{ .list = items });
         },
         c.EDN_TYPE_SET => {
             const n = c.edn_set_count(v);
             const items = try a.alloc(syrup.Value, n);
-            for (items, 0..) |*slot, i| slot.* = try convert(a, c.edn_set_get(v, i));
+            for (items, 0..) |*slot, i| slot.* = try convert(a, input, c.edn_set_get(v, i));
             return .{ .set = items };
         },
         c.EDN_TYPE_MAP => {
@@ -304,8 +322,8 @@ fn convert(a: std.mem.Allocator, v: ?*c.edn_value_t) BridgeError!syrup.Value {
             const entries = try a.alloc(syrup.Value.DictEntry, n);
             for (entries, 0..) |*e, i| {
                 e.* = .{
-                    .key = try convert(a, c.edn_map_get_key(v, i)),
-                    .value = try convert(a, c.edn_map_get_value(v, i)),
+                    .key = try convert(a, input, c.edn_map_get_key(v, i)),
+                    .value = try convert(a, input, c.edn_map_get_value(v, i)),
                 };
             }
             return .{ .dictionary = entries };
@@ -316,7 +334,7 @@ fn convert(a: std.mem.Allocator, v: ?*c.edn_value_t) BridgeError!syrup.Value {
             var inner: ?*c.edn_value_t = null;
             _ = c.edn_tagged_get(v, &tag, &tag_len, &inner);
             const tag_text = try dupe(a, tag, tag_len);
-            const payload = try convert(a, inner);
+            const payload = try convert(a, input, inner);
             if (try reabsorbSyrupTag(a, tag_text, payload)) |native| return native;
             return taggedVal(a, tag_text, payload);
         },

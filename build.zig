@@ -100,21 +100,26 @@ pub fn build(b: *std.Build) void {
     const edn_roundtrip_install = b.step("edn-roundtrip", "Build EDN corpus round-trip checker");
     edn_roundtrip_install.dependOn(&b.addInstallArtifact(edn_roundtrip_exe, .{}).step);
 
-    // edn-syrup CLI (EDN twin of the JSON <-> syrup cli.zig)
-    const edn_syrup_cli_mod = b.createModule(.{
-        .root_source_file = b.path("tools/edn_syrup_cli.zig"),
+    // esyrup CLI — the EDN projection of syrup (see ESYRUP.md);
+    // sibling of vivicat/zig-syrup's jsyrup, twin of the JSON cli.zig
+    const esyrup_cli_mod = b.createModule(.{
+        .root_source_file = b.path("tools/esyrup_cli.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    edn_syrup_cli_mod.addImport("syrup", syrup_mod);
-    edn_syrup_cli_mod.addImport("edn_bridge", edn_bridge_mod);
-    const edn_syrup_cli_exe = b.addExecutable(.{
-        .name = "edn-syrup",
-        .root_module = edn_syrup_cli_mod,
+    esyrup_cli_mod.addImport("syrup", syrup_mod);
+    esyrup_cli_mod.addImport("edn_bridge", edn_bridge_mod);
+    const esyrup_cli_exe = b.addExecutable(.{
+        .name = "esyrup",
+        .root_module = esyrup_cli_mod,
     });
-    const edn_syrup_cli_step = b.step("edn-syrup", "Build edn-syrup CLI (EDN <-> syrup bytes)");
-    edn_syrup_cli_step.dependOn(&b.addInstallArtifact(edn_syrup_cli_exe, .{}).step);
+    const esyrup_install = b.addInstallArtifact(esyrup_cli_exe, .{});
+    const esyrup_step = b.step("esyrup", "Build esyrup CLI (EDN <-> syrup bytes, ESYRUP.md)");
+    esyrup_step.dependOn(&esyrup_install.step);
+    // legacy alias
+    const edn_syrup_cli_step = b.step("edn-syrup", "Alias of esyrup");
+    edn_syrup_cli_step.dependOn(&esyrup_install.step);
 
     // Cyton Parser module (OpenBCI packet parsing)
     const cyton_parser_mod = b.addModule("cyton_parser", .{

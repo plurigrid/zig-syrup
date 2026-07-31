@@ -1,9 +1,10 @@
-//! edn-syrup — EDN text <-> Syrup canonical bytes, the EDN twin of src/cli.zig
-//! (which does JSON <-> Syrup with $dict/$bytes/$label escape objects).
+//! esyrup — EDN text <-> Syrup canonical bytes (spec: ESYRUP.md).
+//! The EDN projection of syrup: twin of src/cli.zig (JSON, $dict/$bytes
+//! escapes), sibling of vivicat/zig-syrup's jsyrup (wire-faithful text).
 //!
 //! Modes:
-//!   edn-syrup encode   stdin: EDN text     -> stdout: canonical syrup bytes
-//!   edn-syrup decode   stdin: syrup bytes  -> stdout: EDN text
+//!   esyrup encode   stdin: EDN text     -> stdout: canonical syrup bytes
+//!   esyrup decode   stdin: syrup bytes  -> stdout: EDN text
 //!
 //! The type mapping (and its escape conventions for syrup values EDN lacks)
 //! lives entirely in src/edn_bridge.zig; this file is stdin/stdout plumbing,
@@ -22,7 +23,7 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len < 2) {
-        fatal(io, "Usage: {s} [encode|decode]  (EDN on stdin for encode, syrup bytes for decode)\n", .{if (args.len > 0) args[0] else "edn-syrup"});
+        fatal(io, "Usage: {s} [encode|decode]  (EDN on stdin for encode, syrup bytes for decode)\n", .{if (args.len > 0) args[0] else "esyrup"});
     }
     const mode = args[1];
 
