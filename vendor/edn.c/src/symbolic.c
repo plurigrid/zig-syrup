@@ -1,0 +1,47 @@
+#include <math.h>
+#include <string.h>
+
+#include "edn_internal.h"
+
+edn_value_t* edn_read_symbolic_value(edn_parser_t* parser) {
+    const char* value_start = parser->current;
+    const char* ptr = parser->current;
+
+    ptr += 2;
+
+    double value;
+    size_t len = parser->end - ptr;
+
+    if (len >= 3 && strncmp(ptr, "Inf", 3) == 0) {
+        value = INFINITY;
+        ptr += 3;
+    } else if (len >= 4 && strncmp(ptr, "-Inf", 4) == 0) {
+        value = -INFINITY;
+        ptr += 4;
+    } else if (len >= 3 && strncmp(ptr, "NaN", 3) == 0) {
+        value = NAN;
+        ptr += 3;
+    } else {
+        edn_parser_set_error(parser, EDN_ERROR_INVALID_SYNTAX,
+                             "Invalid symbolic value (expected ##Inf, ##-Inf, or ##NaN)",
+                             value_start, parser->end);
+        return NULL;
+    }
+
+    edn_value_t* result = edn_arena_alloc_value(parser->arena);
+    if (!result) {
+        edn_parser_set_error(parser, EDN_ERROR_OUT_OF_MEMORY,
+                             "Out of memory allocating symbolic value", value_start, ptr);
+        return NULL;
+    }
+
+    result->type = EDN_TYPE_FLOAT;
+    result->as.floating = value;
+    result->arena = parser->arena;
+    result->source_start = value_start - parser->input;
+    result->source_end = ptr - parser->input;
+
+    parser->current = ptr;
+
+    return result;
+}

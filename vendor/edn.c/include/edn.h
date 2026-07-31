@@ -1,0 +1,1105 @@
+/**
+ * EDN.C - Fast EDN (Extensible Data Notation) parser
+ * 
+ * A simple and performant EDN parser written in C11 with SIMD acceleration.
+ */
+
+#ifndef EDN_H
+#define EDN_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(EDN_BUILDING_SHARED)
+#define EDN_API __declspec(dllexport)
+#elif defined(EDN_USING_SHARED)
+#define EDN_API __declspec(dllimport)
+#else
+#define EDN_API
+#endif
+#else
+#if defined(EDN_BUILDING_SHARED) && (defined(__GNUC__) || defined(__clang__))
+#define EDN_API __attribute__((visibility("default")))
+#else
+#define EDN_API
+#endif
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* EDN value types */
+typedef enum {
+    EDN_TYPE_NIL,
+    EDN_TYPE_BOOL,
+    EDN_TYPE_INT,
+    EDN_TYPE_BIGINT,
+    EDN_TYPE_FLOAT,
+    EDN_TYPE_BIGDEC,
+#ifdef EDN_ENABLE_CLOJURE_EXTENSION
+    EDN_TYPE_RATIO,
+    EDN_TYPE_BIGRATIO,
+#endif
+    EDN_TYPE_CHARACTER,
+    EDN_TYPE_STRING,
+    EDN_TYPE_SYMBOL,
+    EDN_TYPE_KEYWORD,
+    EDN_TYPE_LIST,
+    EDN_TYPE_VECTOR,
+    EDN_TYPE_MAP,
+    EDN_TYPE_SET,
+    EDN_TYPE_TAGGED,
+    EDN_TYPE_EXTERNAL
+} edn_type_t;
+
+/* Opaque EDN value structure */
+typedef struct edn_value edn_value_t;
+
+/* Error codes */
+typedef enum {
+    EDN_OK = 0,
+    EDN_ERROR_INVALID_SYNTAX,
+    EDN_ERROR_UNEXPECTED_EOF,
+    EDN_ERROR_UNTERMINATED_COLLECTION,
+    EDN_ERROR_OUT_OF_MEMORY,
+    EDN_ERROR_INVALID_NUMBER,
+    EDN_ERROR_INVALID_STRING,
+    EDN_ERROR_INVALID_CHARACTER,
+    EDN_ERROR_INVALID_DISCARD,
+    EDN_ERROR_UNMATCHED_DELIMITER,
+    EDN_ERROR_UNKNOWN_TAG,
+    EDN_ERROR_DUPLICATE_KEY,
+    EDN_ERROR_DUPLICATE_ELEMENT,
+    EDN_ERROR_MAX_DEPTH_EXCEEDED,
+    EDN_ERROR_UNSUPPORTED_TYPE,
+    EDN_ERROR_INVALID_ARGUMENT,
+    EDN_ERROR_IO_FAILURE,
+    EDN_ERROR_INVALID_STATE
+} edn_error_t;
+
+typedef struct {
+    size_t offset; /* Byte offset from start of input */
+    size_t line;   /* Line number (1-indexed) */
+    size_t column; /* Column number (1-indexed) */
+} edn_error_position_t;
+
+/* Parse result */
+typedef struct {
+    edn_value_t* value;               /* Parsed value (NULL on error) */
+    edn_error_t error;                /* Error code (EDN_OK on success) */
+    edn_error_position_t error_start; /* Start of error range */
+    edn_error_position_t error_end;   /* End of error range */
+    const char* error_message;        /* Human-readable error description */
+} edn_result_t;
+
+/**
+ * Parse EDN from a UTF-8 string.
+ *
+ * @param input UTF-8 encoded string containing EDN data
+ * @param length Length of input in bytes (or 0 to use strlen)
+ * @return Parse result containing value or error information
+ *
+ * The returned value must be freed with edn_free().
+ */
+EDN_API edn_result_t edn_read(const char* input, size_t length);
+
+/**
+ * Free an EDN value and all associated memory.
+ *
+ * @param value Value to free (may be NULL)
+ */
+EDN_API void edn_free(edn_value_t* value);
+
+/**
+ * Get the type of an EDN value.
+ *
+ * @param value EDN value
+ * @return Type of the value
+ */
+EDN_API edn_type_t edn_type(const edn_value_t* value);
+
+/**
+ * Get the source position range of an EDN value.
+ *
+ * Returns the byte offsets in the original input where this value
+ * started and ended.
+ *
+ * @param value EDN value
+ * @param start Optional output for start byte offset (may be NULL)
+ * @param end Optional output for end byte offset (may be NULL)
+ * @return true if value is not NULL, false otherwise
+ *
+ * Example:
+ *   size_t start, end;
+ *   if (edn_source_position(value, &start, &end)) {
+ *       printf("Value spans bytes %zu to %zu\n", start, end);
+ *   }
+ */
+EDN_API bool edn_source_position(const edn_value_t* value, size_t* start, size_t* end);
+
+/**
+ * Get the C string value from an EDN string.
+ *
+ * This function implements lazy decoding:
+ * - For strings without escapes: returns pointer to original input (zero-copy)
+ * - For strings with escapes: decodes and caches result on first call
+ *
+ * @param value EDN string value
+ * @param length Optional output parameter for string length (may be NULL)
+ * @return Pointer to UTF-8 string, or NULL if value is not a string
+ *
+ * The returned pointer is valid until the value is freed with edn_free().
+ * The string is guaranteed to be null-terminated.
+ */
+EDN_API const char* edn_string_get(const edn_value_t* value, size_t* length);
+
+/**
+ * Check if value is nil.
+ *
+ * @param value EDN value
+ * @return true if value is nil, false otherwise
+ */
+EDN_API bool edn_is_nil(const edn_value_t* value);
+
+/**
+ * Get boolean value from an EDN boolean.
+ *
+ * @param value EDN boolean value
+ * @param out Pointer to store the result
+ * @return true if value is EDN_TYPE_BOOL, false otherwise
+ */
+EDN_API bool edn_bool_get(const edn_value_t* value, bool* out);
+
+/**
+ * Get int64_t value from an EDN integer.
+ *
+ * @param value EDN integer value
+ * @param out Pointer to store the result
+ * @return true if value is EDN_TYPE_INT, false otherwise
+ */
+EDN_API bool edn_int64_get(const edn_value_t* value, int64_t* out);
+
+/**
+ * Get BigInt digit string from an EDN big integer.
+ *
+ * Returns the string representation of the big integer for use with
+ * external BigInt libraries (GMP, OpenSSL BIGNUM, etc.).
+ *
+ * @param value EDN big integer value
+ * @param length Pointer to store the digit string length (may be NULL)
+ * @param negative Pointer to store the sign (may be NULL)
+ * @param radix Pointer to store the number base (may be NULL)
+ * @return Pointer to digit string, or NULL if value is not a big integer
+ *
+ * The returned pointer is valid until the value is freed with edn_free().
+ */
+EDN_API const char* edn_bigint_get(const edn_value_t* value, size_t* length, bool* negative,
+                                   uint8_t* radix);
+
+/**
+ * Get double value from an EDN float.
+ *
+ * @param value EDN float value
+ * @param out Pointer to store the result
+ * @return true if value is EDN_TYPE_FLOAT, false otherwise
+ */
+EDN_API bool edn_double_get(const edn_value_t* value, double* out);
+
+/**
+ * Get BigDecimal string from an EDN big decimal.
+ *
+ * Returns the string representation of the big decimal for use with
+ * external BigDecimal libraries (Java BigDecimal, GMP mpf_t, etc.).
+ *
+ * @param value EDN big decimal value
+ * @param length Pointer to store the string length (may be NULL)
+ * @param negative Pointer to store the sign (may be NULL)
+ * @return Pointer to decimal string, or NULL if value is not a big decimal
+ *
+ * The returned pointer is valid until the value is freed with edn_free().
+ * The string contains the exact decimal representation (e.g., "3.14159265358979323846").
+ */
+EDN_API const char* edn_bigdec_get(const edn_value_t* value, size_t* length, bool* negative);
+
+#ifdef EDN_ENABLE_CLOJURE_EXTENSION
+/**
+ * Get numerator and denominator from an EDN ratio.
+ *
+ * @param value EDN ratio value
+ * @param numerator Pointer to store the numerator
+ * @param denominator Pointer to store the denominator
+ * @return true if value is EDN_TYPE_RATIO, false otherwise
+ */
+EDN_API bool edn_ratio_get(const edn_value_t* value, int64_t* numerator, int64_t* denominator);
+
+/**
+ * Get numerator and denominator strings from an EDN big ratio.
+ *
+ * Returns pointers to the string representations of numerator and denominator
+ * for use with external BigInt libraries (GMP, OpenSSL BIGNUM, etc.).
+ *
+ * @param value EDN big ratio value
+ * @param numerator Pointer to store numerator digit string
+ * @param numer_length Pointer to store numerator string length (may be NULL)
+ * @param numer_negative Pointer to store numerator sign (may be NULL)
+ * @param denominator Pointer to store denominator digit string
+ * @param denom_length Pointer to store denominator string length (may be NULL)
+ * @return true if value is EDN_TYPE_BIGRATIO, false otherwise
+ *
+ * The returned pointers are valid until the value is freed with edn_free().
+ */
+EDN_API bool edn_bigratio_get(const edn_value_t* value, const char** numerator,
+                              size_t* numer_length, bool* numer_negative, const char** denominator,
+                              size_t* denom_length);
+#endif
+
+/**
+ * Convert any EDN number type to double.
+ *
+ * Automatically converts INT, BIGINT (may lose precision), FLOAT, and BIGDEC to double.
+ *
+ * @param value EDN number value (INT, BIGINT, FLOAT, or BIGDEC)
+ * @param out Pointer to store the result
+ * @return true if value is a number type, false otherwise
+ */
+EDN_API bool edn_number_as_double(const edn_value_t* value, double* out);
+
+/**
+ * Get Unicode codepoint from an EDN character.
+ *
+ * @param value EDN character value
+ * @param out Pointer to store the Unicode codepoint
+ * @return true if value is EDN_TYPE_CHARACTER, false otherwise
+ */
+EDN_API bool edn_character_get(const edn_value_t* value, uint32_t* out);
+
+/**
+ * Type Predicates
+ */
+
+/**
+ * Check if value is a string.
+ *
+ * @param value EDN value
+ * @return true if value is EDN_TYPE_STRING, false otherwise
+ */
+EDN_API bool edn_is_string(const edn_value_t* value);
+
+/**
+ * Check if value is any numeric type.
+ *
+ * Returns true for INT, BIGINT, FLOAT, BIGDEC, and RATIO (if enabled).
+ *
+ * @param value EDN value
+ * @return true if value is a numeric type, false otherwise
+ */
+EDN_API bool edn_is_number(const edn_value_t* value);
+
+/**
+ * Check if value is an integer type.
+ *
+ * Returns true for INT or BIGINT.
+ *
+ * @param value EDN value
+ * @return true if value is an integer type, false otherwise
+ */
+EDN_API bool edn_is_integer(const edn_value_t* value);
+
+/**
+ * Check if value is a collection type.
+ *
+ * Returns true for LIST, VECTOR, MAP, or SET.
+ *
+ * @param value EDN value
+ * @return true if value is a collection type, false otherwise
+ */
+EDN_API bool edn_is_collection(const edn_value_t* value);
+
+/**
+ * String Utilities
+ */
+
+/**
+ * Compare EDN string with C string for equality.
+ *
+ * @param value EDN string value
+ * @param str C string to compare against (null-terminated)
+ * @return true if strings are equal, false otherwise
+ *
+ * Returns false if value is NULL or not a string.
+ */
+EDN_API bool edn_string_equals(const edn_value_t* value, const char* str);
+
+/**
+ * Get symbol name and optional namespace from an EDN symbol.
+ *
+ * @param value EDN symbol value
+ * @param ns Optional output for namespace pointer (may be NULL)
+ * @param ns_length Optional output for namespace length (may be NULL)
+ * @param name Output for name pointer
+ * @param name_length Optional output for name length (may be NULL)
+ * @return true if value is EDN_TYPE_SYMBOL, false otherwise
+ */
+EDN_API bool edn_symbol_get(const edn_value_t* value, const char** ns, size_t* ns_length,
+                            const char** name, size_t* name_length);
+
+/**
+ * Get keyword name and optional namespace from an EDN keyword.
+ *
+ * @param value EDN keyword value
+ * @param ns Optional output for namespace pointer (may be NULL)
+ * @param ns_length Optional output for namespace length (may be NULL)
+ * @param name Output for name pointer
+ * @param name_length Optional output for name length (may be NULL)
+ * @return true if value is EDN_TYPE_KEYWORD, false otherwise
+ */
+EDN_API bool edn_keyword_get(const edn_value_t* value, const char** ns, size_t* ns_length,
+                             const char** name, size_t* name_length);
+
+/**
+ * List API
+ */
+
+/**
+ * Get the number of elements in a list.
+ *
+ * @param value EDN list value
+ * @return Number of elements, or 0 if not a list
+ */
+EDN_API size_t edn_list_count(const edn_value_t* value);
+
+/**
+ * Get element at index from a list.
+ *
+ * @param value EDN list value
+ * @param index Element index (0-based)
+ * @return Element at index, or NULL if out of bounds or not a list
+ */
+EDN_API edn_value_t* edn_list_get(const edn_value_t* value, size_t index);
+
+/**
+ * Vector API
+ */
+
+/**
+ * Get the number of elements in a vector.
+ *
+ * @param value EDN vector value
+ * @return Number of elements, or 0 if not a vector
+ */
+EDN_API size_t edn_vector_count(const edn_value_t* value);
+
+/**
+ * Get element at index from a vector.
+ *
+ * @param value EDN vector value
+ * @param index Element index (0-based)
+ * @return Element at index, or NULL if out of bounds or not a vector
+ */
+EDN_API edn_value_t* edn_vector_get(const edn_value_t* value, size_t index);
+
+/**
+ * Set API
+ */
+
+/**
+ * Get the number of elements in a set.
+ *
+ * @param value EDN set value
+ * @return Number of elements, or 0 if not a set
+ */
+EDN_API size_t edn_set_count(const edn_value_t* value);
+
+/**
+ * Get element at index from a set.
+ *
+ * Note: Sets are unordered, this is for iteration only.
+ *
+ * @param value EDN set value
+ * @param index Element index (0-based)
+ * @return Element at index, or NULL if out of bounds or not a set
+ */
+EDN_API edn_value_t* edn_set_get(const edn_value_t* value, size_t index);
+
+/**
+ * Check if set contains an element.
+ *
+ * @param value EDN set value
+ * @param element Element to search for
+ * @return true if element is in set, false otherwise
+ */
+EDN_API bool edn_set_contains(const edn_value_t* value, const edn_value_t* element);
+
+/**
+ * Map API
+ */
+
+/**
+ * Get the number of key-value pairs in a map.
+ *
+ * @param value EDN map value
+ * @return Number of pairs, or 0 if not a map
+ */
+EDN_API size_t edn_map_count(const edn_value_t* value);
+
+/**
+ * Get key at index from a map.
+ *
+ * Note: Maps are unordered, this is for iteration only.
+ *
+ * @param value EDN map value
+ * @param index Pair index (0-based)
+ * @return Key at index, or NULL if out of bounds or not a map
+ */
+EDN_API edn_value_t* edn_map_get_key(const edn_value_t* value, size_t index);
+
+/**
+ * Get value at index from a map.
+ *
+ * Note: Maps are unordered, this is for iteration only.
+ *
+ * @param value EDN map value
+ * @param index Pair index (0-based)
+ * @return Value at index, or NULL if out of bounds or not a map
+ */
+EDN_API edn_value_t* edn_map_get_value(const edn_value_t* value, size_t index);
+
+/**
+ * Look up value by key in a map.
+ *
+ * @param value EDN map value
+ * @param key Key to search for
+ * @return Value associated with key, or NULL if not found or not a map
+ */
+EDN_API edn_value_t* edn_map_lookup(const edn_value_t* value, const edn_value_t* key);
+
+/**
+ * Check if map contains a key.
+ *
+ * @param value EDN map value
+ * @param key Key to search for
+ * @return true if key is in map, false otherwise
+ */
+EDN_API bool edn_map_contains_key(const edn_value_t* value, const edn_value_t* key);
+
+/**
+ * Map Convenience Functions
+ */
+
+/**
+ * Look up value by keyword name in a map.
+ *
+ * Convenience wrapper that creates a keyword key internally and performs lookup.
+ * Equivalent to creating ":keyword" and calling edn_map_lookup().
+ *
+ * @param map EDN map value
+ * @param keyword Keyword name (without the leading ':')
+ * @return Value associated with keyword, or NULL if not found or not a map
+ *
+ * Example:
+ *   edn_value_t* name = edn_map_get_keyword(map, "name");
+ *   // Equivalent to: edn_map_lookup(map, parse(":name"))
+ */
+EDN_API edn_value_t* edn_map_get_keyword(const edn_value_t* map, const char* keyword);
+
+/**
+ * Look up value by namespaced keyword in a map.
+ *
+ * Convenience wrapper that creates a keyword key internally and performs lookup.
+ * Equivalent to creating ":ns/keyword" and calling edn_map_lookup().
+ *
+ * @param map EDN map value
+ * @param ns Keyword namespace (without the leading ':')
+ * @param name Keyword name
+ * @return Value associated with keyword, or NULL if not found or not a map
+ *
+ * Example:
+ *   edn_value_t* name = edn_map_get_namespaced_keyword(map, "ns", "name");
+ *   // Equivalent to: edn_map_lookup(map, parse(":ns/name"))
+ */
+EDN_API edn_value_t* edn_map_get_namespaced_keyword(const edn_value_t* map, const char* ns,
+                                                    const char* name);
+
+/**
+ * Look up value by string key in a map.
+ *
+ * Convenience wrapper that creates a string key internally and performs lookup.
+ * The supplied key is interpreted as the already-decoded UTF-8 byte sequence,
+ * so this lookup correctly matches keys that were parsed with escape sequences
+ * (e.g., a map key written as "a\nb" will match key "a\nb" passed here).
+ *
+ * @param map EDN map value
+ * @param key String key value
+ * @return Value associated with key, or NULL if not found or not a map
+ */
+EDN_API edn_value_t* edn_map_get_string_key(const edn_value_t* map, const char* key);
+
+/**
+ * Tagged Literal API
+ */
+
+/**
+ * Get tag and value from a tagged literal.
+ *
+ * @param value EDN tagged literal value
+ * @param tag Output for tag string pointer
+ * @param tag_length Optional output for tag length (may be NULL)
+ * @param tagged_value Output for the tagged value
+ * @return true if value is EDN_TYPE_TAGGED, false otherwise
+ *
+ * The tag string is the raw symbol name (e.g., "inst", "uuid", "myapp/custom").
+ */
+EDN_API bool edn_tagged_get(const edn_value_t* value, const char** tag, size_t* tag_length,
+                            edn_value_t** tagged_value);
+
+/**
+ * External Value API
+ *
+ * External values allow tagged literal readers to return arbitrary C types
+ * wrapped in an EDN value. The data is stored as a void pointer with a
+ * user-defined type identifier for runtime type checking.
+ */
+
+/* Forward declarations */
+typedef struct edn_arena edn_arena_t;
+
+/**
+ * Equality function for external values.
+ *
+ * Compares two external values of the same type_id for equality.
+ *
+ * @param a First external value's data pointer
+ * @param b Second external value's data pointer
+ * @return true if values are equal, false otherwise
+ */
+typedef bool (*edn_external_equal_fn)(const void* a, const void* b);
+
+/**
+ * Hash function for external values.
+ *
+ * Computes a hash for an external value's data.
+ * Must return consistent hash values for equal data.
+ *
+ * @param data External value's data pointer
+ * @return 64-bit hash value
+ */
+typedef uint64_t (*edn_external_hash_fn)(const void* data);
+
+/**
+ * Register equality and hash functions for an external type.
+ *
+ * Process-global registry. Calls from multiple threads are serialized internally,
+ * but callers are still responsible for ordering register/unregister with any
+ * concurrent parse calls.
+ *
+ * @param type_id User-defined type identifier
+ * @param equal_fn Equality function (required)
+ * @param hash_fn Hash function (optional, may be NULL)
+ * @return true on success, false on allocation failure
+ */
+EDN_API bool edn_external_register_type(uint32_t type_id, edn_external_equal_fn equal_fn,
+                                        edn_external_hash_fn hash_fn);
+
+/**
+ * Unregister equality and hash functions for an external type.
+ *
+ * @param type_id User-defined type identifier
+ */
+EDN_API void edn_external_unregister_type(uint32_t type_id);
+
+/**
+ * Allocate memory from an arena.
+ *
+ * This function is intended for use within tagged literal readers to allocate
+ * memory for external data structures. Memory allocated from the arena is
+ * automatically freed when the EDN value is freed with edn_free().
+ *
+ * @param arena Arena allocator (passed to reader function)
+ * @param size Number of bytes to allocate
+ * @return Pointer to allocated memory, or NULL on allocation failure
+ */
+EDN_API void* edn_arena_alloc(edn_arena_t* arena, size_t size);
+
+/**
+ * Create an external value wrapping arbitrary user data.
+ *
+ * This function is intended to be called from within a tagged literal reader
+ * to wrap a custom C type in an EDN value.
+ *
+ * @param arena Arena allocator (passed to reader function)
+ * @param data Pointer to user data (should be allocated from arena)
+ * @param type_id User-defined type identifier for runtime type checking
+ * @return New EDN_TYPE_EXTERNAL value, or NULL on allocation failure
+ */
+EDN_API edn_value_t* edn_external_create(edn_arena_t* arena, void* data, uint32_t type_id);
+
+/**
+ * Get data and type from an external value.
+ *
+ * @param value EDN external value
+ * @param data Output for user data pointer (may be NULL)
+ * @param type_id Output for type identifier (may be NULL)
+ * @return true if value is EDN_TYPE_EXTERNAL, false otherwise
+ */
+EDN_API bool edn_external_get(const edn_value_t* value, void** data, uint32_t* type_id);
+
+/**
+ * Check if external value has a specific type.
+ *
+ * Convenience function for type checking external values.
+ *
+ * @param value EDN external value
+ * @param type_id Expected type identifier
+ * @return true if value is EDN_TYPE_EXTERNAL with matching type_id
+ */
+EDN_API bool edn_external_is_type(const edn_value_t* value, uint32_t type_id);
+
+/**
+ * Reader API
+ */
+
+/* Forward declaration for reader registry */
+typedef struct edn_reader_registry edn_reader_registry_t;
+
+/**
+ * Reader function for tagged literals.
+ *
+ * Transforms a tagged literal value into its target representation.
+ * Readers can return any EDN type, including EDN_TYPE_EXTERNAL for
+ * wrapping arbitrary C types.
+ *
+ * @param value The wrapped EDN value (e.g., string, map, vector)
+ * @param arena Arena allocator for creating new values
+ * @param error_message Output parameter for error message (set to NULL for success)
+ * @return Transformed EDN value, or NULL on error
+ *
+ * The returned value must be allocated from the provided arena.
+ * On error, set error_message to a string with static storage duration and
+ * return NULL.
+ */
+typedef edn_value_t* (*edn_reader_fn)(edn_value_t* value, edn_arena_t* arena,
+                                      const char** error_message);
+
+/**
+ * Create a new reader registry.
+ *
+ * @return New registry, or NULL on allocation failure
+ */
+EDN_API edn_reader_registry_t* edn_reader_registry_create(void);
+
+/**
+ * Destroy a reader registry and free all associated memory.
+ *
+ * @param registry Registry to destroy (may be NULL)
+ */
+EDN_API void edn_reader_registry_destroy(edn_reader_registry_t* registry);
+
+/**
+ * Register a reader function for a tag.
+ *
+ * If a reader is already registered for this tag, it will be replaced.
+ *
+ * @param registry Reader registry
+ * @param tag Tag name (e.g., "inst", "uuid", "myapp/custom")
+ * @param reader Reader function
+ * @return true on success, false on allocation failure
+ */
+EDN_API bool edn_reader_register(edn_reader_registry_t* registry, const char* tag,
+                                 edn_reader_fn reader);
+
+/**
+ * Unregister a reader function for a tag.
+ *
+ * @param registry Reader registry
+ * @param tag Tag name
+ */
+EDN_API void edn_reader_unregister(edn_reader_registry_t* registry, const char* tag);
+
+/**
+ * Look up a reader function for a tag.
+ *
+ * @param registry Reader registry
+ * @param tag Tag name
+ * @return Reader function, or NULL if not found
+ */
+EDN_API edn_reader_fn edn_reader_lookup(const edn_reader_registry_t* registry, const char* tag);
+
+/**
+ * Default fallback behavior for unregistered tags.
+ */
+typedef enum {
+    /**
+     * Return EDN_TYPE_TAGGED value (current behavior).
+     * Caller must handle conversion manually.
+     */
+    EDN_DEFAULT_READER_PASSTHROUGH,
+
+    /**
+     * Return the wrapped value, discarding the tag.
+     * Useful for ignoring unknown tags during parsing.
+     */
+    EDN_DEFAULT_READER_UNWRAP,
+
+    /**
+     * Fail with EDN_ERROR_UNKNOWN_TAG error.
+     * Useful for strict validation.
+     */
+    EDN_DEFAULT_READER_ERROR
+} edn_default_reader_mode_t;
+
+/**
+ * Parse options for configuring parser behavior.
+ *
+ * ABI note: `struct_size` MUST be initialized to `sizeof(edn_parse_options_t)` by
+ * the caller. New fields are appended in future versions; the parser uses
+ * struct_size to know which fields are present. The recommended idiom is:
+ *
+ *   edn_parse_options_t opts = {0};
+ *   opts.struct_size = sizeof(opts);
+ *   opts.reader_registry = ...;
+ */
+typedef struct {
+    /**
+     * Size of this struct as known to the caller. MUST be set to
+     * sizeof(edn_parse_options_t) before passing to edn_read_with_options().
+     * A value of 0 is treated as "use defaults for all fields".
+     */
+    size_t struct_size;
+
+    /**
+     * Optional reader registry for tagged literals.
+     * If NULL, all tags use default fallback.
+     */
+    edn_reader_registry_t* reader_registry;
+
+    /**
+     * Optional value to return on end-of-file. When not supplied, return error.
+     * */
+    edn_value_t* eof_value;
+
+    /**
+     * Default behavior for tags without registered readers.
+     */
+    edn_default_reader_mode_t default_reader_mode;
+
+    /**
+     * Maximum nesting depth for collections/tagged/metadata/discard chains.
+     * 0 means use a sane built-in default (currently 1024). The parser fails
+     * with EDN_ERROR_MAX_DEPTH_EXCEEDED if this limit is exceeded.
+     */
+    size_t max_depth;
+} edn_parse_options_t;
+
+/**
+ * Parse EDN with custom options.
+ *
+ * @param input UTF-8 encoded string containing EDN data
+ * @param length Length of input in bytes (or 0 to use strlen)
+ * @param options Parse options (or NULL for defaults)
+ * @return Parse result containing value or error information
+ */
+EDN_API edn_result_t edn_read_with_options(const char* input, size_t length,
+                                           const edn_parse_options_t* options);
+
+/**
+ * Metadata API (optional, requires EDN_ENABLE_CLOJURE_EXTENSION)
+ */
+
+#ifdef EDN_ENABLE_CLOJURE_EXTENSION
+/**
+ * Get metadata attached to a value.
+ *
+ * Metadata is always a map (or NULL if no metadata).
+ *
+ * @param value EDN value
+ * @return Metadata map, or NULL if no metadata attached
+ */
+EDN_API edn_value_t* edn_value_meta(const edn_value_t* value);
+
+/**
+ * Check if a value has metadata attached.
+ *
+ * @param value EDN value
+ * @return true if value has metadata, false otherwise
+ */
+EDN_API bool edn_value_has_meta(const edn_value_t* value);
+#endif
+
+/* ========================================================================
+ * EDN writer (serializer)
+ * ======================================================================== */
+
+/**
+ * Streaming output callback. Invoked with each emitted byte range. Return 0
+ * to continue, non-zero to abort emission (the negative return is propagated
+ * back to edn_write_*).
+ */
+typedef int (*edn_writer_callback_fn)(const char* buf, size_t len, void* ctx);
+
+/* Opaque writer-extension registry (for EDN_TYPE_EXTERNAL values).
+ * Scaffolded; not yet honored by edn_write_* in this release. */
+typedef struct edn_writer_registry edn_writer_registry_t;
+
+/**
+ * Writer options. Pass NULL to edn_write_* for defaults (compact, raw UTF-8,
+ * no trailing newline). When supplying a non-NULL options pointer you MUST
+ * initialize struct_size to sizeof(edn_write_options_t).
+ *
+ * The same struct also configures the streaming emitter (see
+ * edn_emitter_create) with two caveats:
+ *   - sort_unordered=true is rejected at emitter_create (streaming cannot sort).
+ *   - emit_metadata=false makes edn_emit_meta return -EDN_ERROR_INVALID_STATE.
+ *
+ * Implementation status:
+ *   indent           - implemented as a boolean toggle: 0 = compact, non-zero = pretty-print
+ *   sort_unordered   - implemented (byte-wise lex order on serialized elements; maps and sets)
+ *   emit_metadata    - implemented (requires EDN_ENABLE_CLOJURE_EXTENSION)
+ *   escape_unicode   - implemented (non-ASCII bytes in strings -> \uXXXX BMP escapes;
+ *                                   supplementary codepoints pass through as UTF-8)
+ *   writer_registry  - NOT IMPLEMENTED (EDN_TYPE_EXTERNAL -> EDN_ERROR_UNSUPPORTED_TYPE)
+ *   newline_at_end   - implemented
+ */
+typedef struct {
+    size_t struct_size;
+    size_t indent;                          /* 0 = compact; non-zero enables pretty-print */
+    bool sort_unordered;                    /* deterministic ordering of map entries and set
+                                               elements (byte-wise on serialized form) */
+    bool emit_metadata;                     /* emit ^... metadata prefixes
+                                               (requires EDN_ENABLE_CLOJURE_EXTENSION) */
+    bool escape_unicode;                    /* escape non-ASCII bytes in strings as
+                                               \uXXXX (BMP only) */
+    bool newline_at_end;                    /* emit trailing '\n' after value */
+    edn_writer_registry_t* writer_registry; /* reserved */
+} edn_write_options_t;
+
+/**
+ * Streaming primitive. All other edn_write_* functions are thin wrappers.
+ *
+ * @return 0 on success; negative on failure (callback non-zero return is
+ *         propagated; -EDN_ERROR_* for internal errors).
+ */
+EDN_API int edn_write_stream(const edn_value_t* value, edn_writer_callback_fn cb, void* ctx,
+                             const edn_write_options_t* options);
+
+/**
+ * Serialize to a freshly malloc'd, null-terminated string. Caller frees with
+ * free(). Optional out_len receives the byte length (excluding null).
+ *
+ * @return NULL on error (alloc failure or unsupported type).
+ */
+EDN_API char* edn_write_string(const edn_value_t* value, const edn_write_options_t* options,
+                               size_t* out_len);
+
+/**
+ * Serialize to a caller-provided buffer with snprintf semantics: writes at
+ * most cap-1 bytes plus a null terminator, returns the number of bytes that
+ * would have been written (excluding null). If cap == 0, buf may be NULL.
+ *
+ * @return Number of bytes required, or (size_t)-1 on error.
+ */
+EDN_API size_t edn_write_buffer(const edn_value_t* value, char* buf, size_t cap,
+                                const edn_write_options_t* options);
+
+/**
+ * Serialize to a stdio FILE*.
+ *
+ * @return 0 on success, negative on error.
+ */
+EDN_API int edn_write_file(const edn_value_t* value, FILE* fp, const edn_write_options_t* options);
+
+/**
+ * Convenience: compact, default options, freshly malloc'd string.
+ * Equivalent to edn_write_string(value, NULL, NULL). Caller frees with free().
+ */
+EDN_API char* edn_write(const edn_value_t* value);
+
+/* Writer extension registry (scaffold; not yet honored by edn_write_*). */
+EDN_API edn_writer_registry_t* edn_writer_registry_create(void);
+EDN_API void edn_writer_registry_destroy(edn_writer_registry_t* registry);
+
+/* ========================================================================
+ * EDN streaming emitter
+ * ========================================================================
+ *
+ * Push-style YAJL-like emitter for callers that do not have a complete
+ * edn_value_t tree to serialize. Bytes flow through the same
+ * edn_writer_callback_fn used by edn_write_*; output is byte-identical to
+ * what the value-tree writer would produce for the equivalent value.
+ *
+ * State machine (fail-loud):
+ *   - Every begin_<collection> must be matched by the corresponding
+ *     end_<collection>; mismatched pairs return -EDN_ERROR_INVALID_STATE.
+ *   - Maps strictly alternate key, value, key, value, ...; ending a map on
+ *     a key (odd item count) returns -EDN_ERROR_INVALID_STATE.
+ *   - Exactly one top-level value must be emitted before edn_emitter_finish;
+ *     emitting a second top-level value, or finishing with zero values,
+ *     returns -EDN_ERROR_INVALID_STATE.
+ *   - edn_emit_tag records a pending tag consumed by the very next value
+ *     emit (scalar, begin_<collection>, big number, or edn_emit_value).
+ *     Calling edn_emit_tag twice without a value between, or finishing with
+ *     a pending tag, returns -EDN_ERROR_INVALID_STATE.
+ *   - edn_emit_meta (Clojure extension) declares that the next emit is a
+ *     metadata payload (must be map, vector, symbol, or keyword); the
+ *     emit *after* that payload is the value the metadata attaches to.
+ *     Multiple meta declarations stack in call order, and tag/meta prefixes
+ *     flush together in call order. Finishing with a pending meta state
+ *     returns -EDN_ERROR_INVALID_STATE.
+ *   - Identifier syntax, character codepoints (> 0x10FFFF and surrogates),
+ *     UTF-8 well-formedness, and big-number digit characters are validated
+ *     at the entry of the relevant emit function; violations return
+ *     -EDN_ERROR_INVALID_ARGUMENT.
+ *   - Duplicate map keys and duplicate set elements are NOT checked; the
+ *     caller is responsible for uniqueness. Emitting duplicates produces
+ *     output that may not round-trip through edn_read.
+ *   - Maximum nesting depth mirrors the reader's (EDN_DEFAULT_MAX_DEPTH);
+ *     exceeding it returns -EDN_ERROR_MAX_DEPTH_EXCEEDED.
+ *
+ * All edn_emit_* functions return 0 on success; on failure they return a
+ * negative -EDN_ERROR_* code and leave the emitter in an unusable state
+ * (further emits return -EDN_ERROR_INVALID_STATE). The caller must still
+ * call edn_emitter_destroy in either case.
+ */
+
+typedef struct edn_emitter edn_emitter_t;
+
+/**
+ * Create a streaming emitter.
+ *
+ * @param cb       Callback receiving emitted byte ranges (required).
+ * @param ctx      Opaque pointer passed back to cb.
+ * @param options  Writer options (may be NULL for defaults). Copied; the
+ *                 caller's struct lifetime is not the emitter's concern after
+ *                 this call returns.
+ *
+ * @return New emitter, or NULL on:
+ *         - cb == NULL,
+ *         - non-NULL options with bad struct_size,
+ *         - options->sort_unordered == true (streaming cannot sort),
+ *         - options->writer_registry != NULL (not honored by the writer),
+ *         - allocation failure.
+ */
+EDN_API edn_emitter_t* edn_emitter_create(edn_writer_callback_fn cb, void* ctx,
+                                          const edn_write_options_t* options);
+
+/**
+ * Finish a streaming emission.
+ *
+ * Verifies that the emitter is at top level, that exactly one top-level
+ * value has been emitted, and that no tag/meta prefix is pending. If
+ * options->newline_at_end was set at create time, emits the trailing '\n'.
+ * After a successful finish, all further edn_emit_* calls return
+ * -EDN_ERROR_INVALID_STATE.
+ *
+ * @return 0 on success; negative -EDN_ERROR_* on failure.
+ */
+EDN_API int edn_emitter_finish(edn_emitter_t* emitter);
+
+/**
+ * Destroy an emitter. NULL-safe. Calling destroy without a prior finish is
+ * allowed; the partial output remains the caller's concern.
+ */
+EDN_API void edn_emitter_destroy(edn_emitter_t* emitter);
+
+/* --- Scalars ----------------------------------------------------------- */
+EDN_API int edn_emit_nil(edn_emitter_t* emitter);
+EDN_API int edn_emit_bool(edn_emitter_t* emitter, bool value);
+EDN_API int edn_emit_int(edn_emitter_t* emitter, int64_t value);
+EDN_API int edn_emit_double(edn_emitter_t* emitter, double value);
+
+/**
+ * Emit a string. `len == (size_t)-1` requests strlen(s). The input is
+ * validated as well-formed UTF-8; malformed input returns
+ * -EDN_ERROR_INVALID_ARGUMENT.
+ */
+EDN_API int edn_emit_string(edn_emitter_t* emitter, const char* s, size_t len);
+
+/**
+ * Emit a keyword/symbol. Names and namespaces are validated against the
+ * reader's identifier grammar; invalid input returns
+ * -EDN_ERROR_INVALID_ARGUMENT.
+ */
+EDN_API int edn_emit_keyword(edn_emitter_t* emitter, const char* name);
+EDN_API int edn_emit_keyword_ns(edn_emitter_t* emitter, const char* ns, const char* name);
+EDN_API int edn_emit_symbol(edn_emitter_t* emitter, const char* name);
+EDN_API int edn_emit_symbol_ns(edn_emitter_t* emitter, const char* ns, const char* name);
+
+/**
+ * Emit a character literal. Codepoints > 0x10FFFF and surrogates
+ * (0xD800..0xDFFF) return -EDN_ERROR_INVALID_ARGUMENT.
+ */
+EDN_API int edn_emit_character(edn_emitter_t* emitter, uint32_t codepoint);
+
+#ifdef EDN_ENABLE_CLOJURE_EXTENSION
+/**
+ * Emit a big integer. `digits` is the digit string with optional leading
+ * '-' sign. `radix` must be in [2, 36]. Output matches what the value-tree
+ * writer produces for the same parsed BigInt (including the radix prefix
+ * and 'N' suffix conventions).
+ */
+EDN_API int edn_emit_bigint(edn_emitter_t* emitter, const char* digits, int radix);
+
+/**
+ * Emit a big ratio. Numerator may have a leading '-' sign; denominator is
+ * positive-magnitude digits only.
+ */
+EDN_API int edn_emit_bigratio(edn_emitter_t* emitter, const char* numerator,
+                              const char* denominator);
+
+/**
+ * Emit a big decimal. `digits` is the decimal representation with optional
+ * leading '-' sign and optional fractional part / exponent.
+ */
+EDN_API int edn_emit_bigdecimal(edn_emitter_t* emitter, const char* digits);
+#endif
+
+/* --- Collections ------------------------------------------------------- */
+EDN_API int edn_emit_begin_list(edn_emitter_t* emitter);
+EDN_API int edn_emit_end_list(edn_emitter_t* emitter);
+EDN_API int edn_emit_begin_vector(edn_emitter_t* emitter);
+EDN_API int edn_emit_end_vector(edn_emitter_t* emitter);
+EDN_API int edn_emit_begin_set(edn_emitter_t* emitter);
+EDN_API int edn_emit_end_set(edn_emitter_t* emitter);
+
+/**
+ * Begin a map. Caller MUST emit strictly alternating key, value, key,
+ * value, ... pairs and is responsible for key uniqueness; the emitter does
+ * not check for duplicates.
+ */
+EDN_API int edn_emit_begin_map(edn_emitter_t* emitter);
+EDN_API int edn_emit_end_map(edn_emitter_t* emitter);
+
+/**
+ * Record a pending tag. The very next value emitted is prefixed with
+ * `#<tag> `. The tag string is copied; the caller's buffer need not
+ * outlive this call. Namespaced tags using a single '/' separator are
+ * accepted, e.g. `#my/tag`.
+ */
+EDN_API int edn_emit_tag(edn_emitter_t* emitter, const char* tag);
+
+#ifdef EDN_ENABLE_CLOJURE_EXTENSION
+/**
+ * Declare that the next emitted value is a metadata payload (must be map,
+ * vector, symbol, or keyword); the emit after the payload is the actual
+ * value the metadata attaches to. Requires options->emit_metadata == true.
+ * Multiple calls stack; tag and meta prefixes flush together in call order.
+ */
+EDN_API int edn_emit_meta(edn_emitter_t* emitter);
+#endif
+
+/**
+ * Embed a pre-built value subtree. Behaves as if the value's scalars and
+ * containers were emitted one-by-one through this emitter. Honors the
+ * emitter's options (indent, escape_unicode, ...) and consumes any pending
+ * tag/meta prefixes that apply to the embedded value as a whole.
+ */
+EDN_API int edn_emit_value(edn_emitter_t* emitter, const edn_value_t* value);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* EDN_H */

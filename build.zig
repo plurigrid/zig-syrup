@@ -18,6 +18,104 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // ========================================
+    // edn.c (vendored from DotFox/edn.c, MIT — see vendor/edn.c/VENDORED.md)
+    // C11 SIMD zero-copy EDN reader, wrapped by src/edn_bridge.zig
+    // ========================================
+    const edn_c_mod = b.createModule(.{
+        .target = target,
+        .optimize = .ReleaseFast,
+        .link_libc = true,
+    });
+    edn_c_mod.addIncludePath(b.path("vendor/edn.c/include"));
+    edn_c_mod.addIncludePath(b.path("vendor/edn.c/src"));
+    edn_c_mod.addCMacro("EDN_ENABLE_CLOJURE_EXTENSION", "1");
+    edn_c_mod.addCSourceFiles(.{
+        .root = b.path("vendor/edn.c/src"),
+        .files = &.{
+            "edn.c",       "arena.c",      "collection.c", "number.c",
+            "string.c",    "identifier.c", "character.c",  "reader.c",
+            "tagged.c",    "symbolic.c",   "discard.c",    "metadata.c",
+            "equality.c",  "uniqueness.c", "simd.c",       "writer.c",
+            "newline_finder.c", "ryu/d2s.c",
+        },
+        .flags = &.{"-std=c11"},
+    });
+    const edn_c_lib = b.addLibrary(.{
+        .name = "edn_c",
+        .linkage = .static,
+        .root_module = edn_c_mod,
+    });
+
+    // translate-c module for edn.h (0.17-dev removed @cImport)
+    const edn_c_translate = b.addTranslateC(.{
+        .root_source_file = b.path("vendor/edn.c/include/edn.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    edn_c_translate.addIncludePath(b.path("vendor/edn.c/include"));
+    edn_c_translate.defineCMacroRaw("EDN_ENABLE_CLOJURE_EXTENSION=1");
+    const edn_c_import_mod = edn_c_translate.createModule();
+
+    // EDN bridge module (EDN text <-> syrup.Value)
+    const edn_bridge_mod = b.addModule("edn_bridge", .{
+        .root_source_file = b.path("src/edn_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    edn_bridge_mod.addImport("syrup", syrup_mod);
+    edn_bridge_mod.addImport("edn_c", edn_c_import_mod);
+    edn_bridge_mod.linkLibrary(edn_c_lib);
+
+    // EDN bridge tests
+    const edn_bridge_test_mod = b.createModule(.{
+        .root_source_file = b.path("src/edn_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    edn_bridge_test_mod.addImport("syrup", syrup_mod);
+    edn_bridge_test_mod.addImport("edn_c", edn_c_import_mod);
+    edn_bridge_test_mod.linkLibrary(edn_c_lib);
+    const edn_bridge_tests = b.addTest(.{ .root_module = edn_bridge_test_mod });
+    const run_edn_bridge_tests = b.addRunArtifact(edn_bridge_tests);
+    const test_edn_bridge_step = b.step("test-edn-bridge", "Run EDN <-> syrup bridge tests");
+    test_edn_bridge_step.dependOn(&run_edn_bridge_tests.step);
+
+    // EDN round-trip corpus tool (parse∘emit∘parse = parse over vendored corpus)
+    const edn_roundtrip_mod = b.createModule(.{
+        .root_source_file = b.path("tools/edn_roundtrip.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    edn_roundtrip_mod.addImport("syrup", syrup_mod);
+    edn_roundtrip_mod.addImport("edn_bridge", edn_bridge_mod);
+    const edn_roundtrip_exe = b.addExecutable(.{
+        .name = "edn-roundtrip",
+        .root_module = edn_roundtrip_mod,
+    });
+    const edn_roundtrip_install = b.step("edn-roundtrip", "Build EDN corpus round-trip checker");
+    edn_roundtrip_install.dependOn(&b.addInstallArtifact(edn_roundtrip_exe, .{}).step);
+
+    // edn-syrup CLI (EDN twin of the JSON <-> syrup cli.zig)
+    const edn_syrup_cli_mod = b.createModule(.{
+        .root_source_file = b.path("tools/edn_syrup_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    edn_syrup_cli_mod.addImport("syrup", syrup_mod);
+    edn_syrup_cli_mod.addImport("edn_bridge", edn_bridge_mod);
+    const edn_syrup_cli_exe = b.addExecutable(.{
+        .name = "edn-syrup",
+        .root_module = edn_syrup_cli_mod,
+    });
+    const edn_syrup_cli_step = b.step("edn-syrup", "Build edn-syrup CLI (EDN <-> syrup bytes)");
+    edn_syrup_cli_step.dependOn(&b.addInstallArtifact(edn_syrup_cli_exe, .{}).step);
+
     // Cyton Parser module (OpenBCI packet parsing)
     const cyton_parser_mod = b.addModule("cyton_parser", .{
         .root_source_file = b.path("src/cyton_parser.zig"),

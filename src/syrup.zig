@@ -817,8 +817,10 @@ pub const Value = union(enum) {
     }
 
     fn integerEncodedSize(i: i64) usize {
-        const abs: u64 = if (i >= 0) @intCast(i) else @intCast(-i);
-        return digitCount(abs) + 1; // digits + sign
+        // @abs, not -i: negating minInt(i64) overflows (caught by the edn.c
+        // corpus in the b/core checkout; encodeInteger was fixed there but
+        // this size-path twin had survived).
+        return digitCount(@abs(i)) + 1; // digits + sign
     }
 
     fn bigintEncodedSize(b: BigInt) usize {
