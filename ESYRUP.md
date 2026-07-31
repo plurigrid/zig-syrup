@@ -2,11 +2,12 @@
 
 A human-readable text format for OCapN Syrup, as EDN. Sibling of
 [jsyrup](https://codeberg.org/vivicat/zig-syrup) with the inverse design
-priority: jsyrup is wire-faithful and accepts unreadability (symbols as
-base32 in `|…|`, byte-string keys in backticks); esyrup is readable EDN and
-pays with explicit escape tags where EDN lacks a syrup type. Both are
-textual projections of the same canonical binary; a document converts
-between them through the wire.
+priority: jsyrup is wire-faithful and accepts unreadability (bytes as
+base32 in `|…|` — alphabet inherited from Goblins — and symbols
+backtick-quoted); esyrup is readable EDN and pays with explicit escape
+tags where EDN lacks a syrup type. jsyrup is also emit-only (a debug
+projection: nothing reads it back); esyrup is bidirectional and
+law-checked. Both project the same canonical binary.
 
 ```
        esyrup text ──parse──▶ syrup Value ──encode──▶ canonical wire
