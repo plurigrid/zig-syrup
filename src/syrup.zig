@@ -1311,7 +1311,7 @@ pub const Parser = struct {
         terminator: u8,
         comptime check_order: bool,
     ) ParseError![]Value {
-        var items = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
+        var items: std.ArrayListUnmanaged(Value) = .empty;
         errdefer items.deinit(self.allocator);
 
         var last_start: usize = 0;
@@ -1351,7 +1351,7 @@ pub const Parser = struct {
     /// Parse dictionary: {<key><value>...}
     fn parseDictionary(self: *Parser) ParseError!Value {
         self.pos += 1;
-        var entries = std.ArrayListUnmanaged(Value.DictEntry){ .items = &.{}, .capacity = 0 };
+        var entries: std.ArrayListUnmanaged(Value.DictEntry) = .empty;
         errdefer entries.deinit(self.allocator);
 
         var last_key_start: usize = 0;
@@ -1475,7 +1475,7 @@ pub const Parser = struct {
         var w = FixedBufWriter{ .buf = &stack_buf, .pos = &pos };
         value.encode(&w) catch {
             // Fall back to allocating for large values
-            var list_buf = std.ArrayListUnmanaged(u8){ .items = &.{}, .capacity = 0 };
+            var list_buf: std.ArrayListUnmanaged(u8) = .empty;
             var aw = arrayListWriter(&list_buf, self.allocator);
             value.encode(&aw) catch return error.OutOfMemory;
             return list_buf.toOwnedSlice(self.allocator) catch return error.OutOfMemory;
@@ -1509,7 +1509,7 @@ pub fn decodeZeroCopy(input: []const u8, allocator: Allocator) !Value {
 /// Decode multiple values from a stream
 pub fn decodeStream(input: []const u8, allocator: Allocator) ![]Value {
     var parser = Parser.init(input, allocator);
-    var values = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
+    var values: std.ArrayListUnmanaged(Value) = .empty;
     errdefer values.deinit(allocator);
 
     while (parser.hasMore()) {

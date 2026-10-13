@@ -33,10 +33,10 @@ pub fn build(b: *std.Build) void {
     edn_c_mod.addCSourceFiles(.{
         .root = b.path("vendor/edn.c/src"),
         .files = &.{
-            "edn.c",       "arena.c",      "collection.c", "number.c",
-            "string.c",    "identifier.c", "character.c",  "reader.c",
-            "tagged.c",    "symbolic.c",   "discard.c",    "metadata.c",
-            "equality.c",  "uniqueness.c", "simd.c",       "writer.c",
+            "edn.c",            "arena.c",      "collection.c", "number.c",
+            "string.c",         "identifier.c", "character.c",  "reader.c",
+            "tagged.c",         "symbolic.c",   "discard.c",    "metadata.c",
+            "equality.c",       "uniqueness.c", "simd.c",       "writer.c",
             "newline_finder.c", "ryu/d2s.c",
         },
         .flags = &.{"-std=c11"},
@@ -1021,7 +1021,8 @@ pub fn build(b: *std.Build) void {
     cell_sync_test_mod.addImport("damage", damage_mod);
     const cell_sync_tests = b.addTest(.{ .root_module = cell_sync_test_mod });
     const run_cell_sync_tests = b.addRunArtifact(cell_sync_tests);
-    _ = run_cell_sync_tests;
+    const cell_sync_step = b.step("test-cell-sync", "Run cell frame admission and fused-path conformance tests");
+    cell_sync_step.dependOn(&run_cell_sync_tests.step);
 
     // QASM renderer module (quantum circuit ASCII art)
     const qasm_test_mod = b.createModule(.{
@@ -2244,6 +2245,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/vat.zig"),
         .target = target,
         .optimize = optimize,
+        // defaultNowMs calls POSIX clock_gettime on Linux.
+        .link_libc = target.result.os.tag == .linux,
     });
     vat_mod.addImport("cap", cap_mod);
     const vat_replay_mod = b.addModule("vat_replay", .{
@@ -2391,6 +2394,8 @@ pub fn build(b: *std.Build) void {
     const run_epoch_bridge_tests = b.addRunArtifact(epoch_bridge_tests);
     const promise_bridge_tests = b.addTest(.{ .root_module = promise_bridge_mod });
     const run_promise_bridge_tests = b.addRunArtifact(promise_bridge_tests);
+    const session_tests = b.addTest(.{ .root_module = ocapn_session_mod });
+    const run_session_tests = b.addRunArtifact(session_tests);
     const cap_integration_tests = b.addTest(.{ .root_module = cap_integration_test_mod });
     const run_cap_integration_tests = b.addRunArtifact(cap_integration_tests);
 
@@ -2412,6 +2417,7 @@ pub fn build(b: *std.Build) void {
     cap_layer_step.dependOn(&run_chronicle_tests.step);
     cap_layer_step.dependOn(&run_epoch_bridge_tests.step);
     cap_layer_step.dependOn(&run_promise_bridge_tests.step);
+    cap_layer_step.dependOn(&run_session_tests.step);
     cap_layer_step.dependOn(&run_cap_integration_tests.step);
 
     // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.

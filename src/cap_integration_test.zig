@@ -142,7 +142,7 @@ test "integration: sealed sturdy + cross-vat membrane + epoch bridge compose" {
     var ecr = epoch_capability.EpochCapRef.init(0, false, .cluster, 0, 0);
     var epoch_rev = epoch_bridge.EpochRevoker.init(&ecr);
     epoch_rev.refresh(0);
-    const epoch_gated_view = epoch_bridge.epochBackedCap(&epoch_rev, db_cap.target, db_cap.facet);
+    const epoch_gated_view = try epoch_bridge.epochBackedCap(&epoch_rev, db_cap.target, db_cap.facet);
     try testing.expect(epoch_gated_view.isLive());
 
     // ========================================================================

@@ -95,7 +95,9 @@ pub const Promise = struct {
         }
         // Resolved to promise: only wants_partial listeners fire.
         var eligible: std.ArrayListUnmanaged(Listener) = .empty;
+        errdefer eligible.deinit(allocator);
         var retained: std.ArrayListUnmanaged(Listener) = .empty;
+        errdefer retained.deinit(allocator);
         for (self.listeners.items) |l| {
             if (l.wants_partial) {
                 try eligible.append(allocator, l);
@@ -103,9 +105,10 @@ pub const Promise = struct {
                 try retained.append(allocator, l);
             }
         }
+        const items = try eligible.toOwnedSlice(allocator);
         self.listeners.deinit(allocator);
         self.listeners = retained;
-        return eligible.toOwnedSlice(allocator);
+        return items;
     }
 };
 
@@ -126,13 +129,15 @@ pub const AnswerTable = struct {
     /// Allocate a fresh answer position + promise.
     pub fn newPromise(self: *AnswerTable, allocator: Allocator) !*Promise {
         const pos = self.next_answer_pos;
-        self.next_answer_pos += 1;
         const id = self.next_promise_id;
-        self.next_promise_id += 1;
+        if (pos == std.math.maxInt(AnswerPos) or id == std.math.maxInt(PromiseId))
+            return error.PositionExhausted;
         try self.promises.append(allocator, .{
             .id = id,
             .answer_pos = pos,
         });
+        self.next_answer_pos += 1;
+        self.next_promise_id += 1;
         return &self.promises.items[self.promises.items.len - 1];
     }
 
@@ -180,6 +185,8 @@ pub const AnswerTable = struct {
     ) !void {
         const p = self.byAnswerPos(pos) orelse return error.UnknownAnswerPos;
         if (p.state != .resolved or !p.resolved_to_promise) return error.NotForwardingPromise;
+        // Keep the forwarding value intact if growth fails.
+        try p.resolved_bytes.ensureTotalCapacity(allocator, final_bytes.len);
         p.resolved_bytes.clearRetainingCapacity();
         try p.resolved_bytes.appendSlice(allocator, final_bytes);
         p.resolved_to_promise = false;
@@ -296,6 +303,53 @@ test "AnswerTable: unknown pos errors" {
     defer at.deinit(allocator);
     try std.testing.expectError(error.UnknownAnswerPos, at.resolvePromise(allocator, 99, "x"));
     try std.testing.expectError(error.UnknownAnswerPos, at.breakPromise(99));
+}
+
+test "AnswerTable: allocation failure and exhausted positions publish no promise" {
+    var answers = AnswerTable.init();
+    defer answers.deinit(std.testing.allocator);
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, answers.newPromise(failing.allocator()));
+    try std.testing.expectEqual(@as(u32, 0), answers.next_answer_pos);
+    try std.testing.expectEqual(@as(u32, 1), answers.next_promise_id);
+    answers.next_answer_pos = std.math.maxInt(AnswerPos);
+    try std.testing.expectError(error.PositionExhausted, answers.newPromise(std.testing.allocator));
+    try std.testing.expectEqual(@as(usize, 0), answers.promises.items.len);
+}
+
+test "AnswerTable: failed forwarding replacement retains its old value" {
+    const alloc = std.testing.allocator;
+    var answers = AnswerTable.init();
+    defer answers.deinit(alloc);
+    const pos = (try answers.newPromise(alloc)).answer_pos;
+    try answers.resolvePromiseEx(alloc, pos, "forwarded", true);
+    var bytes: [4096]u8 = @splat('x');
+    var failing = std.testing.FailingAllocator.init(alloc, .{ .fail_index = 0, .resize_fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, answers.finalizeForwarding(failing.allocator(), pos, &bytes));
+    const original = answers.byAnswerPos(pos).?;
+    try std.testing.expect(original.resolved_to_promise);
+    try std.testing.expectEqualStrings("forwarded", original.resolved_bytes.items);
+}
+
+test "listeners: failed partial drain retains both interests for retry" {
+    const alloc = std.testing.allocator;
+    for (0..4) |failure_index| {
+        var promise = Promise{ .id = 1, .answer_pos = 0, .state = .resolved, .resolved_to_promise = true };
+        defer promise.deinit(alloc);
+        try promise.listeners.append(alloc, .{ .resolver = .{ .position = 10, .is_promise = false }, .wants_partial = true });
+        try promise.listeners.append(alloc, .{ .resolver = .{ .position = 11, .is_promise = false }, .wants_partial = false });
+        var failing = std.testing.FailingAllocator.init(alloc, .{ .fail_index = failure_index });
+        const eligible = promise.drainListeners(failing.allocator()) catch |err| {
+            try std.testing.expectEqual(error.OutOfMemory, err);
+            try std.testing.expectEqual(@as(usize, 2), promise.listeners.items.len);
+            try std.testing.expectEqual(@as(u32, 10), promise.listeners.items[0].resolver.position);
+            continue;
+        };
+        defer alloc.free(eligible);
+        try std.testing.expectEqual(@as(usize, 1), eligible.len);
+        try std.testing.expectEqual(@as(usize, 1), promise.listeners.items.len);
+        try std.testing.expectEqual(@as(u32, 11), promise.listeners.items[0].resolver.position);
+    }
 }
 
 test "AnswerTable: releasePromise drops slot and frees resolved bytes" {

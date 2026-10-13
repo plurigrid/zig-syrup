@@ -1,14 +1,14 @@
 //! cap.zig — capabilities, facets, rights amplification, Horton provenance.
 //!
-//! A `Capability` is an unforgeable `(vat_id, actor_id)` pair plus a comptime-
-//! checkable facet mask and a sender designation (Horton "who says what").
+//! A `Capability` is an in-process target reference plus a checkable facet
+//! mask, revocation/expiry gates and a sender designation.
 //!
 //! - Facets:  `narrow(cap, allowed)` keeps only selectors in `allowed`.
 //! - Amplify: `union_(a, b)` widens authority iff both name the same target;
 //!            `intersect(a, b)` narrows.
 //! - Horton:  every Message carries `sender: CapId`, and the receiver can
-//!            verify it without a side-channel because caps are unforgeable
-//!            within the vat (table indices, not pointers).
+//!            use it for provenance within the trusted runtime. Numeric IDs
+//!            and public Zig structs alone do not authenticate a remote caller.
 
 const std = @import("std");
 
@@ -41,14 +41,16 @@ pub fn actorOf(c: CapId) ActorId {
 
 /// Forwarder-style revoker. Caller owns the Revoker; every Capability that
 /// holds a pointer to it becomes unusable the moment `revoke()` is called.
-/// Lifetime rule: the Revoker must outlive every wrapped cap, otherwise the
+/// Lifetime rule: the Revoker must outlive every wrapped cap and queued copy, otherwise the
 /// `?*Revoker` field dangles. Caps re-derived via `narrow`/`unionWith`/etc.
 /// inherit the same revoker pointer, so revocation is transitive across
 /// attenuation.
 pub const Revoker = struct {
     revoked: bool = false,
 
-    pub fn wrap(self: *Revoker, c: Capability) Capability {
+    /// Adding this gate must not remove an existing, distinct gate.
+    pub fn wrap(self: *Revoker, c: Capability) error{IncompatibleRevokers}!Capability {
+        if (c.revoker != null and c.revoker != self) return error.IncompatibleRevokers;
         var out = c;
         out.revoker = self;
         return out;
@@ -88,19 +90,26 @@ pub const Capability = struct {
 
     /// Rights amplification — combine two caps for the *same* target.
     /// Union widens, intersect narrows. Different targets is an error.
-    /// Revoker preference: self's, falling back to other's. Combining caps
-    /// from two distinct revokers is not supported — wrap the result in a
-    /// fresh Revoker if you want "alive iff both alive" semantics.
+    /// One cap can carry one revoker. Distinct revocation scopes therefore
+    /// fail closed; choosing either pointer would discard the other scope.
+    /// Compose distinct scopes through forwarders which retain both caps.
     /// Expiry: result expires at the earliest of the two deadlines (the
     /// validity window of the combined cap is the intersection of source
     /// windows, regardless of whether facets are widened or narrowed).
-    pub fn unionWith(self: Capability, other: Capability) error{DifferentTarget}!Capability {
+    pub fn unionWith(self: Capability, other: Capability) error{ DifferentTarget, IncompatibleRevokers }!Capability {
         if (self.target != other.target) return error.DifferentTarget;
+        try self.checkRevokerCompatibility(other);
         return .{ .target = self.target, .facet = self.facet | other.facet, .sender = self.sender, .revoker = self.revoker orelse other.revoker, .expires_at_ms = earliest(self.expires_at_ms, other.expires_at_ms) };
     }
-    pub fn intersectWith(self: Capability, other: Capability) error{DifferentTarget}!Capability {
+    pub fn intersectWith(self: Capability, other: Capability) error{ DifferentTarget, IncompatibleRevokers }!Capability {
         if (self.target != other.target) return error.DifferentTarget;
+        try self.checkRevokerCompatibility(other);
         return .{ .target = self.target, .facet = self.facet & other.facet, .sender = self.sender, .revoker = self.revoker orelse other.revoker, .expires_at_ms = earliest(self.expires_at_ms, other.expires_at_ms) };
+    }
+
+    fn checkRevokerCompatibility(self: Capability, other: Capability) error{IncompatibleRevokers}!void {
+        if (self.revoker != null and other.revoker != null and self.revoker != other.revoker)
+            return error.IncompatibleRevokers;
     }
 
     /// True iff this cap permits selector index `s`.
@@ -254,7 +263,7 @@ test "Horton withSender re-stamps designation" {
 test "Revoker: wrap preserves cap fields, revoke flips isLive, narrow inherits" {
     var rev = Revoker{};
     const c = Capability{ .target = pack(1, 7), .facet = FACET_FULL };
-    const w = rev.wrap(c);
+    const w = try rev.wrap(c);
     try std.testing.expectEqual(c.target, w.target);
     try std.testing.expectEqual(c.facet, w.facet);
     try std.testing.expect(w.isLive());
@@ -271,6 +280,26 @@ test "Revoker: wrap preserves cap fields, revoke flips isLive, narrow inherits" 
 test "Revoker: cap with no revoker is always alive" {
     const c = Capability{ .target = pack(1, 7) };
     try std.testing.expect(c.isLive());
+}
+
+test "combining distinct revokers rejects loss of either authority gate" {
+    var first = Revoker{};
+    var second = Revoker{};
+    const a = try first.wrap(.{ .target = pack(1, 7), .facet = maskOf(&.{0}) });
+    const b = try second.wrap(.{ .target = a.target, .facet = maskOf(&.{1}) });
+    second.revoke();
+    try std.testing.expectError(error.IncompatibleRevokers, a.unionWith(b));
+    try std.testing.expectError(error.IncompatibleRevokers, b.unionWith(a));
+    try std.testing.expectError(error.IncompatibleRevokers, a.intersectWith(b));
+    try std.testing.expectError(error.IncompatibleRevokers, b.intersectWith(a));
+    try std.testing.expect(a.isLive());
+    try std.testing.expect(!b.isLive());
+    try std.testing.expectError(error.IncompatibleRevokers, first.wrap(b));
+    try std.testing.expect(!(try second.wrap(b)).isLive());
+
+    const shared = try a.unionWith(a.narrow(maskOf(&.{0})));
+    first.revoke();
+    try std.testing.expect(!shared.isLive());
 }
 
 test "expires_at_ms: isFresh boundary, narrow inherits, intersect picks earliest" {
