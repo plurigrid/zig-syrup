@@ -2420,6 +2420,12 @@ pub fn build(b: *std.Build) void {
     cap_layer_step.dependOn(&run_session_tests.step);
     cap_layer_step.dependOn(&run_cap_integration_tests.step);
 
+    const ocapn_entropy_mod = b.addModule("ocapn_entropy", .{
+        .root_source_file = b.path("src/ocapn_entropy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.
     const ocapn_location_mod = b.addModule("ocapn_location", .{
         .root_source_file = b.path("src/ocapn_location.zig"),
@@ -2433,6 +2439,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_handshake_mod.addImport("syrup", syrup_mod);
+    ocapn_handshake_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     ocapn_handshake_mod.addImport("ocapn_location", ocapn_location_mod);
     const ocapn_transport_mod = b.addModule("ocapn_transport", .{
         .root_source_file = b.path("src/ocapn_transport.zig"),
@@ -2447,6 +2454,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_bootstrap_mod.addImport("syrup", syrup_mod);
+    ocapn_bootstrap_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     const wire_desc_mod = b.addModule("wire_desc", .{
         .root_source_file = b.path("src/wire_desc.zig"),
         .target = target,
@@ -2459,6 +2467,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_handoff_mod.addImport("syrup", syrup_mod);
+    ocapn_handoff_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     ocapn_handoff_mod.addImport("ocapn_location", ocapn_location_mod);
     ocapn_handoff_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
     const ocapn_vat_mod = b.addModule("ocapn_vat", .{
@@ -2509,6 +2518,7 @@ pub fn build(b: *std.Build) void {
     stranded_check_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
     stranded_check_mod.addImport("ocapn_transport", ocapn_transport_mod);
     stranded_check_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    stranded_check_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     stranded_check_mod.addImport("ocapn_session", ocapn_session_mod);
     stranded_check_mod.addImport("wire_desc", wire_desc_mod);
     // Compile-check object (always works — honors module target directly).
@@ -2531,6 +2541,12 @@ pub fn build(b: *std.Build) void {
     color_memo_test_step.dependOn(&run_color_memo_tests.step);
 
     const test_step = b.step("test", "Run unit tests");
+    const entropy_tests = b.addTest(.{ .root_module = ocapn_entropy_mod });
+    const run_entropy_tests = b.addRunArtifact(entropy_tests);
+    const handshake_tests = b.addTest(.{ .root_module = ocapn_handshake_mod });
+    const run_handshake_tests = b.addRunArtifact(handshake_tests);
+    test_step.dependOn(&run_entropy_tests.step);
+    test_step.dependOn(&run_handshake_tests.step);
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_color_memo_tests.step);
     test_step.dependOn(&run_stranded_tests.step); // run tests in the 8 novel files
@@ -2556,6 +2572,11 @@ pub fn build(b: *std.Build) void {
     const ocapn_handoff_tests = b.addTest(.{ .root_module = ocapn_handoff_mod });
     const run_ocapn_handoff_tests = b.addRunArtifact(ocapn_handoff_tests);
     test_step.dependOn(&run_ocapn_handoff_tests.step);
+    const entropy_step = b.step("test-ocapn-entropy", "Run secure entropy, bootstrap, handshake and handoff tests");
+    entropy_step.dependOn(&run_entropy_tests.step);
+    entropy_step.dependOn(&run_ocapn_bootstrap_tests.step);
+    entropy_step.dependOn(&run_handshake_tests.step);
+    entropy_step.dependOn(&run_ocapn_handoff_tests.step);
     const ocapn_session_tests = b.addTest(.{ .root_module = ocapn_session_mod });
     const run_ocapn_session_tests = b.addRunArtifact(ocapn_session_tests);
     test_step.dependOn(&run_ocapn_session_tests.step);
