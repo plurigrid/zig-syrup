@@ -10,6 +10,7 @@
 //! `null` if unknown.
 
 const std = @import("std");
+const entropy = @import("ocapn_entropy");
 const syrup = @import("syrup");
 const Allocator = std.mem.Allocator;
 const ByteList = std.array_list.Managed(u8);
@@ -238,11 +239,7 @@ pub const GiftTable = struct {
 /// Generate a fresh 32-byte swiss using a cryptographic RNG.
 pub fn freshSwiss() [SWISS_LEN]u8 {
     var out: [SWISS_LEN]u8 = undefined;
-    if (comptime @hasDecl(std.crypto, "random")) {
-        std.crypto.random.bytes(&out);
-    } else {
-        std.c.arc4random_buf(out[0..].ptr, out.len);
-    }
+    entropy.fill(&out);
     return out;
 }
 
@@ -310,6 +307,20 @@ test "freshSwiss yields nonzero bytes with overwhelming probability" {
         zero_count += 1;
     };
     try std.testing.expect(zero_count < SWISS_LEN);
+}
+
+test "freshSwiss generates distinct 32-byte registry keys" {
+    const a = freshSwiss();
+    const b = freshSwiss();
+    try std.testing.expectEqual(@as(usize, 32), a.len);
+    try std.testing.expect(!std.mem.eql(u8, &a, &b));
+    var registry = SwissRegistry.init();
+    defer registry.deinit(std.testing.allocator);
+    const pos_a = try registry.register(std.testing.allocator, a);
+    const pos_b = try registry.register(std.testing.allocator, b);
+    try std.testing.expect(pos_a != pos_b);
+    try std.testing.expectEqual(pos_a, registry.fetch(a).?);
+    try std.testing.expectEqual(pos_b, registry.fetch(b).?);
 }
 
 test "encodeImportObjectAlloc produces parseable desc:import-object" {

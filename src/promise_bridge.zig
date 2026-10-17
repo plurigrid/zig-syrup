@@ -53,6 +53,8 @@ pub const BridgeError = error{
     NotAnInboundPromise,
     NotResolved,
     UnsupportedResolutionKind,
+    DuplicateRuntimePromise,
+    DuplicateAnswerPos,
 } || std.mem.Allocator.Error || error{ AlreadyResolved, PromiseAlreadyResolved };
 
 pub const PromiseBridge = struct {
@@ -79,14 +81,22 @@ pub const PromiseBridge = struct {
         runtime_id: vat.PromiseId,
         answers: *ocapn_session.AnswerTable,
     ) !ocapn_session.AnswerPos {
+        if (self.by_runtime.contains(runtime_id)) return error.DuplicateRuntimePromise;
+        const state = self.runtime_vat.promiseState(runtime_id) orelse return error.UnknownPromise;
+        if (state != .pending) return error.AlreadyResolved;
+        if (self.by_answer.contains(answers.next_answer_pos)) return error.DuplicateAnswerPos;
+        // Reserve both indices before publishing a wire promise or either
+        // binding. An allocation failure cannot leave a half-registration.
+        try self.by_runtime.ensureUnusedCapacity(self.allocator, 1);
+        try self.by_answer.ensureUnusedCapacity(self.allocator, 1);
         const wire_promise = try answers.newPromise(self.allocator);
         const binding = Binding{
             .runtime_id = runtime_id,
             .answer_pos = wire_promise.answer_pos,
             .direction = .outbound,
         };
-        try self.by_runtime.put(self.allocator, runtime_id, binding);
-        try self.by_answer.put(self.allocator, wire_promise.answer_pos, binding);
+        self.by_runtime.putAssumeCapacityNoClobber(runtime_id, binding);
+        self.by_answer.putAssumeCapacityNoClobber(wire_promise.answer_pos, binding);
         return wire_promise.answer_pos;
     }
 
@@ -99,14 +109,17 @@ pub const PromiseBridge = struct {
         self: *PromiseBridge,
         answer_pos: ocapn_session.AnswerPos,
     ) !vat.PromiseId {
+        if (self.by_answer.contains(answer_pos)) return error.DuplicateAnswerPos;
+        try self.by_runtime.ensureUnusedCapacity(self.allocator, 1);
+        try self.by_answer.ensureUnusedCapacity(self.allocator, 1);
         const runtime_id = try self.runtime_vat.newPromise();
         const binding = Binding{
             .runtime_id = runtime_id,
             .answer_pos = answer_pos,
             .direction = .inbound,
         };
-        try self.by_runtime.put(self.allocator, runtime_id, binding);
-        try self.by_answer.put(self.allocator, answer_pos, binding);
+        self.by_runtime.putAssumeCapacityNoClobber(runtime_id, binding);
+        self.by_answer.putAssumeCapacityNoClobber(answer_pos, binding);
         return runtime_id;
     }
 
@@ -166,9 +179,10 @@ pub const PromiseBridge = struct {
         answer_pos: ocapn_session.AnswerPos,
         answers: *ocapn_session.AnswerTable,
     ) !void {
-        const binding = self.by_answer.fetchRemove(answer_pos) orelse return error.UnknownAnswerPos;
-        _ = self.by_runtime.remove(binding.value.runtime_id);
+        const binding = self.by_answer.get(answer_pos) orelse return error.UnknownAnswerPos;
         try answers.releasePromise(self.allocator, answer_pos);
+        _ = self.by_answer.remove(answer_pos);
+        _ = self.by_runtime.remove(binding.runtime_id);
     }
 
     pub fn lookupByRuntime(self: *const PromiseBridge, runtime_id: vat.PromiseId) ?Binding {
@@ -187,6 +201,100 @@ pub const PromiseBridge = struct {
 // ---- Tests ------------------------------------------------------------------
 
 const testing = std.testing;
+
+test "registration: duplicates preserve the original bidirectional binding" {
+    const alloc = testing.allocator;
+    var v = vat.Vat.init(alloc, 1);
+    defer v.deinit();
+    var answers = ocapn_session.AnswerTable.init();
+    defer answers.deinit(alloc);
+    var bridge = PromiseBridge.init(alloc, &v);
+    defer bridge.deinit();
+    const rid = try v.newPromise();
+    const pos = try bridge.registerOutbound(rid, &answers);
+    try testing.expectError(error.DuplicateRuntimePromise, bridge.registerOutbound(rid, &answers));
+    try testing.expectError(error.DuplicateAnswerPos, bridge.registerInbound(pos));
+    try testing.expectEqual(@as(usize, 1), bridge.count());
+    try testing.expectEqual(@as(usize, 1), answers.promises.items.len);
+    try testing.expectEqual(@as(usize, 1), v.promises.items.len);
+    try testing.expectEqual(rid, bridge.lookupByAnswer(pos).?.runtime_id);
+    try bridge.onWireAnswer(pos, "original reply");
+    try testing.expectEqualStrings("original reply", v.promiseValue(rid).?);
+}
+
+test "registration: unknown or settled runtime promises do not allocate wire slots" {
+    const alloc = testing.allocator;
+    var v = vat.Vat.init(alloc, 1);
+    defer v.deinit();
+    var answers = ocapn_session.AnswerTable.init();
+    defer answers.deinit(alloc);
+    var bridge = PromiseBridge.init(alloc, &v);
+    defer bridge.deinit();
+    try testing.expectError(error.UnknownPromise, bridge.registerOutbound(999, &answers));
+    const rid = try v.newPromise();
+    try v.resolvePromiseToValue(rid, "settled");
+    try testing.expectError(error.AlreadyResolved, bridge.registerOutbound(rid, &answers));
+    try testing.expectEqual(@as(usize, 0), bridge.count());
+    try testing.expectEqual(@as(usize, 0), answers.promises.items.len);
+}
+
+test "registration: allocation failures cannot publish half a binding" {
+    for (0..8) |failure_index| {
+        var failing = testing.FailingAllocator.init(testing.allocator, .{ .fail_index = failure_index });
+        const alloc = failing.allocator();
+        var v = vat.Vat.init(testing.allocator, 1);
+        defer v.deinit();
+        var answers = ocapn_session.AnswerTable.init();
+        defer answers.deinit(alloc);
+        var bridge = PromiseBridge.init(alloc, &v);
+        defer bridge.deinit();
+        const rid = try v.newPromise();
+        const pos = bridge.registerOutbound(rid, &answers) catch |err| {
+            try testing.expectEqual(error.OutOfMemory, err);
+            try testing.expectEqual(@as(usize, 0), bridge.by_runtime.count());
+            try testing.expectEqual(@as(usize, 0), bridge.by_answer.count());
+            try testing.expectEqual(@as(usize, 0), answers.promises.items.len);
+            try testing.expectEqual(@as(u32, 0), answers.next_answer_pos);
+            continue;
+        };
+        try testing.expectEqual(@as(usize, 1), bridge.count());
+        try testing.expectEqual(rid, bridge.lookupByAnswer(pos).?.runtime_id);
+    }
+}
+
+test "release: missing wire state does not erase a runtime binding" {
+    const alloc = testing.allocator;
+    var v = vat.Vat.init(alloc, 1);
+    defer v.deinit();
+    var answers = ocapn_session.AnswerTable.init();
+    defer answers.deinit(alloc);
+    var bridge = PromiseBridge.init(alloc, &v);
+    defer bridge.deinit();
+    const rid = try bridge.registerInbound(99);
+    try testing.expectError(error.UnknownAnswerPos, bridge.release(99, &answers));
+    try testing.expectEqual(rid, bridge.lookupByAnswer(99).?.runtime_id);
+    try testing.expectEqual(@as(usize, 1), bridge.count());
+}
+
+test "registration: inbound allocation failures preserve both indexes and runtime slots" {
+    for (0..8) |failure_index| {
+        var failing = testing.FailingAllocator.init(testing.allocator, .{ .fail_index = failure_index });
+        const alloc = failing.allocator();
+        var v = vat.Vat.init(alloc, 1);
+        defer v.deinit();
+        var bridge = PromiseBridge.init(alloc, &v);
+        defer bridge.deinit();
+        const rid = bridge.registerInbound(42) catch |err| {
+            try testing.expectEqual(error.OutOfMemory, err);
+            try testing.expectEqual(@as(usize, 0), bridge.by_runtime.count());
+            try testing.expectEqual(@as(usize, 0), bridge.by_answer.count());
+            try testing.expectEqual(@as(usize, 0), v.promises.items.len);
+            continue;
+        };
+        try testing.expectEqual(rid, bridge.lookupByAnswer(42).?.runtime_id);
+        try testing.expectEqual(@as(usize, 1), v.promises.items.len);
+    }
+}
 
 test "outbound: registerOutbound binds, onWireAnswer resolves runtime promise" {
     const alloc = testing.allocator;
