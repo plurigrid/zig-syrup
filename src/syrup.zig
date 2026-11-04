@@ -1311,7 +1311,7 @@ pub const Parser = struct {
         terminator: u8,
         comptime check_order: bool,
     ) ParseError![]Value {
-        var items = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
+        var items: std.ArrayListUnmanaged(Value) = .empty;
         errdefer items.deinit(self.allocator);
 
         var last_start: usize = 0;
@@ -1351,7 +1351,7 @@ pub const Parser = struct {
     /// Parse dictionary: {<key><value>...}
     fn parseDictionary(self: *Parser) ParseError!Value {
         self.pos += 1;
-        var entries = std.ArrayListUnmanaged(Value.DictEntry){ .items = &.{}, .capacity = 0 };
+        var entries: std.ArrayListUnmanaged(Value.DictEntry) = .empty;
         errdefer entries.deinit(self.allocator);
 
         var last_key_start: usize = 0;
@@ -1475,7 +1475,7 @@ pub const Parser = struct {
         var w = FixedBufWriter{ .buf = &stack_buf, .pos = &pos };
         value.encode(&w) catch {
             // Fall back to allocating for large values
-            var list_buf = std.ArrayListUnmanaged(u8){ .items = &.{}, .capacity = 0 };
+            var list_buf: std.ArrayListUnmanaged(u8) = .empty;
             var aw = arrayListWriter(&list_buf, self.allocator);
             value.encode(&aw) catch return error.OutOfMemory;
             return list_buf.toOwnedSlice(self.allocator) catch return error.OutOfMemory;
@@ -1509,7 +1509,7 @@ pub fn decodeZeroCopy(input: []const u8, allocator: Allocator) !Value {
 /// Decode multiple values from a stream
 pub fn decodeStream(input: []const u8, allocator: Allocator) ![]Value {
     var parser = Parser.init(input, allocator);
-    var values = std.ArrayListUnmanaged(Value){ .items = &.{}, .capacity = 0 };
+    var values: std.ArrayListUnmanaged(Value) = .empty;
     errdefer values.deinit(allocator);
 
     while (parser.hasMore()) {
@@ -1845,26 +1845,12 @@ fn deserializeImpl(comptime T: type, value: Value, allocator: Allocator) !T {
             }
         },
 
-        .@"enum" => |enum_info| blk: {
-            switch (value) {
-                .symbol => |s| {
-                    inline for (enum_info.field_names, enum_info.field_values) |name, val| {
-                        if (std.mem.eql(u8, name, s)) {
-                            break :blk @fromBackingInt(@intCast(val));
-                        }
-                    }
-                    return error.TypeMismatch;
-                },
-                .string => |s| {
-                    inline for (enum_info.field_names, enum_info.field_values) |name, val| {
-                        if (std.mem.eql(u8, name, s)) {
-                            break :blk @fromBackingInt(@intCast(val));
-                        }
-                    }
-                    return error.TypeMismatch;
-                },
+        .@"enum" => blk: {
+            const name = switch (value) {
+                .symbol, .string => |s| s,
                 else => return error.TypeMismatch,
-            }
+            };
+            break :blk std.meta.stringToEnum(T, name) orelse error.TypeMismatch;
         },
 
         .@"struct" => |struct_info| blk: {
@@ -2648,6 +2634,50 @@ test "deserialize enum from symbol" {
 
     const val = try deserialize(Color, symbol("green"), allocator);
     try std.testing.expect(val == .green);
+}
+
+test "deserialize enum from symbol and string preserves explicit tags" {
+    const State = enum(i16) { negative = -7, zero = 0, high = 300 };
+    inline for (.{ State.negative, State.zero, State.high }) |expected| {
+        const from_symbol = try deserialize(State, symbol(@tagName(expected)), std.testing.allocator);
+        const from_string = try deserialize(State, string(@tagName(expected)), std.testing.allocator);
+        try std.testing.expect(@TypeOf(from_symbol) == State);
+        try std.testing.expect(@TypeOf(from_string) == State);
+        try std.testing.expectEqual(expected, from_symbol);
+        try std.testing.expectEqual(expected, from_string);
+    }
+}
+
+test "deserialize enum rejects invalid names and value types" {
+    const State = enum(u16) { ready = 7, done = 300 };
+    for ([_][]const u8{ "", "missing", "Ready", "ready ", "7", "300", "ready\x00" }) |name| {
+        try std.testing.expectError(error.TypeMismatch, deserialize(State, symbol(name), std.testing.allocator));
+        try std.testing.expectError(error.TypeMismatch, deserialize(State, string(name), std.testing.allocator));
+    }
+    for ([_]Value{ integer(7), integer(8), boolean(false), bytes("ready"), list(&.{}) }) |value| {
+        try std.testing.expectError(error.TypeMismatch, deserialize(State, value, std.testing.allocator));
+    }
+}
+
+test "deserialize nonexhaustive enum only accepts declared names" {
+    const State = enum(u16) { ready = 7, done = 300, _ };
+    try std.testing.expectEqual(State.done, try deserialize(State, symbol("done"), std.testing.allocator));
+    try std.testing.expectEqual(State.ready, try deserialize(State, string("ready"), std.testing.allocator));
+    try std.testing.expectError(error.TypeMismatch, deserialize(State, symbol("8"), std.testing.allocator));
+    try std.testing.expectError(error.TypeMismatch, deserialize(State, string("missing"), std.testing.allocator));
+    try std.testing.expectError(error.TypeMismatch, deserialize(State, integer(8), std.testing.allocator));
+}
+
+test "deserialize enum from wire symbol and string" {
+    const State = enum(u16) { ready = 7, done = 300 };
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    try std.testing.expectEqual(State.ready, try deserializeFromBytes(State, "5'ready", allocator));
+    try std.testing.expectEqual(State.done, try deserializeFromBytes(State, "4\"done", allocator));
+    try std.testing.expectError(error.TypeMismatch, deserializeFromBytes(State, "7'missing", allocator));
+    try std.testing.expectError(error.TypeMismatch, deserializeFromBytes(State, "7\"missing", allocator));
+    try std.testing.expectError(error.TypeMismatch, deserializeFromBytes(State, "7+", allocator));
 }
 
 // ============================================================================

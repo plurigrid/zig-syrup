@@ -2,6 +2,6 @@
     .name = .placeholder,
     .version = "0.0.0",
     .fingerprint = 0xf5e69f02c9feebc3,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .paths = .{""},
 }
