@@ -1,6 +1,21 @@
 name: ci
 on: [push, pull_request]
 jobs:
+  enum-compat:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        optimize: [Debug, ReleaseSafe]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - run: zig version
+      - run: zig fmt --check src/syrup.zig
+      - run: zig test src/syrup.zig -O ${{ matrix.optimize }} --test-filter 'deserialize enum' --test-filter 'deserialize nonexhaustive enum'
   build:
     strategy:
       fail-fast: false
