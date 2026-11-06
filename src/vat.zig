@@ -106,6 +106,9 @@ pub const Mailbox = struct {
         /// `turn()` into `vat.current_resolver` so the running handler can
         /// access it without a Message-shape change.
         promise_id: ?PromiseId = null,
+        /// The admitted grant must remain valid until dispatch. Direct mailbox
+        /// users are trusted runtime code; public sends always fill this field.
+        authority: ?cap.Capability = null,
     };
 
     pub fn push(self: *Mailbox, m: MsgOwned) error{Backpressure}!void {
@@ -318,6 +321,7 @@ pub const Vat = struct {
         if (s.terminated or s.behavior == null) return error.Terminated;
 
         const promise_id = try self.newPromise();
+        errdefer _ = self.promises.pop();
         const owned = try self.allocator.dupe(u8, payload);
         errdefer self.allocator.free(owned);
         try s.mailbox.push(.{
@@ -326,6 +330,7 @@ pub const Vat = struct {
             .selector = sel,
             .payload = owned,
             .promise_id = promise_id,
+            .authority = to,
         });
         return promise_id;
     }
@@ -483,11 +488,13 @@ pub const Vat = struct {
             .target = aid,
             .selector = sel,
             .payload = owned,
+            .authority = to,
         });
     }
 
     /// Process one queued message from any actor with non-empty mailbox.
-    /// Returns true if a turn ran. Called repeatedly by quiesce / driver.
+    /// Returns true if a message was consumed, including a rejected delivery.
+    /// A rejected grant breaks its reply promise without running the actor.
     pub fn turn(self: *Vat) !bool {
         if (self.closed) return false;
         for (self.slots.items, 0..) |*s, i| {
@@ -498,6 +505,20 @@ pub const Vat = struct {
             const lagged_before = s.mailbox.lagged;
             const turn_seq = self.turn_seq;
             const now_ms = self.nowMs();
+            if (m.authority) |grant| {
+                const denial: ?[]const u8 = if (!grant.isLive())
+                    "capability revoked before delivery"
+                else if (!grant.isFresh(now_ms))
+                    "capability expired before delivery"
+                else if (!grant.permits(m.selector))
+                    "capability facet denies delivery"
+                else
+                    null;
+                if (denial) |reason| {
+                    if (m.promise_id) |pid| try self.breakPromise(pid, reason);
+                    return true;
+                }
+            }
             const msg = Message{
                 .sender = m.sender,
                 .target = m.target,
@@ -785,6 +806,7 @@ test "expires_at_ms: send after deadline returns error.Expired" {
 
     const sender = cap.Capability{ .target = cap.pack(1, 0) };
     try v.send(sender, ttl_cap, 0, "before");
+    _ = try v.quiesce(10);
 
     VirtualClock.now = 2000; // deadline reached — strict < expiry
     try testing.expectError(error.Expired, v.send(sender, ttl_cap, 0, "at"));
@@ -803,15 +825,93 @@ test "Revoker: send before revoke succeeds; after revoke returns error.Revoked" 
     defer log.deinit(alloc);
     const c = try v.spawn(Echo, .{ .log = &log, .alloc = alloc });
     var rev = cap.Revoker{};
-    const wrapped = rev.wrap(c);
+    const wrapped = try rev.wrap(c);
     const sender = cap.Capability{ .target = cap.pack(1, 0) };
 
     try v.send(sender, wrapped, 0, "before");
+    _ = try v.quiesce(10);
     rev.revoke();
     try testing.expectError(error.Revoked, v.send(sender, wrapped, 0, "after"));
 
     _ = try v.quiesce(10);
     try testing.expectEqualStrings("before", log.items);
+}
+
+test "dispatch: revoke queued send and sendQ without touching unrelated delivery" {
+    const Counter = struct {
+        n: *u32,
+        pub const SELECTORS = cap.maskOf(&.{0});
+        pub fn handle(self: *@This(), host: *Vat, _: Message) !Become {
+            self.n.* += 1;
+            if (host.currentResolver()) |resolver| try resolver.fulfillValue("ok");
+            return .same;
+        }
+    };
+    var v = Vat.init(testing.allocator, 1);
+    defer v.deinit();
+    var count: u32 = 0;
+    const target = try v.spawn(Counter, .{ .n = &count });
+    const sender = cap.Capability{ .target = cap.pack(1, 0) };
+    var rev = cap.Revoker{};
+    const guarded = try rev.wrap(target);
+    try v.send(sender, guarded, 0, "delayed");
+    const reply = try v.sendQ(sender, guarded, 0, "delayed question");
+    try v.send(sender, target, 0, "unaffected");
+    rev.revoke();
+    _ = try v.quiesce(10);
+    try testing.expectEqual(@as(u32, 1), count);
+    try testing.expectEqual(PromiseState.broken, v.promiseState(reply).?);
+    try testing.expectEqual(@as(u64, 1), v.turn_seq);
+    try testing.expect(!v.slots.items[0].terminated);
+}
+
+test "dispatch: bounded timing variation never delivers beyond capability expiry" {
+    const Clock = struct {
+        var now: i64 = 0;
+        fn read() i64 {
+            return now;
+        }
+    };
+    const Counter = struct {
+        n: *u32,
+        pub const SELECTORS = cap.maskOf(&.{0});
+        pub fn handle(self: *@This(), host: *Vat, _: Message) !Become {
+            self.n.* += 1;
+            if (host.currentResolver()) |resolver| try resolver.fulfillValue("ok");
+            return .same;
+        }
+    };
+    for ([_]i64{ 0, 1, 9, 10, 11, 100 }) |delay| {
+        Clock.now = 0;
+        var v = Vat.init(testing.allocator, 1);
+        defer v.deinit();
+        v.now_ms_fn = Clock.read;
+        var count: u32 = 0;
+        var target = try v.spawn(Counter, .{ .n = &count });
+        target.expires_at_ms = 10;
+        const reply = try v.sendQ(.{ .target = cap.pack(1, 0) }, target, 0, "delayed");
+        Clock.now = delay;
+        _ = try v.quiesce(10);
+        try testing.expectEqual(@as(u32, if (delay < 10) 1 else 0), count);
+        try testing.expectEqual(if (delay < 10) PromiseState.resolved_value else PromiseState.broken, v.promiseState(reply).?);
+    }
+}
+
+test "sendQ: backpressure publishes neither a promise nor an extra effect" {
+    const Sink = struct {
+        pub const SELECTORS = cap.maskOf(&.{0});
+        pub fn handle(_: *@This(), _: *Vat, _: Message) !Become {
+            return .same;
+        }
+    };
+    var v = Vat.init(testing.allocator, 1);
+    defer v.deinit();
+    const target = try v.spawn(Sink, .{});
+    const sender = cap.Capability{ .target = cap.pack(1, 0) };
+    for (0..Mailbox.CAPACITY) |_| try v.send(sender, target, 0, "full");
+    try testing.expectError(error.Backpressure, v.sendQ(sender, target, 0, "question"));
+    try testing.expectEqual(@as(usize, 0), v.promises.items.len);
+    try testing.expectEqual(Mailbox.CAPACITY, v.slots.items[0].mailbox.len);
 }
 
 test "GF(3) trit conservation across siblings" {

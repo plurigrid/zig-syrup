@@ -14,6 +14,7 @@
 //! domain-separated with the literal bytestring "captp-location-sig:".
 
 const std = @import("std");
+const entropy = @import("ocapn_entropy");
 const syrup = @import("syrup");
 const location_mod = @import("ocapn_location");
 const Ed25519 = std.crypto.sign.Ed25519;
@@ -24,14 +25,6 @@ const ByteList = std.array_list.Managed(u8);
 fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
     var tmp: [128]u8 = undefined;
     try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
-}
-
-fn fillRandom(bytes: []u8) void {
-    if (comptime @hasDecl(std.crypto, "random")) {
-        std.crypto.random.bytes(bytes);
-    } else {
-        std.c.arc4random_buf(bytes.ptr, bytes.len);
-    }
 }
 
 pub const CAPTP_VERSION: []const u8 = "1.0";
@@ -180,7 +173,7 @@ pub const KeyPair = struct {
 
     pub fn generate() !KeyPair {
         var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
-        fillRandom(&seed);
+        entropy.fill(&seed);
         const kp = try Ed25519.KeyPair.generateDeterministic(seed);
         return KeyPair{
             .pub_key = kp.public_key.toBytes(),
@@ -274,6 +267,18 @@ pub fn encodeStartSession(
 }
 
 // ---- Tests ------------------------------------------------------------------
+
+test "generated handshake keys are distinct and match their secret keys" {
+    const a = try KeyPair.generate();
+    const b = try KeyPair.generate();
+    try std.testing.expectEqual(@as(usize, 32), a.pub_key.len);
+    try std.testing.expect(!std.mem.eql(u8, &a.pub_key, &b.pub_key));
+    const loc = location_mod.Location{ .netlayer = .tcp, .designator = "entropy-test" };
+    for ([_]KeyPair{ a, b }) |kp| {
+        const sig = try signLocation(kp, loc, std.testing.allocator);
+        try std.testing.expect(try verifyLocation(kp.pub_key, loc, sig, std.testing.allocator));
+    }
+}
 
 test "sign + verify location round-trip" {
     const allocator = std.testing.allocator;

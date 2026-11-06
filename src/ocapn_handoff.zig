@@ -24,6 +24,7 @@
 //! long-term machine key.
 
 const std = @import("std");
+const entropy = @import("ocapn_entropy");
 const syrup = @import("syrup");
 const location_mod = @import("ocapn_location");
 const handshake = @import("ocapn_handshake");
@@ -35,14 +36,6 @@ const ByteList = std.array_list.Managed(u8);
 fn fmtAppend(list: *ByteList, comptime fmt: []const u8, args: anytype) !void {
     var tmp: [128]u8 = undefined;
     try list.appendSlice(try std.fmt.bufPrint(&tmp, fmt, args));
-}
-
-fn fillRandom(out: []u8) void {
-    if (comptime @hasDecl(std.crypto, "random")) {
-        std.crypto.random.bytes(out);
-    } else {
-        std.c.arc4random_buf(out.ptr, out.len);
-    }
 }
 
 pub const GIFT_ID_LEN: usize = 32;
@@ -203,11 +196,19 @@ pub fn verifyGive(
 /// Generate a fresh 32-byte gift-id.
 pub fn freshGiftId() [GIFT_ID_LEN]u8 {
     var out: [GIFT_ID_LEN]u8 = undefined;
-    fillRandom(&out);
+    entropy.fill(&out);
     return out;
 }
 
 // ---- Tests ------------------------------------------------------------------
+
+test "freshGiftId generates distinct 32-byte gift identifiers" {
+    const a = freshGiftId();
+    const b = freshGiftId();
+    try std.testing.expectEqual(@as(usize, 32), a.len);
+    try std.testing.expect(!std.mem.allEqual(u8, &a, 0));
+    try std.testing.expect(!std.mem.eql(u8, &a, &b));
+}
 
 test "handoff-give encodes and parses as record" {
     const allocator = std.testing.allocator;
@@ -272,7 +273,7 @@ test "Square C — corpus of 70 handoff-give envelopes all sign/verify" {
     // Recipient pubkey is fixed within the corpus (same B across all gifts);
     // only the gift-id varies. This isolates the gift-id channel.
     var rk: [32]u8 = undefined;
-    fillRandom(&rk);
+    entropy.fill(&rk);
 
     // Use a printable string designator (Racket-aligned), not raw bytes,
     // since the encoder now emits Syrup string for designator.

@@ -38,6 +38,9 @@ pub const Generation = u64;
 /// Packed cell size in bytes (no RLE): 2(x) + 2(y) + 3(cp) + 3(fg) + 3(bg) + 1(attrs)
 const CELL_PACKED_SIZE: usize = 14;
 
+/// Admission budget for untrusted frames, including RLE expansion.
+pub const MAX_FRAME_CELLS: usize = 1024 * 1024;
+
 /// RLE marker in x position
 const RLE_MARKER: u16 = 0xFFFF;
 
@@ -434,20 +437,7 @@ pub const CellSync = struct {
         // is at most 65535. We need the scan pass for correctness with large RLE runs.
 
         // Fast scan: count only, no unpacking (just reads marker bytes)
-        var total: usize = 0;
-        {
-            var scan: usize = 0;
-            while (scan + CELL_PACKED_SIZE <= data.len) {
-                total += 1;
-                scan += CELL_PACKED_SIZE;
-                if (scan + 4 <= data.len and
-                    data[scan] == 0xFF and data[scan + 1] == 0xFF)
-                {
-                    total += @as(usize, data[scan + 2]) << 8 | data[scan + 3];
-                    scan += 4;
-                }
-            }
-        }
+        const total = try validatePacked(data, std.math.maxInt(u16), std.math.maxInt(u16), MAX_FRAME_CELLS);
 
         const diffs = try allocator.alloc(CellDiff, total);
         var write_idx: usize = 0;
@@ -514,27 +504,16 @@ pub const CellSync = struct {
 
     /// Decode a Syrup record back into a FrameSnapshot
     pub fn snapshotFromSyrup(allocator: Allocator, val: syrup.Value) !FrameSnapshot {
-        const rec = val.record;
-        if (!std.mem.eql(u8, rec.label.*.symbol, "cell-frame")) {
-            return error.InvalidLabel;
-        }
-
-        const gen: Generation = @intCast(rec.fields[0].integer);
-        const cols: u16 = @intCast(rec.fields[1].integer);
-        const rows: u16 = @intCast(rec.fields[2].integer);
-        const source: NodeId = @intCast(rec.fields[3].integer);
-        // fields[4] = cursor_x, fields[5] = cursor_y (consumed by caller)
-        const packed_data = rec.fields[6].bytes;
-
-        const diffs = try unpackDiffs(allocator, packed_data);
+        const frame = try admitFrame(val);
+        const diffs = try unpackDiffs(allocator, frame.packed_data);
 
         return .{
-            .gen = gen,
-            .cols = cols,
-            .rows = rows,
+            .gen = frame.gen,
+            .cols = frame.cols,
+            .rows = frame.rows,
             .diffs = diffs,
             .is_full = false,
-            .source = source,
+            .source = frame.source,
         };
     }
 
@@ -542,20 +521,77 @@ pub const CellSync = struct {
     /// Combines snapshotFromSyrup + applyRemote into a single pass over packed data.
     /// Returns metadata (gen, source, cursor) without allocating CellDiff array.
     pub fn applyFromSyrup(self: *CellSync, val: syrup.Value) !struct { gen: Generation, source: NodeId, cursor_x: u16, cursor_y: u16 } {
+        // Admission completes before any front/back/damage mutation. The
+        // fused path uses the same checks as explicit decode-then-apply.
+        const frame = try admitFrame(val);
+        if (frame.cols != self.pane.cols or frame.rows != self.pane.rows)
+            return error.DimensionMismatch;
+        self.applyPacked(frame.packed_data);
+        return .{ .gen = frame.gen, .source = frame.source, .cursor_x = frame.cursor_x, .cursor_y = frame.cursor_y };
+    }
+
+    const AdmittedFrame = struct {
+        gen: Generation,
+        source: NodeId,
+        cols: u16,
+        rows: u16,
+        cursor_x: u16,
+        cursor_y: u16,
+        packed_data: []const u8,
+    };
+
+    fn integerField(comptime T: type, value: syrup.Value) !T {
+        if (value != .integer) return error.InvalidField;
+        return std.math.cast(T, value.integer) orelse error.InvalidField;
+    }
+
+    fn admitFrame(val: syrup.Value) !AdmittedFrame {
+        if (val != .record) return error.InvalidFrame;
         const rec = val.record;
-        if (!std.mem.eql(u8, rec.label.*.symbol, "cell-frame")) {
+        if (rec.label.* != .symbol or !std.mem.eql(u8, rec.label.symbol, "cell-frame"))
             return error.InvalidLabel;
+        if (rec.fields.len != 7) return error.InvalidFrame;
+        const frame = AdmittedFrame{
+            .gen = try integerField(Generation, rec.fields[0]),
+            .cols = try integerField(u16, rec.fields[1]),
+            .rows = try integerField(u16, rec.fields[2]),
+            .source = try integerField(NodeId, rec.fields[3]),
+            .cursor_x = try integerField(u16, rec.fields[4]),
+            .cursor_y = try integerField(u16, rec.fields[5]),
+            .packed_data = if (rec.fields[6] == .bytes) rec.fields[6].bytes else return error.InvalidField,
+        };
+        const cells = @as(usize, frame.cols) * frame.rows;
+        if (cells == 0 or cells > MAX_FRAME_CELLS) return error.FrameLimitExceeded;
+        if (frame.cursor_x >= frame.cols or frame.cursor_y >= frame.rows) return error.InvalidCursor;
+        _ = try validatePacked(frame.packed_data, frame.cols, frame.rows, cells);
+        return frame;
+    }
+
+    /// Read-only ana -> admit pass. Counts the exact expansion, consumes all
+    /// bytes and validates every cell/run before allocating or changing state.
+    fn validatePacked(data: []const u8, cols: u16, rows: u16, budget: usize) !usize {
+        var pos: usize = 0;
+        var total: usize = 0;
+        while (pos < data.len) {
+            if (data.len - pos < CELL_PACKED_SIZE) return error.InvalidPackedData;
+            const cell = data[pos..][0..CELL_PACKED_SIZE];
+            const x = @as(u16, cell[0]) << 8 | cell[1];
+            const y = @as(u16, cell[2]) << 8 | cell[3];
+            const cp = @as(u24, cell[4]) << 16 | @as(u24, cell[5]) << 8 | cell[6];
+            if (x >= cols or y >= rows) return error.InvalidCellPosition;
+            if (cp > 0x10ffff or (cp >= 0xd800 and cp <= 0xdfff)) return error.InvalidCodepoint;
+            pos += CELL_PACKED_SIZE;
+            total += 1;
+            if (data.len - pos >= 2 and data[pos] == 0xff and data[pos + 1] == 0xff) {
+                if (data.len - pos < 4) return error.InvalidPackedData;
+                const count = @as(u16, data[pos + 2]) << 8 | data[pos + 3];
+                if (count == 0 or @as(u32, x) + count >= cols) return error.InvalidRun;
+                total += count;
+                pos += 4;
+            }
+            if (total > budget) return error.FrameLimitExceeded;
         }
-
-        const gen: Generation = @intCast(rec.fields[0].integer);
-        const source: NodeId = @intCast(rec.fields[3].integer);
-        const cursor_x: u16 = @intCast(rec.fields[4].integer);
-        const cursor_y: u16 = @intCast(rec.fields[5].integer);
-        const packed_data = rec.fields[6].bytes;
-
-        self.applyPacked(packed_data);
-
-        return .{ .gen = gen, .source = source, .cursor_x = cursor_x, .cursor_y = cursor_y };
+        return total;
     }
 
     /// Encode an ACK message: <cell-ack node-id gen>
@@ -583,6 +619,120 @@ pub const CellSync = struct {
 // ============================================================================
 // TESTS
 // ============================================================================
+
+fn admissionTestFrame(fields: *[7]syrup.Value, label: *syrup.Value, data: []const u8, cols: u16, rows: u16) syrup.Value {
+    label.* = .{ .symbol = "cell-frame" };
+    fields.* = .{
+        .{ .integer = 7 },  .{ .integer = cols }, .{ .integer = rows },
+        .{ .integer = 2 },  .{ .integer = 0 },    .{ .integer = 0 },
+        .{ .bytes = data },
+    };
+    return .{ .record = .{ .label = label, .fields = fields } };
+}
+
+test "frame admission: invalid suffix preserves grid, damage and generation" {
+    const alloc = std.testing.allocator;
+    var sync = try CellSync.init(alloc, 1, 8, 2);
+    defer sync.deinit();
+    sync.pane.damage_mask.unsetAll();
+    sync.pane.row_dirty.unsetAll();
+    const before = try alloc.dupe(Cell, sync.pane.front);
+    defer alloc.free(before);
+    const before_back = try alloc.dupe(Cell, sync.pane.back);
+    defer alloc.free(before_back);
+    var data: [15]u8 = undefined;
+    CellSync.packCell(data[0..14], .{ .x = 1, .y = 0, .cell = .{ .codepoint = 'x' } });
+    data[14] = 0xff;
+    var fields: [7]syrup.Value = undefined;
+    var label: syrup.Value = undefined;
+    const frame = admissionTestFrame(&fields, &label, &data, 8, 2);
+    const damage_before = sync.pane.damage_mask.count();
+    const rows_before = sync.pane.row_dirty.count();
+    try std.testing.expectError(error.InvalidPackedData, sync.applyFromSyrup(frame));
+    try std.testing.expectError(error.InvalidPackedData, CellSync.snapshotFromSyrup(alloc, frame));
+    for (sync.pane.front, before) |actual, expected| try std.testing.expect(Cell.eql(actual, expected));
+    for (sync.pane.back, before_back) |actual, expected| try std.testing.expect(Cell.eql(actual, expected));
+    try std.testing.expectEqual(damage_before, sync.pane.damage_mask.count());
+    try std.testing.expectEqual(rows_before, sync.pane.row_dirty.count());
+    try std.testing.expectEqual(@as(Generation, 0), sync.gen);
+}
+
+test "frame admission: types, dimensions, cursor and RLE bounds fail closed" {
+    var sync = try CellSync.init(std.testing.allocator, 1, 8, 2);
+    defer sync.deinit();
+    var fields: [7]syrup.Value = undefined;
+    var label: syrup.Value = undefined;
+    var frame = admissionTestFrame(&fields, &label, &.{}, 8, 2);
+    try std.testing.expectError(error.InvalidFrame, sync.applyFromSyrup(.{ .bool = false }));
+    frame.record.fields = fields[0..6];
+    try std.testing.expectError(error.InvalidFrame, sync.applyFromSyrup(frame));
+    frame = admissionTestFrame(&fields, &label, &.{}, 8, 2);
+    fields[0] = .{ .integer = -1 };
+    try std.testing.expectError(error.InvalidField, sync.applyFromSyrup(frame));
+    fields[0] = .{ .bool = false };
+    try std.testing.expectError(error.InvalidField, sync.applyFromSyrup(frame));
+    frame = admissionTestFrame(&fields, &label, &.{}, 9, 2);
+    try std.testing.expectError(error.DimensionMismatch, sync.applyFromSyrup(frame));
+    frame = admissionTestFrame(&fields, &label, &.{}, 8, 2);
+    fields[4] = .{ .integer = 8 };
+    try std.testing.expectError(error.InvalidCursor, sync.applyFromSyrup(frame));
+    var data: [18]u8 = undefined;
+    CellSync.packCell(data[0..14], .{ .x = 7, .y = 0, .cell = .{ .codepoint = 'x' } });
+    data[14..].* = .{ 0xff, 0xff, 0, 1 };
+    frame = admissionTestFrame(&fields, &label, &data, 8, 2);
+    try std.testing.expectError(error.InvalidRun, sync.applyFromSyrup(frame));
+    data[4..7].* = .{ 0xff, 0xff, 0xff };
+    try std.testing.expectError(error.InvalidCodepoint, sync.applyFromSyrup(frame));
+    frame = admissionTestFrame(&fields, &label, &.{}, 2048, 2048);
+    try std.testing.expectError(error.FrameLimitExceeded, CellSync.snapshotFromSyrup(std.testing.allocator, frame));
+}
+
+test "frame admission: fused and explicit folds agree and preserve untouched cells" {
+    const alloc = std.testing.allocator;
+    var fast = try CellSync.init(alloc, 1, 8, 2);
+    defer fast.deinit();
+    var explicit = try CellSync.init(alloc, 1, 8, 2);
+    defer explicit.deinit();
+    fast.pane.damage_mask.unsetAll();
+    fast.pane.row_dirty.unsetAll();
+    explicit.pane.damage_mask.unsetAll();
+    explicit.pane.row_dirty.unsetAll();
+    const untouched = fast.pane.front[15];
+    const diffs = [_]CellDiff{
+        .{ .x = 1, .y = 0, .cell = .{ .codepoint = 'x' } },
+        .{ .x = 2, .y = 0, .cell = .{ .codepoint = 'x' } },
+        .{ .x = 3, .y = 0, .cell = .{ .codepoint = 'x' } },
+        .{ .x = 0, .y = 1, .cell = .{ .codepoint = 'y' } },
+    };
+    const packed_bytes = try CellSync.packDiffs(alloc, &diffs);
+    defer alloc.free(packed_bytes);
+    var fields: [7]syrup.Value = undefined;
+    var label: syrup.Value = undefined;
+    const frame = admissionTestFrame(&fields, &label, packed_bytes, 8, 2);
+    // Exercise the real canonical wire decoder before either fold.
+    const wire = try frame.encodeAlloc(alloc);
+    defer alloc.free(wire);
+    const decoded = try syrup.decode(wire, alloc);
+    defer decoded.deinitContainers(alloc);
+    const reencoded = try decoded.encodeAlloc(alloc);
+    defer alloc.free(reencoded);
+    try std.testing.expectEqualSlices(u8, wire, reencoded);
+    const metadata = try fast.applyFromSyrup(decoded);
+    var snapshot = try CellSync.snapshotFromSyrup(alloc, decoded);
+    defer snapshot.deinit(alloc);
+    explicit.applyRemote(&snapshot);
+    try std.testing.expectEqual(snapshot.gen, metadata.gen);
+    try std.testing.expectEqual(snapshot.source, metadata.source);
+    for (fast.pane.front, explicit.pane.front) |a, b| try std.testing.expect(Cell.eql(a, b));
+    for (fast.pane.back, explicit.pane.back) |a, b| try std.testing.expect(Cell.eql(a, b));
+    try std.testing.expectEqual(fast.pane.damage_mask.count(), explicit.pane.damage_mask.count());
+    try std.testing.expectEqual(fast.pane.row_dirty.count(), explicit.pane.row_dirty.count());
+    for (0..fast.pane.front.len) |i|
+        try std.testing.expectEqual(fast.pane.damage_mask.isSet(i), explicit.pane.damage_mask.isSet(i));
+    for (0..fast.pane.rows) |i|
+        try std.testing.expectEqual(fast.pane.row_dirty.isSet(i), explicit.pane.row_dirty.isSet(i));
+    try std.testing.expect(Cell.eql(untouched, fast.pane.front[15]));
+}
 
 test "cell sync basic write and commit" {
     const allocator = std.testing.allocator;

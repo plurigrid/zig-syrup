@@ -33,10 +33,10 @@ pub fn build(b: *std.Build) void {
     edn_c_mod.addCSourceFiles(.{
         .root = b.path("vendor/edn.c/src"),
         .files = &.{
-            "edn.c",       "arena.c",      "collection.c", "number.c",
-            "string.c",    "identifier.c", "character.c",  "reader.c",
-            "tagged.c",    "symbolic.c",   "discard.c",    "metadata.c",
-            "equality.c",  "uniqueness.c", "simd.c",       "writer.c",
+            "edn.c",            "arena.c",      "collection.c", "number.c",
+            "string.c",         "identifier.c", "character.c",  "reader.c",
+            "tagged.c",         "symbolic.c",   "discard.c",    "metadata.c",
+            "equality.c",       "uniqueness.c", "simd.c",       "writer.c",
             "newline_finder.c", "ryu/d2s.c",
         },
         .flags = &.{"-std=c11"},
@@ -1021,7 +1021,8 @@ pub fn build(b: *std.Build) void {
     cell_sync_test_mod.addImport("damage", damage_mod);
     const cell_sync_tests = b.addTest(.{ .root_module = cell_sync_test_mod });
     const run_cell_sync_tests = b.addRunArtifact(cell_sync_tests);
-    _ = run_cell_sync_tests;
+    const cell_sync_step = b.step("test-cell-sync", "Run cell frame admission and fused-path conformance tests");
+    cell_sync_step.dependOn(&run_cell_sync_tests.step);
 
     // QASM renderer module (quantum circuit ASCII art)
     const qasm_test_mod = b.createModule(.{
@@ -2244,6 +2245,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/vat.zig"),
         .target = target,
         .optimize = optimize,
+        // defaultNowMs calls POSIX clock_gettime on Linux.
+        .link_libc = target.result.os.tag == .linux,
     });
     vat_mod.addImport("cap", cap_mod);
     const vat_replay_mod = b.addModule("vat_replay", .{
@@ -2391,6 +2394,8 @@ pub fn build(b: *std.Build) void {
     const run_epoch_bridge_tests = b.addRunArtifact(epoch_bridge_tests);
     const promise_bridge_tests = b.addTest(.{ .root_module = promise_bridge_mod });
     const run_promise_bridge_tests = b.addRunArtifact(promise_bridge_tests);
+    const session_tests = b.addTest(.{ .root_module = ocapn_session_mod });
+    const run_session_tests = b.addRunArtifact(session_tests);
     const cap_integration_tests = b.addTest(.{ .root_module = cap_integration_test_mod });
     const run_cap_integration_tests = b.addRunArtifact(cap_integration_tests);
 
@@ -2412,7 +2417,14 @@ pub fn build(b: *std.Build) void {
     cap_layer_step.dependOn(&run_chronicle_tests.step);
     cap_layer_step.dependOn(&run_epoch_bridge_tests.step);
     cap_layer_step.dependOn(&run_promise_bridge_tests.step);
+    cap_layer_step.dependOn(&run_session_tests.step);
     cap_layer_step.dependOn(&run_cap_integration_tests.step);
+
+    const ocapn_entropy_mod = b.addModule("ocapn_entropy", .{
+        .root_source_file = b.path("src/ocapn_entropy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // Declare the 5 inter-stranded ocapn_* modules so @import("ocapn_X") resolves.
     const ocapn_location_mod = b.addModule("ocapn_location", .{
@@ -2427,6 +2439,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_handshake_mod.addImport("syrup", syrup_mod);
+    ocapn_handshake_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     ocapn_handshake_mod.addImport("ocapn_location", ocapn_location_mod);
     const ocapn_transport_mod = b.addModule("ocapn_transport", .{
         .root_source_file = b.path("src/ocapn_transport.zig"),
@@ -2441,6 +2454,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_bootstrap_mod.addImport("syrup", syrup_mod);
+    ocapn_bootstrap_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     const wire_desc_mod = b.addModule("wire_desc", .{
         .root_source_file = b.path("src/wire_desc.zig"),
         .target = target,
@@ -2453,6 +2467,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ocapn_handoff_mod.addImport("syrup", syrup_mod);
+    ocapn_handoff_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     ocapn_handoff_mod.addImport("ocapn_location", ocapn_location_mod);
     ocapn_handoff_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
     const ocapn_vat_mod = b.addModule("ocapn_vat", .{
@@ -2503,6 +2518,7 @@ pub fn build(b: *std.Build) void {
     stranded_check_mod.addImport("ocapn_handshake", ocapn_handshake_mod);
     stranded_check_mod.addImport("ocapn_transport", ocapn_transport_mod);
     stranded_check_mod.addImport("ocapn_bootstrap", ocapn_bootstrap_mod);
+    stranded_check_mod.addImport("ocapn_entropy", ocapn_entropy_mod);
     stranded_check_mod.addImport("ocapn_session", ocapn_session_mod);
     stranded_check_mod.addImport("wire_desc", wire_desc_mod);
     // Compile-check object (always works — honors module target directly).
@@ -2525,6 +2541,12 @@ pub fn build(b: *std.Build) void {
     color_memo_test_step.dependOn(&run_color_memo_tests.step);
 
     const test_step = b.step("test", "Run unit tests");
+    const entropy_tests = b.addTest(.{ .root_module = ocapn_entropy_mod });
+    const run_entropy_tests = b.addRunArtifact(entropy_tests);
+    const handshake_tests = b.addTest(.{ .root_module = ocapn_handshake_mod });
+    const run_handshake_tests = b.addRunArtifact(handshake_tests);
+    test_step.dependOn(&run_entropy_tests.step);
+    test_step.dependOn(&run_handshake_tests.step);
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_color_memo_tests.step);
     test_step.dependOn(&run_stranded_tests.step); // run tests in the 8 novel files
@@ -2550,6 +2572,11 @@ pub fn build(b: *std.Build) void {
     const ocapn_handoff_tests = b.addTest(.{ .root_module = ocapn_handoff_mod });
     const run_ocapn_handoff_tests = b.addRunArtifact(ocapn_handoff_tests);
     test_step.dependOn(&run_ocapn_handoff_tests.step);
+    const entropy_step = b.step("test-ocapn-entropy", "Run secure entropy, bootstrap, handshake and handoff tests");
+    entropy_step.dependOn(&run_entropy_tests.step);
+    entropy_step.dependOn(&run_ocapn_bootstrap_tests.step);
+    entropy_step.dependOn(&run_handshake_tests.step);
+    entropy_step.dependOn(&run_ocapn_handoff_tests.step);
     const ocapn_session_tests = b.addTest(.{ .root_module = ocapn_session_mod });
     const run_ocapn_session_tests = b.addRunArtifact(ocapn_session_tests);
     test_step.dependOn(&run_ocapn_session_tests.step);

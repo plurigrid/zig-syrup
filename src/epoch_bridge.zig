@@ -61,7 +61,7 @@ pub fn epochBackedCap(
     revoker: *EpochRevoker,
     target: cap.CapId,
     facet: cap.SelectorMask,
-) cap.Capability {
+) error{IncompatibleRevokers}!cap.Capability {
     return revoker.revoker.wrap(.{
         .target = target,
         .facet = facet,
@@ -77,14 +77,14 @@ test "fresh ecr at E0: bridged cap is live" {
     var rev = EpochRevoker.init(&ecr);
     rev.refresh(0);
 
-    const c = epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
+    const c = try epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
     try testing.expect(c.isLive());
 }
 
 test "explicitly-revoked ecr → bridged cap dies on next refresh" {
     var ecr = EpochCapRef.init(7, false, .local, 0, 0);
     var rev = EpochRevoker.init(&ecr);
-    const c = epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
+    const c = try epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
     try testing.expect(c.isLive());
 
     ecr.revoke();
@@ -97,7 +97,7 @@ test "stale E1 ecr past consistency window → bridged cap revokes after refresh
     // last_verified by more than the window.
     var ecr = EpochCapRef.init(7, false, .cluster, 1000, 0);
     var rev = EpochRevoker.init(&ecr);
-    const c = epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
+    const c = try epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
 
     // Within window — still alive.
     rev.refresh(1000 + epoch_capability.E1_WINDOW - 1);
@@ -120,7 +120,7 @@ test "stale E1 ecr past consistency window → bridged cap revokes after refresh
 test "refresh is monotonic: once revoked, never re-lives" {
     var ecr = EpochCapRef.init(7, false, .local, 0, 0);
     var rev = EpochRevoker.init(&ecr);
-    const c = epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
+    const c = try epochBackedCap(&rev, cap.pack(1, 7), cap.FACET_FULL);
 
     ecr.revoke();
     rev.refresh(0);

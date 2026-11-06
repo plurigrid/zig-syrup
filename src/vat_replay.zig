@@ -1,11 +1,11 @@
 //! vat_replay.zig — deterministic rollout log for vat.zig.
 //!
 //! Each TurnRecord is appended as a Syrup record so the log is parseable by
-//! any OCapN-compatible reader. Replay reconstructs vat state by re-feeding
-//! the recorded sequence into a fresh Vat with the same Behavior types.
+//! any OCapN-compatible reader. This is dispatch metadata: payload lengths
+//! do not reconstruct payloads, actor state, grants or external effects.
 //!
 //! This is distinct from tape_recorder.zig (which logs terminal damage frames):
-//! vat_replay logs *actor turns*, the unit needed to rebuild vat semantics.
+//! A recovery engine must supply those missing inputs and its own admission.
 
 const std = @import("std");
 const vat = @import("vat.zig");
@@ -16,6 +16,7 @@ const Allocator = std.mem.Allocator;
 pub const Log = struct {
     allocator: Allocator,
     bytes: std.ArrayListUnmanaged(u8),
+    recording_failed: bool = false,
 
     pub fn init(allocator: Allocator) Log {
         return .{ .allocator = allocator, .bytes = .empty };
@@ -30,29 +31,37 @@ pub const Log = struct {
     /// `became` is the symbol "same" or "terminate". `lagged` is the
     /// mailbox lag count *before* this turn (Lagged-marker semantics).
     /// `turn_seq` is a vat-local monotonic counter; `now_ms` captures the
-    /// vat clock at dispatch start so expiry decisions can be re-checked
-    /// during replay without rerunning handlers.
+    /// vat clock at dispatch start. Rechecking expiry additionally requires
+    /// the original grant; restoring state requires the original payload.
     pub fn record(self: *Log, rec: vat.TurnRecord) !void {
+        try self.requireComplete();
+        errdefer self.recording_failed = true;
         var tmp: [192]u8 = undefined;
-        try self.bytes.appendSlice(self.allocator, "<8'vat-turn");
         const became_sym = switch (rec.became) {
             .same => "4'same",
             .terminate => "9'terminate",
         };
-        const s = try std.fmt.bufPrint(&tmp, "{d}+{d}+{d}+{d}+{d}+{d}+{s}{d}+>", .{
-            rec.turn_seq, rec.now_ms,
-            rec.sender,   rec.target,
-            rec.selector, rec.payload_len,
-            became_sym,   rec.lagged_before,
+        const s = try std.fmt.bufPrint(&tmp, "<8'vat-turn{d}+{d}{c}{d}+{d}+{d}+{d}+{s}{d}+>", .{
+            rec.turn_seq,    @abs(rec.now_ms), if (rec.now_ms < 0) @as(u8, '-') else @as(u8, '+'),
+            rec.sender,      rec.target,       rec.selector,
+            rec.payload_len, became_sym,       rec.lagged_before,
         });
         try self.bytes.appendSlice(self.allocator, s);
+    }
+
+    /// Check completeness before consuming this diagnostic as evidence.
+    /// A later successful allocation cannot repair an omitted turn.
+    pub fn requireComplete(self: *const Log) error{IncompleteLog}!void {
+        if (self.recording_failed) return error.IncompleteLog;
     }
 
     /// C-callback adapter — pass the address of `record_callback` and a `*Log`
     /// to `vat.on_record`/`vat.record_ctx`.
     pub fn callback(ctx: *anyopaque, rec: vat.TurnRecord) void {
         const self: *Log = @ptrCast(@alignCast(ctx));
-        self.record(rec) catch {};
+        self.record(rec) catch {
+            self.recording_failed = true;
+        };
     }
 
     /// Total recorded turns (counts top-level `<vat-turn ...>` opens).
@@ -68,6 +77,26 @@ pub const Log = struct {
 // ---- Tests ------------------------------------------------------------------
 
 const testing = std.testing;
+
+test "negative virtual time uses the Syrup integer sign suffix" {
+    var log = Log.init(testing.allocator);
+    defer log.deinit();
+    try log.record(.{ .turn_seq = 0, .now_ms = -1, .sender = 0, .target = 0, .selector = 0, .payload_len = 0, .became = .same, .lagged_before = 0 });
+    try testing.expectEqualStrings("<8'vat-turn0+1-0+0+0+0+4'same0+>", log.bytes.items);
+    try log.requireComplete();
+}
+
+test "recording failure leaves no partial receipt and remains observable" {
+    var failing = testing.FailingAllocator.init(testing.allocator, .{ .fail_index = 0 });
+    var log = Log.init(failing.allocator());
+    defer log.deinit();
+    const rec = vat.TurnRecord{ .turn_seq = 0, .now_ms = 1, .sender = 1, .target = 0, .selector = 0, .payload_len = 0, .became = .same, .lagged_before = 0 };
+    Log.callback(&log, rec);
+    try testing.expectEqual(@as(usize, 0), log.bytes.items.len);
+    try testing.expectEqual(@as(usize, 0), log.turnCount());
+    try testing.expectError(error.IncompleteLog, log.requireComplete());
+    try testing.expectError(error.IncompleteLog, log.record(rec));
+}
 
 test "replay log records each turn as a Syrup record" {
     const alloc = testing.allocator;

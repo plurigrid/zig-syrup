@@ -657,7 +657,7 @@ pub const TerminalPane = struct {
     /// Swap buffers after render, return damaged regions.
     /// Uses row_dirty bitmap to skip clean rows entirely ("sphere tracing").
     pub fn commit(self: *TerminalPane, allocator: Allocator) ![]AABB {
-        var regions = std.ArrayListUnmanaged(AABB){};
+        var regions: std.ArrayListUnmanaged(AABB) = .empty;
 
         // Only iterate rows where row_dirty is set
         var y: u16 = 0;
